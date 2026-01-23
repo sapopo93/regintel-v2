@@ -630,3 +630,179 @@ export class FollowUpLimitExceededError extends Error {
     this.name = 'FollowUpLimitExceededError';
   }
 }
+
+/**
+ * Computes deterministic question ID.
+ *
+ * DETERMINISM REQUIREMENT:
+ * question_id = sha256(topic_id | topic_version | followup_index | template_id)
+ *
+ * Same inputs always produce same question ID.
+ */
+export function computeQuestionId(params: {
+  topicId: TopicId;
+  topicVersion: number;
+  followupIndex: number; // 0 = baseline question, 1+ = follow-ups
+  templateId: string; // Question template ID from topic catalog
+}): string {
+  const canonical = {
+    topicId: params.topicId,
+    topicVersion: params.topicVersion,
+    followupIndex: params.followupIndex,
+    templateId: params.templateId,
+  };
+
+  const json = JSON.stringify(canonical);
+  const hash = createHash('sha256').update(json).digest('hex');
+
+  // Return a prefixed hash for clarity
+  return `q-${hash.substring(0, 16)}`;
+}
+
+/**
+ * Question context for sequencing
+ */
+export interface QuestionContext {
+  questionId: string;
+  topicId: TopicId;
+  templateId: string;
+  questionText: string;
+  isFollowUp: boolean;
+  followupIndex: number;
+}
+
+/**
+ * Topic sequencing state
+ */
+export interface TopicSequencingState {
+  currentTopicIndex: number;
+  orderedTopicIds: TopicId[];
+  askedQuestionIds: Set<string>; // Track which questions have been asked
+}
+
+/**
+ * Selects the next topic to ask questions about.
+ *
+ * DETERMINISM REQUIREMENT:
+ * Topics are ordered strictly by Topic Catalog v1 order.
+ * Same session state always produces same topic selection.
+ *
+ * @param session Current session state
+ * @param orderedTopicIds Topics in catalog order
+ * @returns Next topic ID or null if all topics exhausted
+ */
+export function selectNextTopic(
+  session: MockInspectionSession,
+  orderedTopicIds: TopicId[]
+): TopicId | null {
+  // Find first topic that hasn't been closed or hasn't reached follow-up limit
+  for (const topicId of orderedTopicIds) {
+    const topicState = session.topicStates.get(topicId);
+
+    // Topic not yet opened
+    if (!topicState) {
+      return topicId;
+    }
+
+    // Topic closed, move to next
+    if (topicState.closedAt !== null) {
+      continue;
+    }
+
+    // Topic open and can still ask follow-ups
+    if (topicState.followUpCount < session.maxFollowUpsPerTopic) {
+      return topicId;
+    }
+
+    // Topic exhausted, move to next
+  }
+
+  // All topics exhausted
+  return null;
+}
+
+/**
+ * Selects the next question for a topic.
+ *
+ * DETERMINISM REQUIREMENT:
+ * - First question is always the baseline (followup_index = 0)
+ * - Follow-up questions increment followup_index
+ * - Same topic state always produces same question
+ *
+ * @param session Current session state
+ * @param topicId Topic to select question for
+ * @param starterQuestionIds Starter question template IDs from catalog
+ * @param followupQuestionIds Follow-up question template IDs from catalog
+ * @param topicVersion Topic version number
+ * @returns Question context or null if topic exhausted
+ */
+export function selectNextQuestion(
+  session: MockInspectionSession,
+  topicId: TopicId,
+  starterQuestionIds: string[],
+  followupQuestionIds: string[],
+  topicVersion: number
+): QuestionContext | null {
+  const topicState = session.topicStates.get(topicId);
+
+  // Topic not open yet - return baseline question
+  if (!topicState) {
+    if (starterQuestionIds.length === 0) {
+      return null;
+    }
+
+    const templateId = starterQuestionIds[0]; // Always use first starter question
+    const questionId = computeQuestionId({
+      topicId,
+      topicVersion,
+      followupIndex: 0,
+      templateId,
+    });
+
+    return {
+      questionId,
+      topicId,
+      templateId,
+      questionText: templateId, // Placeholder - would resolve from template registry
+      isFollowUp: false,
+      followupIndex: 0,
+    };
+  }
+
+  // Topic closed
+  if (topicState.closedAt !== null) {
+    return null;
+  }
+
+  // Check if we can ask follow-ups
+  if (topicState.followUpCount >= session.maxFollowUpsPerTopic) {
+    return null;
+  }
+
+  // Return next follow-up question
+  const followupIndex = topicState.followUpCount + 1;
+
+  // Select follow-up template deterministically (cycle through available follow-ups)
+  if (followupQuestionIds.length === 0) {
+    return null;
+  }
+
+  const templateIndex = (followupIndex - 1) % followupQuestionIds.length;
+  const templateId = followupQuestionIds[templateIndex];
+
+  const questionId = computeQuestionId({
+    topicId,
+    topicVersion,
+    followupIndex,
+    templateId,
+  });
+
+  return {
+    questionId,
+    topicId,
+    templateId,
+    questionText: templateId, // Placeholder - would resolve from template registry
+    isFollowUp: true,
+    followupIndex,
+  };
+}

@@ -177,6 +177,20 @@ phases:
           - "constraint check is deterministic"
     blocks_next_phase_on_failure: true
 
+  phase9e_export:
+    description: "Readiness export for mock inspections (CSV/PDF)"
+    depends_on: [phase8_integration_slice]
+    required_tests:
+      - id: report_export
+        command: "pnpm vitest run -t \"ux:report_export\""
+        asserts:
+          - "CSV export includes session metadata (ID, provider, versions, hashes)"
+          - "PDF export includes watermark: READINESS (MOCK) — NOT REGULATORY HISTORY"
+          - "exports are deterministically ordered"
+          - "exports NEVER include regulatory history findings"
+          - "every page/row includes Topic Catalog + PRS Logic Profile versions + hashes"
+    blocks_next_phase_on_failure: true
+
 # Global enforcement
 rules:
   - "CI must read current_phase_file and run all dependent gates"

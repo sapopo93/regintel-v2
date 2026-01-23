@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "gate": "tsx scripts/gate.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "validate:versions": "tsx scripts/validate-version-immutability.ts"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
