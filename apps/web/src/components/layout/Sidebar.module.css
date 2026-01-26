@@ -1,0 +1,110 @@
+.sidebar {
+  width: var(--sidebar-width);
+  height: 100vh;
+  position: fixed;
+  top: 0;
+  left: 0;
+  background-color: var(--sidebar-bg);
+  color: var(--sidebar-text);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.header {
+  padding: var(--space-6) var(--space-4);
+  border-bottom: 1px solid var(--color-slate-700);
+}
+
+.providerName {
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--sidebar-text-active);
+  margin-bottom: var(--space-2);
+}
+
+.snapshot {
+  font-size: var(--text-sm);
+  color: var(--sidebar-text);
+  margin-bottom: var(--space-1);
+}
+
+.status {
+  font-size: var(--text-sm);
+  color: var(--sidebar-text);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.statusLabel {
+  font-size: var(--text-xs);
+  color: var(--sidebar-text);
+  opacity: 0.8;
+}
+
+.statusValue {
+  font-weight: var(--font-semibold);
+  color: var(--sidebar-text-active);
+}
+
+.statusSource {
+  font-size: var(--text-xs);
+  color: var(--sidebar-text);
+  opacity: 0.6;
+}
+
+.nav {
+  flex: 1;
+  padding: var(--space-4) 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.navItem {
+  padding: var(--space-3) var(--space-4);
+  color: var(--sidebar-text);
+  text-decoration: none;
+  font-size: var(--text-sm);
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.navItem:hover {
+  background-color: var(--color-slate-800);
+  color: var(--sidebar-text-active);
+}
+
+.navItemActive {
+  composes: navItem;
+  background-color: var(--color-slate-800);
+  color: var(--sidebar-text-active);
+  border-left: 3px solid var(--color-white);
+  padding-left: calc(var(--space-4) - 3px);
+}
+
+.systemStatus {
+  padding: var(--space-4);
+  border-top: 1px solid var(--color-slate-700);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.systemStatus .VersionBadge {
+  background-color: var(--color-slate-800);
+}
+
+.statusItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  background-color: var(--color-slate-800);
+  border-radius: var(--radius-base);
+  font-size: var(--text-sm);
+}
+
+.checkmark {
+  color: var(--color-verified);
+  font-weight: var(--font-bold);
+}

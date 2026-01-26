@@ -1,0 +1,14 @@
+.watermark {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-45deg);
+  font-size: 4rem;
+  font-weight: var(--font-bold);
+  color: var(--color-simulation);
+  opacity: 0.05;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 9999;
+  user-select: none;
+}

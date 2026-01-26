@@ -1,0 +1,28 @@
+.header {
+  margin-bottom: var(--space-6);
+}
+
+.titleRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-4);
+}
+
+.title {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
+  color: var(--color-charcoal);
+  margin: 0;
+}
+
+.subtitle {
+  font-size: var(--text-base);
+  color: var(--color-slate-600);
+  margin-top: var(--space-2);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-3);
+}

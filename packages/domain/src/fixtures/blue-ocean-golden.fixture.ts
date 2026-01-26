@@ -1,0 +1,188 @@
+import type { Action } from '../action.js';
+import { ActionStatus } from '../action.js';
+import type { BlueOceanReportInput } from '../blue-ocean-report.js';
+import {
+  computeCompositeRiskScore,
+  computeProvenanceHash,
+  type InspectionFinding,
+} from '../inspection-finding.js';
+import type { EvidenceRecord } from '../evidence.js';
+import { Domain, FindingOrigin, ReportingDomain, Severity } from '../types.js';
+
+const fixtureFindings: InspectionFinding[] = [
+  {
+    id: 'finding-001',
+    tenantId: 'tenant-1',
+    domain: Domain.CQC,
+    origin: FindingOrigin.SYSTEM_MOCK,
+    reportingDomain: ReportingDomain.MOCK_SIMULATION,
+    contextSnapshotId: 'snapshot-001',
+    regulationId: 'reg-1',
+    regulationSectionId: 'reg-1-13',
+    title: 'Missing safeguarding policy',
+    description: 'No formal safeguarding policy in place.',
+    severity: Severity.CRITICAL,
+    impactScore: 90,
+    likelihoodScore: 80,
+    compositeRiskScore: computeCompositeRiskScore(90, 80),
+    provenanceHash: computeProvenanceHash({
+      domain: Domain.CQC,
+      origin: FindingOrigin.SYSTEM_MOCK,
+      reportingDomain: ReportingDomain.MOCK_SIMULATION,
+      contextSnapshotId: 'snapshot-001',
+      regulationId: 'reg-1',
+      regulationSectionId: 'reg-1-13',
+      title: 'Missing safeguarding policy',
+      description: 'No formal safeguarding policy in place.',
+    }),
+    identifiedAt: '2024-06-01T10:00:00Z',
+    identifiedBy: 'SYSTEM',
+    createdAt: '2024-06-01T10:00:00Z',
+  },
+  {
+    id: 'finding-002',
+    tenantId: 'tenant-1',
+    domain: Domain.CQC,
+    origin: FindingOrigin.SYSTEM_MOCK,
+    reportingDomain: ReportingDomain.MOCK_SIMULATION,
+    contextSnapshotId: 'snapshot-001',
+    regulationId: 'reg-1',
+    regulationSectionId: 'reg-1-13',
+    title: 'Safeguarding training gaps',
+    description: 'Not all staff completed safeguarding training.',
+    severity: Severity.HIGH,
+    impactScore: 80,
+    likelihoodScore: 70,
+    compositeRiskScore: computeCompositeRiskScore(80, 70),
+    provenanceHash: computeProvenanceHash({
+      domain: Domain.CQC,
+      origin: FindingOrigin.SYSTEM_MOCK,
+      reportingDomain: ReportingDomain.MOCK_SIMULATION,
+      contextSnapshotId: 'snapshot-001',
+      regulationId: 'reg-1',
+      regulationSectionId: 'reg-1-13',
+      title: 'Safeguarding training gaps',
+      description: 'Not all staff completed safeguarding training.',
+    }),
+    identifiedAt: '2024-06-01T10:05:00Z',
+    identifiedBy: 'SYSTEM',
+    createdAt: '2024-06-01T10:05:00Z',
+  },
+  {
+    id: 'finding-003',
+    tenantId: 'tenant-1',
+    domain: Domain.CQC,
+    origin: FindingOrigin.SYSTEM_MOCK,
+    reportingDomain: ReportingDomain.MOCK_SIMULATION,
+    contextSnapshotId: 'snapshot-001',
+    regulationId: 'reg-2',
+    regulationSectionId: 'reg-2-12',
+    title: 'Incomplete medication records',
+    description: 'Medication administration records not up to date.',
+    severity: Severity.LOW,
+    impactScore: 40,
+    likelihoodScore: 40,
+    compositeRiskScore: computeCompositeRiskScore(40, 40),
+    provenanceHash: computeProvenanceHash({
+      domain: Domain.CQC,
+      origin: FindingOrigin.SYSTEM_MOCK,
+      reportingDomain: ReportingDomain.MOCK_SIMULATION,
+      contextSnapshotId: 'snapshot-001',
+      regulationId: 'reg-2',
+      regulationSectionId: 'reg-2-12',
+      title: 'Incomplete medication records',
+      description: 'Medication administration records not up to date.',
+    }),
+    identifiedAt: '2024-06-01T10:10:00Z',
+    identifiedBy: 'SYSTEM',
+    createdAt: '2024-06-01T10:10:00Z',
+  },
+];
+
+const fixtureActions: Action[] = [
+  {
+    id: 'action-001',
+    tenantId: 'tenant-1',
+    domain: Domain.CQC,
+    findingId: 'finding-001',
+    description: 'Publish safeguarding policy',
+    assignedTo: 'user-1',
+    targetCompletionDate: '2024-07-01T00:00:00Z',
+    status: ActionStatus.IN_PROGRESS,
+    verificationEvidenceIds: [],
+    createdAt: '2024-06-02T09:00:00Z',
+    createdBy: 'user-1',
+    completedAt: null,
+    verifiedAt: null,
+  },
+  {
+    id: 'action-002',
+    tenantId: 'tenant-1',
+    domain: Domain.CQC,
+    findingId: 'finding-002',
+    description: 'Complete safeguarding training',
+    assignedTo: 'user-2',
+    targetCompletionDate: '2024-07-10T00:00:00Z',
+    status: ActionStatus.PENDING_VERIFICATION,
+    verificationEvidenceIds: ['evidence-001'],
+    createdAt: '2024-06-02T10:00:00Z',
+    createdBy: 'user-2',
+    completedAt: '2024-06-15T00:00:00Z',
+    verifiedAt: null,
+  },
+];
+
+const fixtureEvidence: EvidenceRecord[] = [
+  {
+    id: 'evidence-001',
+    tenantId: 'tenant-1',
+    blobHashes: ['a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2'],
+    primaryBlobHash:
+      'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
+    title: 'Safeguarding Policy v3',
+    description: 'Approved safeguarding policy document.',
+    evidenceType: 'policy_document',
+    supportsFindingIds: ['finding-001'],
+    supportsPolicyIds: [],
+    collectedAt: '2024-05-20T09:00:00Z',
+    collectedBy: 'user-1',
+    accessRevoked: false,
+    createdAt: '2024-05-20T09:00:00Z',
+    createdBy: 'user-1',
+  },
+  {
+    id: 'evidence-002',
+    tenantId: 'tenant-1',
+    blobHashes: ['b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3'],
+    primaryBlobHash:
+      'b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3',
+    title: 'Training Matrix Q2',
+    description: 'Staff training completion matrix.',
+    evidenceType: 'training_record',
+    supportsFindingIds: ['finding-002'],
+    supportsPolicyIds: [],
+    collectedAt: '2024-05-22T14:30:00Z',
+    collectedBy: 'user-2',
+    accessRevoked: false,
+    createdAt: '2024-05-22T14:30:00Z',
+    createdBy: 'user-2',
+  },
+];
+
+export const blueOceanFixtureInput: BlueOceanReportInput = {
+  tenantId: 'tenant-1',
+  domain: Domain.CQC,
+  topicCatalogVersion: 'v1',
+  topicCatalogHash:
+    'c1d2e3f4a5b6c1d2e3f4a5b6c1d2e3f4a5b6c1d2e3f4a5b6c1d2e3f4a5b6c1d2',
+  prsLogicProfilesVersion: 'v1',
+  prsLogicProfilesHash:
+    'd2e3f4a5b6c1d2e3f4a5b6c1d2e3f4a5b6c1d2e3f4a5b6c1d2e3f4a5b6c1d2e3',
+  findings: fixtureFindings,
+  actions: fixtureActions,
+  evidence: fixtureEvidence,
+  reportingDomain: ReportingDomain.MOCK_SIMULATION,
+};
+
+export const blueOceanFixtureExpectedHash =
+  '60dea70e0274714c99a05da6b1a7f811d1df67546f16116cc7a676cb5ab29817';

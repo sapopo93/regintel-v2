@@ -6,7 +6,10 @@
   "scripts": {
     "gate": "tsx scripts/gate.ts",
     "test": "vitest run",
-    "validate:versions": "tsx scripts/validate-version-immutability.ts"
+    "validate:versions": "tsx scripts/validate-version-immutability.ts",
+    "api:dev": "cd apps/api && pnpm dev",
+    "web:dev": "cd apps/web && pnpm dev",
+    "playwright": "pnpm --dir apps/web playwright test"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

@@ -1,0 +1,7 @@
+.frame {
+  border-style: solid;
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  position: relative;
+  min-height: 100vh;
+}

@@ -27,6 +27,9 @@
 
 import {
   type TenantId,
+  type ProviderId,
+  type FacilityId,
+  type EvidenceId,
   type SnapshotId,
   type SessionId,
   type TopicId,
@@ -69,6 +72,17 @@ import {
   serializeCsvExport,
   SessionNotCompletedError as ExportSessionNotCompletedError,
 } from '../../packages/domain/src/readiness-export.js';
+import {
+  type Facility,
+  createFacility,
+  verifyFacilityIntegrity,
+} from '../../packages/domain/src/facility.js';
+import {
+  type EvidenceBlob,
+  type EvidenceRecord,
+  createEvidenceBlob,
+  createEvidenceRecord,
+} from '../../packages/domain/src/evidence.js';
 
 /**
  * In-memory session storage (tenant-isolated)
@@ -145,14 +159,146 @@ class SnapshotStore {
 }
 
 /**
+ * In-memory facility storage (tenant-isolated)
+ * In production, this would be RLS-protected database storage
+ */
+class FacilityStore {
+  private facilities: Map<string, Facility> = new Map();
+
+  private scopeKey(tenantId: TenantId, facilityId: FacilityId): string {
+    return `${tenantId}:${facilityId}`;
+  }
+
+  set(tenantId: TenantId, facility: Facility): void {
+    const key = this.scopeKey(tenantId, facility.id);
+    this.facilities.set(key, facility);
+  }
+
+  get(tenantId: TenantId, facilityId: FacilityId): Facility | undefined {
+    const key = this.scopeKey(tenantId, facilityId);
+    return this.facilities.get(key);
+  }
+
+  list(tenantId: TenantId, providerId?: ProviderId): Facility[] {
+    const results: Facility[] = [];
+    for (const [key, facility] of this.facilities.entries()) {
+      if (key.startsWith(`${tenantId}:`)) {
+        if (!providerId || facility.providerId === providerId) {
+          results.push(facility);
+        }
+      }
+    }
+    return results;
+  }
+}
+
+/**
+ * In-memory evidence storage (tenant-isolated)
+ * In production, this would be RLS-protected database storage
+ */
+class EvidenceStore {
+  private blobs: Map<ContentHash, EvidenceBlob> = new Map();
+  private records: Map<string, EvidenceRecord> = new Map();
+
+  private scopeKey(tenantId: TenantId, evidenceId: EvidenceId): string {
+    return `${tenantId}:${evidenceId}`;
+  }
+
+  setBlob(blob: EvidenceBlob): void {
+    this.blobs.set(blob.contentHash, blob);
+  }
+
+  getBlob(contentHash: ContentHash): EvidenceBlob | undefined {
+    return this.blobs.get(contentHash);
+  }
+
+  setRecord(tenantId: TenantId, record: EvidenceRecord): void {
+    const key = this.scopeKey(tenantId, record.id);
+    this.records.set(key, record);
+  }
+
+  getRecord(tenantId: TenantId, recordId: EvidenceId): EvidenceRecord | undefined {
+    const key = this.scopeKey(tenantId, recordId);
+    return this.records.get(key);
+  }
+
+  listRecordsByFacility(tenantId: TenantId, facilityId: FacilityId): EvidenceRecord[] {
+    const results: EvidenceRecord[] = [];
+    for (const [key, record] of this.records.entries()) {
+      if (key.startsWith(`${tenantId}:`)) {
+        // Check if facilityId is in the record's title or description
+        // In a real implementation, we'd have a facilityId field in the record
+        if (record.title.includes(facilityId) || record.description?.includes(facilityId)) {
+          results.push(record);
+        }
+      }
+    }
+    return results;
+  }
+}
+
+/**
  * Global stores (in production, these would be database tables)
  */
 const sessionStore = new SessionStore();
 const snapshotStore = new SnapshotStore();
+const facilityStore = new FacilityStore();
+const evidenceStore = new EvidenceStore();
 
 /**
  * Request/Response types for API endpoints
  */
+
+export interface CreateFacilityRequest {
+  providerId: ProviderId;
+  facilityName: string;
+  address: string;
+  cqcLocationId: string;
+  serviceType: string;
+  capacity?: number;
+}
+
+export interface CreateFacilityResponse {
+  facility: Facility;
+  domain: Domain;
+  reportingDomain: ReportingDomain;
+}
+
+export interface ListFacilitiesResponse {
+  facilities: Facility[];
+  totalCount: number;
+  domain: Domain;
+  reportingDomain: ReportingDomain;
+}
+
+export interface GetFacilityResponse {
+  facility: Facility;
+  domain: Domain;
+  reportingDomain: ReportingDomain;
+}
+
+export interface UploadEvidenceRequest {
+  facilityId: FacilityId;
+  fileName: string;
+  mimeType: string;
+  content: string; // Base64 encoded for PDF/binary files
+  description?: string;
+  evidenceType: string; // e.g., 'CQC_REPORT', 'POLICY_DOCUMENT', 'TRAINING_RECORD'
+}
+
+export interface UploadEvidenceResponse {
+  contentHash: ContentHash;
+  recordId: EvidenceId;
+  domain: Domain;
+  reportingDomain: ReportingDomain;
+}
+
+export interface ListEvidenceResponse {
+  records: EvidenceRecord[];
+  totalCount: number;
+  domain: Domain;
+  reportingDomain: ReportingDomain;
+}
 
 export interface CreateSessionRequest {
   providerId: string;
@@ -242,6 +388,20 @@ export class InvalidSessionStateError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'InvalidSessionStateError';
+  }
+}
+
+export class FacilityNotFoundError extends Error {
+  constructor(facilityId: FacilityId) {
+    super(`Facility not found: ${facilityId}`);
+    this.name = 'FacilityNotFoundError';
+  }
+}
+
+export class EvidenceNotFoundError extends Error {
+  constructor(evidenceId: EvidenceId) {
+    super(`Evidence not found: ${evidenceId}`);
+    this.name = 'EvidenceNotFoundError';
   }
 }
 
@@ -685,6 +845,162 @@ export class MockInspectionBackend {
    */
   registerSnapshot(tenantId: TenantId, snapshot: ProviderContextSnapshot): void {
     snapshotStore.set(tenantId, snapshot);
+  }
+
+  /**
+   * POST /v1/providers/:providerId/facilities
+   * Creates a new facility for a provider.
+   */
+  async createFacility(
+    tenantId: TenantId,
+    userId: string,
+    request: CreateFacilityRequest
+  ): Promise<CreateFacilityResponse> {
+    // Generate facility ID
+    const facilityId = `facility-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+    // Create facility using domain model
+    const facility = createFacility({
+      id: facilityId,
+      tenantId,
+      providerId: request.providerId,
+      facilityName: request.facilityName,
+      address: request.address,
+      cqcLocationId: request.cqcLocationId,
+      serviceType: request.serviceType,
+      capacity: request.capacity,
+      createdBy: userId,
+    });
+
+    // Store facility (in production, this would be a DB insert with audit log)
+    facilityStore.set(tenantId, facility);
+
+    return {
+      facility,
+      domain: Domain.CQC, // All facilities are CQC domain
+      reportingDomain: ReportingDomain.REGULATORY_HISTORY, // Facilities are regulatory entities
+    };
+  }
+
+  /**
+   * GET /v1/providers/:providerId/facilities
+   * Lists all facilities for a provider.
+   */
+  async listFacilities(
+    tenantId: TenantId,
+    providerId?: ProviderId
+  ): Promise<ListFacilitiesResponse> {
+    const facilities = facilityStore.list(tenantId, providerId);
+
+    return {
+      facilities,
+      totalCount: facilities.length,
+      domain: Domain.CQC,
+      reportingDomain: ReportingDomain.REGULATORY_HISTORY,
+    };
+  }
+
+  /**
+   * GET /v1/facilities/:facilityId
+   * Gets a facility by ID.
+   */
+  async getFacility(
+    tenantId: TenantId,
+    facilityId: FacilityId
+  ): Promise<GetFacilityResponse> {
+    const facility = facilityStore.get(tenantId, facilityId);
+    if (!facility) {
+      throw new FacilityNotFoundError(facilityId);
+    }
+
+    return {
+      facility,
+      domain: Domain.CQC,
+      reportingDomain: ReportingDomain.REGULATORY_HISTORY,
+    };
+  }
+
+  /**
+   * POST /v1/facilities/:facilityId/evidence
+   * Uploads evidence (e.g., CQC Report PDF) for a facility.
+   */
+  async uploadEvidence(
+    tenantId: TenantId,
+    userId: string,
+    request: UploadEvidenceRequest
+  ): Promise<UploadEvidenceResponse> {
+    // Verify facility exists
+    const facility = facilityStore.get(tenantId, request.facilityId);
+    if (!facility) {
+      throw new FacilityNotFoundError(request.facilityId);
+    }
+
+    // Decode base64 content to buffer
+    const contentBuffer = Buffer.from(request.content, 'base64');
+
+    // Create evidence blob (content-addressed)
+    // In production, storageUrl would be an actual S3/blob storage URL
+    const storageUrl = `blob://${facility.cqcLocationId}/${request.fileName}`;
+    const blob = createEvidenceBlob({
+      content: contentBuffer,
+      mimeType: request.mimeType,
+      storageUrl,
+      scanned: true, // Mock: assume scanned
+      quarantined: false,
+    });
+
+    // Create evidence record (metadata)
+    const recordId = `record-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    const collectedAt = new Date().toISOString();
+    const record = createEvidenceRecord({
+      id: recordId,
+      tenantId,
+      blobHashes: [blob.contentHash],
+      primaryBlobHash: blob.contentHash,
+      title: `${request.fileName} (${facility.facilityName})`,
+      description: request.description || `Evidence for facility ${facility.facilityName}`,
+      evidenceType: request.evidenceType,
+      supportsFindingIds: [],
+      supportsPolicyIds: [],
+      collectedAt,
+      collectedBy: userId,
+      createdBy: userId,
+    });
+
+    // Store evidence (in production, this would be a DB insert with audit log)
+    evidenceStore.setBlob(blob);
+    evidenceStore.setRecord(tenantId, record);
+
+    return {
+      contentHash: blob.contentHash,
+      recordId: record.id,
+      domain: Domain.CQC,
+      reportingDomain: ReportingDomain.REGULATORY_HISTORY,
+    };
+  }
+
+  /**
+   * GET /v1/facilities/:facilityId/evidence
+   * Lists all evidence for a facility.
+   */
+  async listFacilityEvidence(
+    tenantId: TenantId,
+    facilityId: FacilityId
+  ): Promise<ListEvidenceResponse> {
+    // Verify facility exists
+    const facility = facilityStore.get(tenantId, facilityId);
+    if (!facility) {
+      throw new FacilityNotFoundError(facilityId);
+    }
+
+    const records = evidenceStore.listRecordsByFacility(tenantId, facilityId);
+
+    return {
+      records,
+      totalCount: records.length,
+      domain: Domain.CQC,
+      reportingDomain: ReportingDomain.REGULATORY_HISTORY,
+    };
   }
 }
 

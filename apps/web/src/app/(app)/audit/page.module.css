@@ -1,0 +1,123 @@
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.main {
+  margin-left: var(--sidebar-width);
+  padding: var(--space-8);
+  flex: 1;
+  background-color: var(--color-white);
+}
+
+.auditList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-bottom: var(--space-8);
+}
+
+.auditCard {
+  padding: var(--space-6);
+  background-color: var(--color-white);
+  border: 1px solid var(--color-slate-200);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.auditHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-slate-200);
+}
+
+.eventNumber {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-slate-500);
+}
+
+.eventType {
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  color: var(--color-charcoal);
+  flex: 1;
+}
+
+.timestamp {
+  font-size: var(--text-sm);
+  color: var(--color-slate-600);
+}
+
+.auditMeta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.auditMeta dt {
+  font-weight: var(--font-semibold);
+  color: var(--color-slate-700);
+}
+
+.auditMeta dd {
+  color: var(--color-slate-600);
+}
+
+.auditMeta dd.hash {
+  font-family: monospace;
+  font-size: var(--text-xs);
+  word-break: break-all;
+}
+
+.chainIndicator {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-slate-200);
+  font-size: var(--text-sm);
+  color: var(--color-slate-500);
+  font-style: italic;
+}
+
+.integrity {
+  padding: var(--space-6);
+  background-color: var(--color-slate-50);
+  border: 1px solid var(--color-slate-200);
+  border-radius: var(--radius-md);
+}
+
+.integrityTitle {
+  font-size: var(--text-xl);
+  font-weight: var(--font-semibold);
+  color: var(--color-charcoal);
+  margin-bottom: var(--space-3);
+}
+
+.integrityDescription {
+  font-size: var(--text-sm);
+  color: var(--color-slate-700);
+  line-height: 1.6;
+}
+
+.empty {
+  padding: var(--space-8);
+  text-align: center;
+  color: var(--color-slate-500);
+}
+
+.loading,
+.error {
+  padding: var(--space-8);
+  text-align: center;
+  font-size: var(--text-lg);
+  color: var(--color-slate-600);
+}
+
+.error {
+  color: var(--color-charcoal);
+  font-weight: var(--font-semibold);
+}

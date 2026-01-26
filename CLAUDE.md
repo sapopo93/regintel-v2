@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 RegIntel v2 is a regulatory compliance platform for UK CQC-registered care providers. It helps providers prove inspection readiness with evidence before inspectors arrive. The system focuses on evidence-based compliance rather than checklist theatre.
 
-**Current Phase:** Phase 9e (Readiness Export) per `.regintel/current_phase.txt`
+**Current Phase:** Phase 10 (UI) per `.regintel/current_phase.txt`
 
-**Test Status:** 192 tests passing (14 test files)
+**Test Status:** 295 tests passing (21 test files: domain, security, backend, UI, scripts)
 
 ## Build & Test Commands
 
@@ -18,6 +18,9 @@ pnpm test                         # Run all tests via Vitest
 pnpm gate                         # Run phase gate validation for current phase
 pnpm gate --strict                # CI mode: SKIP treated as failure
 pnpm validate:versions            # Validate version immutability rules
+pnpm api:dev                      # Start API dev server (localhost:3001)
+pnpm web:dev                      # Start web UI dev server (localhost:3000)
+pnpm playwright                   # Run Playwright E2E tests (requires API + Web servers)
 ```
 
 ### Running Specific Tests
@@ -33,11 +36,16 @@ pnpm vitest run -t "spine:no-orphans"
 
 # Watch mode for development
 pnpm vitest watch
+
+# End-to-end tests (Playwright)
+cd apps/web && pnpm test:e2e              # Run all E2E tests
+cd apps/web && pnpm test:e2e --ui         # Run with Playwright UI
+cd apps/web && pnpm test:e2e --debug      # Run in debug mode
 ```
 
 ### Phase Gate Tests
 
-Test names follow the pattern `<phase>:<gate>`. All phases 0-9e have passing gates:
+Test names follow the pattern `<phase>:<gate>`. All phases 0-10 have passing gates:
 
 ```bash
 pnpm vitest run -t "security:tenant"       # Phase 0: Tenant isolation
@@ -60,9 +68,47 @@ pnpm vitest run -t "topics:scope"          # Phase 6: Topic regulation scope val
 pnpm vitest run -t "topics:evidence"       # Phase 6: Evidence alignment
 pnpm vitest run -t "outputs:purity"        # Phase 7: Output purity validation
 pnpm vitest run -t "ux:report_export"      # Phase 9e: Readiness export (CSV/PDF)
+cd apps/web && pnpm vitest run -t "ui:constitutional"    # Phase 10: Constitutional UI requirements
+cd apps/web && pnpm vitest run -t "ui:mock-safety"       # Phase 10: Mock inspection visual safety
+cd apps/web && pnpm vitest run -t "ui:projection-purity" # Phase 10: No business logic in UI
+cd apps/web && pnpm vitest run -t "ui:disclosure"        # Phase 10: Progressive disclosure
+cd apps/web && pnpm vitest run -t "ui:no-interpretation" # Phase 10: Facts only, no interpretation
 ```
 
 **CI Strict Mode:** When `CI=true`, SKIP results are treated as failures. All tests must explicitly PASS.
+
+**E2E Testing:** Playwright tests in `apps/web/e2e/` validate constitutional UI requirements, mock inspection safety, progressive disclosure, and end-to-end user journeys. Tests automatically start both API (localhost:3001) and Web (localhost:3000) servers. Key test suites:
+- `constitutional-requirements.spec.ts` - UI constitutional compliance
+- `mock-safety.spec.ts` - Mock inspection visual safety guarantees
+- `progressive-disclosure.spec.ts` - Progressive disclosure patterns
+- `founder_full_journey.spec.ts` - Complete founder workflow
+- `pipeline-end-to-end.spec.ts` - Full inspection pipeline
+- `facility-cqc-pdf.spec.ts` - PDF export validation
+
+## Environment Variables
+
+Required environment variables are defined in `.env`:
+
+```bash
+# API Authentication Tokens
+FOUNDER_TOKEN=demo-founder-token-12345
+PROVIDER_TOKEN=demo-provider-token-12345
+
+# Web App Configuration
+NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
+NEXT_PUBLIC_FOUNDER_TOKEN=demo-founder-token-12345
+NEXT_PUBLIC_PROVIDER_TOKEN=demo-provider-token-12345
+
+# CQC API Integration (Phase 10: Facility Onboarding)
+CQC_API_KEY=your-cqc-api-key-here
+```
+
+**CQC API Key:** Obtain from [CQC Developer Portal](https://www.cqc.org.uk/about-us/transparency/using-cqc-data). The API key provides:
+- Better rate limits (60 req/min vs 10 req/min public)
+- Authenticated access to CQC location data
+- Priority API access during high load
+
+See [docs/TESTING_CQC_ONBOARDING.md](docs/TESTING_CQC_ONBOARDING.md) for testing facility onboarding with real CQC data.
 
 ## Architecture
 
@@ -88,7 +134,8 @@ The system enforces **strict sequential phase progression** (Phase 0-9e). Each p
 | 6 | Topic Catalog: Relevance control, evidence alignment | ✅ **COMPLETE** |
 | 7 | Provider Outputs: Inspection Confidence Report, Risk Register, Evidence Matrix | ✅ **COMPLETE** |
 | 8 | Integration Slice: Minimal vertical slice across DB, API, audit | ✅ **COMPLETE** |
-| 9e | Readiness Export: CSV/PDF export for mock inspection results | 🚧 **IN PROGRESS** |
+| 9e | Readiness Export: CSV/PDF export for mock inspection results | ✅ **COMPLETE** |
+| 10 | Forensic UI: Constitutional requirements, mock safety, progressive disclosure | ✅ **COMPLETE** |
 
 ### Core Domain Model ("The Spine")
 
@@ -144,7 +191,7 @@ packages/
   domain/       - Phases 1-9: Core domain models and business logic
 apps/
   api/          - Phase 8+: Backend API server (mock-inspection-backend)
-  web/          - Frontend web application (planned)
+  web/          - Phase 10: Forensic UI with constitutional requirements (Next.js 14)
   worker/       - Background job processor (planned)
 scripts/        - Build and validation scripts (gate.ts, validate-version-immutability.ts)
 docs/           - Governance documents and phase plans
@@ -195,6 +242,10 @@ docs/           - Governance documents and phase plans
 - `provider-outputs.ts` - Phase 7: Pure functions generating provider-facing reports from spine data
 - `finding-generator.ts` - Phase 9c: Evidence handling for mock inspection findings
 - `frozen-registries.ts` - Phase 9d: Immutable registry management for versioned artifacts (Topic Catalog v1, PRS Logic Profiles v1)
+- `facility.ts` - Phase 10: Facility entity with inspection status tracking
+- `cqc-client.ts` - Phase 10: CQC API integration with optional API key authentication
+- `cqc-scraper.ts` - Phase 10: Web scraping for latest inspection reports (fresher than API)
+- `onboarding.ts` - Phase 10: Facility onboarding orchestration with conflict resolution
 
 **Backend (Phase 8+):**
 - `apps/api/mock-inspection-backend.ts` - Mock inspection backend with session lifecycle management
@@ -208,13 +259,20 @@ docs/           - Governance documents and phase plans
 | `docs/VERSION_IMMUTABILITY.md` | Version immutability rules and workflow |
 | `docs/PHASE8_IMPLEMENTATION_CODEX.md` | Phase 8 implementation guidance |
 | `docs/REGINTEL_PHASE8_INTEGRATION_PLAN.md` | Phase 8 integration plan |
+| `docs/FACILITY_ONBOARDING_GUIDE.md` | Phase 10: Facility onboarding API documentation |
+| `docs/TESTING_CQC_ONBOARDING.md` | Phase 10: Testing guide for CQC API integration |
 | `scripts/gate.ts` | Phase gate runner implementation |
 | `scripts/validate-version-immutability.ts` | Version immutability validator |
 | `vitest.config.ts` | Test configuration (includes `packages/**/*.test.ts`, `scripts/**/*.test.ts`, `apps/**/*.test.ts`) |
 | `.github/workflows/ci.yml` | CI pipeline: version-immutability, unit tests, phase-gates |
 | `packages/security/src/` | Phase 0: Security foundations |
 | `packages/domain/src/` | Phases 1-9: Domain models and business logic |
+| `packages/domain/src/cqc-client.ts` | Phase 10: CQC API integration for facility onboarding |
+| `packages/domain/src/cqc-scraper.ts` | Phase 10: Web scraping for latest CQC inspection reports |
+| `packages/domain/src/onboarding.ts` | Phase 10: Facility onboarding orchestration logic |
+| `packages/domain/src/facility.ts` | Phase 10: Facility entity and validation |
 | `apps/api/` | Phase 8+: Backend API implementation |
+| `apps/web/` | Phase 10: Forensic UI with constitutional requirements (Next.js 14, React 18, TypeScript) |
 
 ## Domain Concepts
 

@@ -96,6 +96,7 @@ const IGNORE_PATTERNS = [
   '.env.template',
   '*.test.ts',
   '*.spec.ts',
+  '*.tsbuildinfo', // TypeScript incremental build cache
   'secrets-scan.ts', // Ignore this file (contains patterns)
 ];
 

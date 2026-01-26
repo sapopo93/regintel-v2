@@ -1,0 +1,153 @@
+.layout {
+  min-height: 100vh;
+  background: linear-gradient(130deg, #f6f4ef 0%, #efe7da 55%, #e4d7c6 100%);
+  color: #1b1a17;
+}
+
+.main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 48px 24px 64px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.kicker {
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 12px;
+  color: #7a6b5a;
+  margin: 0 0 8px;
+}
+
+.title {
+  font-size: 32px;
+  margin: 0 0 6px;
+}
+
+.subtitle {
+  margin: 0;
+  color: #6e6254;
+}
+
+.formCard {
+  background: #fdfbf7;
+  border: 1px solid #d2c6b7;
+  border-radius: 18px;
+  padding: 24px;
+  box-shadow: 0 16px 40px rgba(27, 26, 23, 0.12);
+  margin-bottom: 32px;
+}
+
+.sectionTitle {
+  margin: 0 0 16px;
+  font-size: 20px;
+}
+
+.form {
+  display: grid;
+  gap: 16px;
+}
+
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.input {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #c7b8a8;
+  background: #fff;
+}
+
+.submit {
+  padding: 12px 18px;
+  border-radius: 10px;
+  border: none;
+  background: #1b1a17;
+  color: #fdfbf7;
+  font-weight: 600;
+  cursor: pointer;
+  justify-self: start;
+}
+
+.submit:hover {
+  background: #302a24;
+}
+
+.list {
+  margin-top: 32px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  background: #fdfbf7;
+  border: 1px solid #d2c6b7;
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.cardTitle {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.cardMeta {
+  margin: 0;
+  color: #6c5f52;
+  font-size: 13px;
+}
+
+.cardButton {
+  border: 1px solid #1b1a17;
+  background: transparent;
+  color: #1b1a17;
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.cardButton:hover {
+  background: #1b1a17;
+  color: #fdfbf7;
+}
+
+.error {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f9e7e2;
+  color: #8a3d2c;
+  border: 1px solid #e5b9ae;
+  margin-bottom: 12px;
+}
+
+.loading {
+  padding: 48px;
+  text-align: center;
+}
+
+.empty {
+  color: #6c5f52;
+}
+
+.required {
+  color: #9b3d2e;
+}

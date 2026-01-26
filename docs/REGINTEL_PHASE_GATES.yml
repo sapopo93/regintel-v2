@@ -189,6 +189,107 @@ phases:
           - "exports are deterministically ordered"
           - "exports NEVER include regulatory history findings"
           - "every page/row includes Topic Catalog + PRS Logic Profile versions + hashes"
+      - id: ui_status_from_api
+        command: "cd apps/web && pnpm test:e2e"
+        asserts:
+          - "Sidebar status displays provider.prsState from API"
+    blocks_next_phase_on_failure: true
+
+  phase10_ui:
+    description: "Forensic UI with constitutional requirements"
+    depends_on: [phase9e_export]
+    required_tests:
+      - id: ui_constitutional
+        command: "cd apps/web && pnpm vitest run -t \"ui:constitutional\""
+        asserts:
+          - "every view renders version"
+          - "every view renders hash"
+          - "every view renders timestamp"
+          - "every view renders domain"
+          - "missing metadata throws ConstitutionalViolationError"
+          - "empty hash throws ConstitutionalViolationError"
+      - id: ui_mock_safety
+        command: "cd apps/web && pnpm vitest run -t \"ui:mock-safety\""
+        asserts:
+          - "mock screens have red frame"
+          - "mock screens have SIMULATION watermark"
+          - "mock findings show origin=SYSTEM_MOCK badge"
+          - "regulatory findings never show simulation styling"
+          - "SYSTEM_MOCK in REGULATORY_HISTORY is visually impossible"
+      - id: ui_projection_purity
+        command: "cd apps/web && pnpm vitest run -t \"ui:projection-purity\""
+        asserts:
+          - "UI components contain zero business logic"
+          - "all computed values come from backend"
+          - "no severity scoring in frontend"
+          - "no risk calculation in frontend"
+      - id: ui_disclosure
+        command: "cd apps/web && pnpm vitest run -t \"ui:disclosure\""
+        asserts:
+          - "findings have Summary layer"
+          - "findings have Evidence layer accessible from Summary"
+          - "findings have Trace layer accessible from Evidence"
+          - "Trace layer shows deterministic hash"
+          - "cannot jump from Summary directly to Trace"
+      - id: ui_no_interpretation
+        command: "cd apps/web && pnpm vitest run -t \"ui:no-interpretation\""
+        asserts:
+          - "no traffic light colors"
+          - "no risk scores displayed"
+          - "no emojis rendered"
+          - "only counts and facts shown"
+          - "severity uses text labels not colors"
+          - "watermark text is fact-based"
+      - id: ui_menu_all_live
+        command: "cd apps/web && pnpm test:e2e"
+        asserts:
+          - "Overview menu calls /v1/providers/:id/overview"
+          - "Topics menu calls /v1/providers/:id/topics"
+          - "Mock Inspection menu calls /v1/providers/:id/mock-sessions"
+          - "Findings menu calls /v1/providers/:id/findings"
+          - "Evidence menu calls /v1/providers/:id/evidence"
+          - "Exports menu calls /v1/providers/:id/exports"
+          - "Audit Trail menu calls /v1/providers/:id/audit-trail"
+          - "All pages display constitutional metadata"
+          - "Sidebar status displays provider.prsState from API"
+    blocks_next_phase_on_failure: true
+
+  phase11_blue_ocean:
+    description: "Blue Ocean Comprehensive Reporting (PhD-level analyst output)"
+    depends_on: [phase10_ui]
+    required_tests:
+      - id: blue_ocean_completeness
+        command: "pnpm vitest run -t \"blue-ocean:completeness\""
+        asserts:
+          - "report has ≥0.95 section coverage (13/13 sections present)"
+          - "report has ≥0.95 evidence coverage (findings link to evidence)"
+          - "report has ≥0.95 action completeness (owner+deadline+AC+verification)"
+          - "report has ≥0.95 RCA completeness (≥2 hypotheses per major finding)"
+          - "output is deterministic (same inputs → same report hash)"
+          - "mock/regulatory separation preserved (watermark on all exports)"
+          - "constitutional metadata on all sections"
+      - id: blue_ocean_rca
+        command: "pnpm vitest run -t \"blue-ocean:rca\""
+        asserts:
+          - "≥2 root cause hypotheses for each critical/high finding"
+          - "each hypothesis has disconfirming test"
+          - "most likely root cause selected with rationale"
+          - "second-order effects identified"
+      - id: blue_ocean_smart_actions
+        command: "pnpm vitest run -t \"blue-ocean:smart-actions\""
+        asserts:
+          - "all actions have owner (role, not name)"
+          - "all actions have deadline (ISO date)"
+          - "all actions have ≥1 acceptance criterion with verification method"
+          - "effort estimates (S/M/L) with rationale"
+          - "dependencies tracked"
+      - id: blue_ocean_golden_fixture
+        command: "pnpm vitest run -t \"blue-ocean:golden\""
+        asserts:
+          - "golden fixture always produces ≥0.95 scores"
+          - "golden fixture output is deterministic"
+          - "no fabricated facts (all evidence refs valid)"
+          - "unknowns explicitly flagged with collection steps"
     blocks_next_phase_on_failure: true
 
 # Global enforcement

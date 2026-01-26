@@ -8,6 +8,8 @@
 // Identifiers (tenant-scoped)
 export type TenantId = string;
 export type UserId = string;
+export type ProviderId = string;
+export type FacilityId = string;
 export type RegulationId = string;
 export type PolicyId = string;
 export type LinkId = string;

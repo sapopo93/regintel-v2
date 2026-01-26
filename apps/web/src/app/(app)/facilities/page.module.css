@@ -1,0 +1,116 @@
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.main {
+  margin-left: var(--sidebar-width);
+  padding: var(--space-8);
+  flex: 1;
+  background-color: var(--color-white);
+}
+
+.actions {
+  margin-bottom: var(--space-6);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.addButton {
+  padding: var(--space-3) var(--space-6);
+  background-color: var(--color-charcoal);
+  color: var(--color-white);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.addButton:hover {
+  background-color: var(--color-slate-700);
+}
+
+.facilitiesList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: var(--space-6);
+}
+
+.facilityCard {
+  padding: var(--space-6);
+  background-color: var(--color-white);
+  border: 1px solid var(--color-slate-200);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.facilityCard:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--color-slate-300);
+}
+
+.facilityName {
+  font-size: var(--text-xl);
+  font-weight: var(--font-semibold);
+  color: var(--color-charcoal);
+  margin-bottom: var(--space-4);
+}
+
+.facilityDetails {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.detailRow {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.detailLabel {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-slate-600);
+  min-width: 140px;
+}
+
+.detailValue {
+  font-size: var(--text-sm);
+  color: var(--color-slate-800);
+}
+
+.facilityHash {
+  font-size: var(--text-xs);
+  color: var(--color-slate-400);
+  font-family: monospace;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-slate-100);
+}
+
+.empty {
+  text-align: center;
+  padding: var(--space-12);
+  color: var(--color-slate-600);
+}
+
+.empty p {
+  margin-bottom: var(--space-2);
+}
+
+.loading,
+.error {
+  padding: var(--space-8);
+  text-align: center;
+  font-size: var(--text-lg);
+  color: var(--color-slate-600);
+}
+
+.error {
+  color: var(--color-charcoal);
+  font-weight: var(--font-semibold);
+}

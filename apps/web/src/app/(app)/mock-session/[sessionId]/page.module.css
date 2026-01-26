@@ -1,0 +1,111 @@
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.main {
+  margin-left: var(--sidebar-width);
+  padding: var(--space-8);
+  flex: 1;
+  background-color: var(--color-white);
+}
+
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.section {
+  padding: var(--space-6);
+  background-color: var(--color-slate-50);
+  border: 1px solid var(--color-slate-200);
+  border-radius: var(--radius-md);
+}
+
+.answerInput {
+  width: 100%;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-slate-200);
+  margin-bottom: var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.submitButton {
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-sm);
+  border: none;
+  background-color: var(--color-slate-900);
+  color: var(--color-white);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+}
+
+.sectionTitle {
+  font-size: var(--text-xl);
+  font-weight: var(--font-semibold);
+  color: var(--color-charcoal);
+  margin-bottom: var(--space-4);
+}
+
+.definitionList {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3) var(--space-6);
+}
+
+.definitionList dt {
+  font-weight: var(--font-semibold);
+  color: var(--color-slate-700);
+}
+
+.definitionList dd {
+  color: var(--color-slate-600);
+}
+
+.definitionList dd.in_progress {
+  font-weight: var(--font-semibold);
+  color: var(--color-charcoal);
+}
+
+.definitionList dd.completed {
+  color: var(--color-slate-700);
+}
+
+.definitionList dd.abandoned {
+  color: var(--color-slate-500);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.backButton {
+  display: inline-block;
+  padding: var(--space-3) var(--space-6);
+  background-color: var(--color-slate-100);
+  color: var(--color-charcoal);
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+  font-weight: var(--font-semibold);
+  transition: background-color 0.2s;
+}
+
+.backButton:hover {
+  background-color: var(--color-slate-200);
+}
+
+.loading,
+.error {
+  padding: var(--space-8);
+  text-align: center;
+  font-size: var(--text-lg);
+  color: var(--color-slate-600);
+}
+
+.error {
+  color: var(--color-charcoal);
+  font-weight: var(--font-semibold);
+}

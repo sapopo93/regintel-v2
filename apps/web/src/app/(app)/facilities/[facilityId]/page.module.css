@@ -1,0 +1,166 @@
+.layout {
+  display: flex;
+  min-height: 100vh;
+  background-color: var(--color-slate-50);
+}
+
+.main {
+  flex: 1;
+  margin-left: var(--sidebar-width);
+  padding: 32px 48px 64px;
+}
+
+.loading,
+.error {
+  padding: 32px;
+  margin-left: var(--sidebar-width);
+}
+
+.section {
+  margin-top: 24px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  border: 1px solid #e6e8ec;
+}
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 20px;
+}
+
+.overviewButton {
+  border: 1px solid #1b1a17;
+  background: #1b1a17;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.detailsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.detailItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detailLabel {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #5a6470;
+}
+
+.detailValue {
+  font-size: 14px;
+  color: #1b1a17;
+}
+
+.detailValueMono {
+  font-family: 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 12px;
+  color: #1b1a17;
+  word-break: break-all;
+}
+
+.uploadButton {
+  border: 1px solid #1b1a17;
+  background: transparent;
+  color: #1b1a17;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.uploadForm {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.formGroup {
+  display: grid;
+  gap: 8px;
+}
+
+.label {
+  font-size: 14px;
+  color: #2c2f36;
+}
+
+.fileInput,
+.select,
+.textarea {
+  border: 1px solid #d9dde3;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.fileName {
+  font-size: 12px;
+  color: #57606a;
+}
+
+.submitButton {
+  background: #1b1a17;
+  color: #fff;
+  border: none;
+  padding: 10px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  width: fit-content;
+}
+
+.evidenceList {
+  display: grid;
+  gap: 12px;
+}
+
+.evidenceCard {
+  border: 1px solid #e6e8ec;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.evidenceTitle {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.evidenceDetails {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: #5a6470;
+}
+
+.evidenceDetail {
+  background: #f4f6f8;
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+
+.evidenceHash {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #1b1a17;
+}
+
+.empty {
+  color: #6b7280;
+}
