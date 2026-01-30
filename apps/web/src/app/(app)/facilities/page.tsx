@@ -1,4 +1,6 @@
 'use client';
+export const dynamic = "force-dynamic";
+
 
 /**
  * Facilities List Page
@@ -92,6 +94,10 @@ export default function FacilitiesPage() {
               snapshotTimestamp={data.snapshotTimestamp}
               domain={data.domain}
               reportingDomain={data.reportingDomain}
+              mode={data.mode}
+              reportSource={data.reportSource}
+              snapshotId={data.snapshotId}
+              ingestionStatus={data.ingestionStatus}
             />
 
             <MetadataBar
@@ -102,6 +108,10 @@ export default function FacilitiesPage() {
               snapshotTimestamp={data.snapshotTimestamp}
               domain={data.domain}
               reportingDomain={data.reportingDomain}
+              mode={data.mode}
+              reportSource={data.reportSource}
+              snapshotId={data.snapshotId}
+              ingestionStatus={data.ingestionStatus}
             />
 
             <div className={styles.actions}>

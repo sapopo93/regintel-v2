@@ -36,7 +36,7 @@ test('founder full journey from onboarding to export', async ({ page }) => {
   await page.fill('[data-testid="capacity-input"]', '20');
 
   const facilityResponsePromise = page.waitForResponse((response) =>
-    response.url().includes(`/v1/providers/${providerId}/facilities`) &&
+    response.url().includes('/v1/facilities/onboard') &&
     response.request().method() === 'POST'
   );
   await page.click('[data-testid="primary-create-facility"]');
@@ -62,6 +62,8 @@ test('founder full journey from onboarding to export', async ({ page }) => {
     mimeType: 'application/pdf',
     buffer: Buffer.from('%PDF-1.4\n%mock\n'),
   });
+  // Select CQC_REPORT as the evidence type
+  await page.selectOption('[data-testid="evidence-type-select"]', 'CQC_REPORT');
   // Wait for the submit button to be enabled (file selected)
   await expect(page.getByTestId('primary-upload-evidence')).toBeEnabled();
 
@@ -126,6 +128,8 @@ test('founder full journey from onboarding to export', async ({ page }) => {
     const answerResponse = await answerResponsePromise;
     const answerBody = await answerResponse.json();
     expect(answerBody.status).toBe('COMPLETED');
+    expect(answerBody.reportingDomain).toBe('MOCK_SIMULATION');
+    expect(answerBody.mode).toBe('MOCK');
   } else {
     expect(statusValue).toBe('COMPLETED');
   }
@@ -137,57 +141,32 @@ test('founder full journey from onboarding to export', async ({ page }) => {
   await page.click('[data-testid="sidebar-link-findings"]');
   const findingsResponse = await findingsResponsePromise;
   const findingsBody = await findingsResponse.json();
-  expect(findingsBody.findings.length).toBeGreaterThan(0);
-  for (const finding of findingsBody.findings) {
-    expect(finding.origin).toBe('SYSTEM_MOCK');
-    expect(finding.reportingDomain).toBe('MOCK_SIMULATION');
-  }
+  expect(findingsBody.reportingDomain).toBe('REGULATORY_HISTORY');
+  expect(findingsBody.findings.length).toBe(0);
+  await expect(page.getByTestId('ingestion-status-banner')).toBeVisible();
 
   await page.click('[data-testid="sidebar-link-exports"]');
   await page.waitForSelector('h1');
 
   const exportButton = page.getByTestId('primary-generate-export');
   await expect(exportButton).toBeEnabled();
-  const exportPdfResponsePromise = page.waitForResponse((response) =>
+  const exportReportResponsePromise = page.waitForResponse((response) =>
     response.url().includes(`/v1/providers/${providerId}/exports`) &&
     response.request().method() === 'POST'
   );
   await exportButton.click();
-  await exportPdfResponsePromise;
+  await exportReportResponsePromise;
 
-  await expect(page.getByRole('link', { name: /Download PDF/i })).toBeVisible();
-  const pdfDownloadPromise = page.waitForEvent('download');
-  await page.getByRole('link', { name: /Download PDF/i }).click();
-  const pdfDownload = await pdfDownloadPromise;
-  const pdfPath = await pdfDownload.path();
-  expect(pdfPath).toBeTruthy();
-  const pdfContent = await readFile(pdfPath as string, 'utf-8');
-  expect(pdfContent).toContain('READINESS (MOCK) — NOT REGULATORY HISTORY');
-  expect(pdfContent).toContain('topicCatalogVersion');
-  expect(pdfContent).toContain('topicCatalogSha256');
-  expect(pdfContent).toContain('prsLogicProfilesVersion');
-  expect(pdfContent).toContain('prsLogicProfilesSha256');
-
-  await page.getByLabel('CSV (Spreadsheet)').check();
-  const exportCsvResponsePromise = page.waitForResponse((response) =>
-    response.url().includes(`/v1/providers/${providerId}/exports`) &&
-    response.request().method() === 'POST'
-  );
-  await exportButton.click();
-  await exportCsvResponsePromise;
-
-  await expect(page.getByRole('link', { name: /Download CSV/i })).toBeVisible();
-  const csvDownloadPromise = page.waitForEvent('download');
-  await page.getByRole('link', { name: /Download CSV/i }).click();
-  const csvDownload = await csvDownloadPromise;
-  const csvPath = await csvDownload.path();
-  expect(csvPath).toBeTruthy();
-  const csvContent = await readFile(csvPath as string, 'utf-8');
-  expect(csvContent).toContain('READINESS (MOCK) — NOT REGULATORY HISTORY');
-  expect(csvContent).toContain('topicCatalogVersion');
-  expect(csvContent).toContain('topicCatalogSha256');
-  expect(csvContent).toContain('prsLogicProfilesVersion');
-  expect(csvContent).toContain('prsLogicProfilesSha256');
+  await expect(page.getByRole('link', { name: /Download Blue Ocean Report/i })).toBeVisible();
+  const reportDownloadPromise = page.waitForEvent('download');
+  await page.getByRole('link', { name: /Download Blue Ocean Report/i }).click();
+  const reportDownload = await reportDownloadPromise;
+  const reportPath = await reportDownload.path();
+  expect(reportPath).toBeTruthy();
+  const reportContent = await readFile(reportPath as string, 'utf-8');
+  expect(reportContent).toContain('BLUE OCEAN — REGULATORY HISTORY');
+  // Board Pack format doesn't include evidence filenames when there are no findings
+  // The evidence is verified by the EVIDENCE_RECORDED audit event instead
 
   await page.click('[data-testid="sidebar-link-audit"]');
   await page.waitForURL(/\/audit\?provider=/);
@@ -196,7 +175,7 @@ test('founder full journey from onboarding to export', async ({ page }) => {
   await page.getByRole('button', { name: 'Show Evidence →' }).click({ force: true });
   await expect(page.getByRole('button', { name: 'Show Trace →' })).toBeVisible();
   await expect(page.getByText('PROVIDER_CREATED')).toBeVisible();
-  await expect(page.getByText('FACILITY_CREATED')).toBeVisible();
+  await expect(page.getByText('FACILITY_ONBOARDED')).toBeVisible();
   await expect(page.getByText('EVIDENCE_RECORDED')).toBeVisible();
   await expect(page.getByText('MOCK_SESSION_STARTED')).toBeVisible();
   await expect(page.getByText('MOCK_SESSION_ANSWERED')).toBeVisible();

@@ -1,4 +1,6 @@
 'use client';
+export const dynamic = "force-dynamic";
+
 
 /**
  * Exports Page
@@ -136,6 +138,8 @@ export default function ExportsPage() {
     );
   }
 
+  const isRealMode = statusData.mode === 'REAL';
+
   return (
     <SimulationFrame reportingDomain={statusData.reportingDomain}>
       <div className={styles.layout}>
@@ -162,6 +166,10 @@ export default function ExportsPage() {
             snapshotTimestamp={statusData.snapshotTimestamp}
             domain={statusData.domain}
             reportingDomain={statusData.reportingDomain}
+            mode={statusData.mode}
+            reportSource={statusData.reportSource}
+            snapshotId={statusData.snapshotId}
+            ingestionStatus={statusData.ingestionStatus}
           />
 
           <DisclosurePanel
@@ -209,9 +217,14 @@ export default function ExportsPage() {
                 {exportError && (
                   <div className={styles.errorMessage}>
                     {exportError}
-                    {(exportError.includes('No completed session') || exportError.includes('Conflict')) && (
+                    {!isRealMode && (exportError.includes('No completed session') || exportError.includes('Conflict')) && (
                       <div style={{ marginTop: '8px', fontSize: '0.9em' }}>
                         💡 Tip: Complete a mock inspection session first. Navigate to "Mock Session" from the sidebar.
+                      </div>
+                    )}
+                    {isRealMode && exportError.includes('Regulatory exports') && (
+                      <div style={{ marginTop: '8px', fontSize: '0.9em' }}>
+                        💡 Tip: Regulatory exports are available only as Blue Ocean reports.
                       </div>
                     )}
                   </div>
@@ -239,13 +252,22 @@ export default function ExportsPage() {
                   <li>Session metadata (ID, provider, versions, hashes)</li>
                   <li>Topic Catalog version and hash</li>
                   <li>PRS Logic Profile version and hash</li>
-                  <li>All findings from mock sessions</li>
+                  <li>{isRealMode ? 'Regulatory findings (if available)' : 'All findings from mock sessions'}</li>
                   <li>Evidence coverage statistics</li>
                   <li>Watermark on every page/row (if enabled)</li>
                 </ul>
                 <div className={styles.warning}>
-                  <strong>Note:</strong> Exports NEVER include regulatory history findings.
-                  All exported findings have origin=SYSTEM_MOCK.
+                  {isRealMode ? (
+                    <>
+                      <strong>Note:</strong> Regulatory exports are sourced from uploaded CQC evidence and regulatory findings only.
+                      Mock findings are excluded.
+                    </>
+                  ) : (
+                    <>
+                      <strong>Note:</strong> Exports NEVER include regulatory history findings.
+                      All exported findings have origin=SYSTEM_MOCK.
+                    </>
+                  )}
                 </div>
 
                 {statusData.latestExport && (
@@ -264,6 +286,10 @@ export default function ExportsPage() {
                 snapshotTimestamp={statusData.snapshotTimestamp}
                 domain={statusData.domain}
                 reportingDomain={statusData.reportingDomain}
+                mode={statusData.mode}
+                reportSource={statusData.reportSource}
+                snapshotId={statusData.snapshotId}
+                ingestionStatus={statusData.ingestionStatus}
               />
             )}
           />

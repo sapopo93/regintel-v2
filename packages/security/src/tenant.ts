@@ -38,6 +38,23 @@ export function extractTenantId(scopedKey: string): string | null {
 }
 
 /**
+ * Extracts the unscoped key from a tenant-scoped key.
+ * Requires TenantContext to correctly handle tenant IDs that contain colons.
+ * Returns null if the key doesn't belong to the tenant.
+ *
+ * Example: unscopeKey({tenantId: 'tenant:foo'}, 'tenant:foo:provider-1') => 'provider-1'
+ * Works correctly even when tenant ID contains colons.
+ */
+export function unscopeKey(ctx: TenantContext, scopedKey: string): string | null {
+  const prefix = `${ctx.tenantId}:`;
+  if (!scopedKey.startsWith(prefix)) {
+    return null;
+  }
+  const unscopedPart = scopedKey.slice(prefix.length);
+  return unscopedPart || null;
+}
+
+/**
  * Validates that a scoped key belongs to the given tenant context.
  * This is a critical security check - prevents cross-tenant access.
  */

@@ -1,4 +1,6 @@
 'use client';
+export const dynamic = "force-dynamic";
+
 
 /**
  * Findings List Page
@@ -83,7 +85,11 @@ export default function FindingsPage() {
         <main className={styles.main}>
           <PageHeader
             title="Inspection Findings"
-            subtitle="All findings from mock sessions"
+            subtitle={
+              data.mode === 'REAL'
+                ? 'Regulatory findings (ingestion pending)'
+                : 'All findings from mock sessions'
+            }
             topicCatalogVersion={data.topicCatalogVersion}
             topicCatalogHash={data.topicCatalogHash}
             prsLogicVersion={data.prsLogicVersion}
@@ -91,6 +97,10 @@ export default function FindingsPage() {
             snapshotTimestamp={data.snapshotTimestamp}
             domain={data.domain}
             reportingDomain={data.reportingDomain}
+            mode={data.mode}
+            reportSource={data.reportSource}
+            snapshotId={data.snapshotId}
+            ingestionStatus={data.ingestionStatus}
           />
 
           <DisclosurePanel
@@ -156,6 +166,10 @@ export default function FindingsPage() {
                 snapshotTimestamp={data.snapshotTimestamp}
                 domain={data.domain}
                 reportingDomain={data.reportingDomain}
+                mode={data.mode}
+                reportSource={data.reportSource}
+                snapshotId={data.snapshotId}
+                ingestionStatus={data.ingestionStatus}
               />
             )}
           />

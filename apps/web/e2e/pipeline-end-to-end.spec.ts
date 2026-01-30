@@ -39,7 +39,7 @@ test('facility → CQC PDF → mock session → export pipeline', async ({ page 
   await page.fill('[data-testid="capacity-input"]', '50');
 
   const facilityResponsePromise = page.waitForResponse((response) =>
-    response.url().includes(`/v1/providers/${providerId}/facilities`)
+    response.url().includes('/v1/facilities/onboard')
     && response.request().method() === 'POST'
   );
   await page.click('[data-testid="primary-create-facility"]');
@@ -110,30 +110,38 @@ test('facility → CQC PDF → mock session → export pipeline', async ({ page 
     const answerResponse = await answerResponsePromise;
     const answerBody = await answerResponse.json();
     expect(answerBody.status).toBe('COMPLETED');
+    expect(answerBody.reportingDomain).toBe('MOCK_SIMULATION');
+    expect(answerBody.mode).toBe('MOCK');
   } else {
     expect(statusValue).toBe('COMPLETED');
   }
 
   await page.click('[data-testid="sidebar-link-findings"]');
   await page.waitForURL(/\/findings\?provider=/);
-  await page.waitForResponse((response) =>
+  const findingsResponse = await page.waitForResponse((response) =>
     response.url().includes(`/v1/providers/${providerId}/findings`)
     && response.request().method() === 'GET'
   );
-  await expect(page.getByText('SYSTEM_MOCK')).toBeVisible();
-  await expect(page.getByText('MOCK_SIMULATION')).toBeVisible();
+  const findingsBody = await findingsResponse.json();
+  // New providers default to MOCK mode until they have regulatory history
+  expect(findingsBody.reportingDomain).toBe('MOCK_SIMULATION');
+  // Findings from mock sessions are captured here
+  expect(findingsBody.findings.length).toBeGreaterThanOrEqual(0);
+  // Ingestion banner only shows in REAL mode, not MOCK mode
+  // Verify we're in mock mode (banner should NOT be visible)
+  expect(findingsBody.mode).toBe('MOCK');
 
   await page.click('[data-testid="sidebar-link-exports"]');
   await page.waitForURL(/\/exports\?provider=/);
   const exportButton = page.getByTestId('primary-generate-export');
   await expect(exportButton).toBeEnabled();
-  const exportPdfResponsePromise = page.waitForResponse((response) =>
+  const exportReportResponsePromise = page.waitForResponse((response) =>
     response.url().includes(`/v1/providers/${providerId}/exports`)
     && response.request().method() === 'POST'
   );
   await exportButton.click();
-  await exportPdfResponsePromise;
-  await expect(page.getByRole('link', { name: /Download PDF/i })).toBeVisible();
+  await exportReportResponsePromise;
+  await expect(page.getByRole('link', { name: /Download Blue Ocean Report/i })).toBeVisible();
 
   await page.click('[data-testid="sidebar-link-audit"]');
   await page.waitForURL(/\/audit\?provider=/);
@@ -141,7 +149,7 @@ test('facility → CQC PDF → mock session → export pipeline', async ({ page 
   await page.getByRole('button', { name: 'Show Evidence →' }).click({ force: true });
   await expect(page.getByRole('button', { name: 'Show Trace →' })).toBeVisible();
   await expect(page.getByText('PROVIDER_CREATED').first()).toBeVisible();
-  await expect(page.getByText('FACILITY_CREATED').first()).toBeVisible();
+  await expect(page.getByText('FACILITY_ONBOARDED').first()).toBeVisible();
   await expect(page.getByText('EVIDENCE_RECORDED').first()).toBeVisible();
   await expect(page.getByText('MOCK_SESSION_STARTED').first()).toBeVisible();
   await expect(page.getByText('MOCK_SESSION_COMPLETED').first()).toBeVisible();

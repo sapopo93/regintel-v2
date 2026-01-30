@@ -21,6 +21,9 @@ export function PageHeader({
   actions,
   ...metadata
 }: PageHeaderProps) {
+  const showIngestionBanner =
+    metadata.mode === 'REAL' && metadata.ingestionStatus !== 'READY';
+
   return (
     <header className={styles.header}>
       <div className={styles.titleRow}>
@@ -30,6 +33,15 @@ export function PageHeader({
         </div>
         {actions && <div className={styles.actions}>{actions}</div>}
       </div>
+      {showIngestionBanner && (
+        <div className={styles.ingestionBanner} data-testid="ingestion-status-banner">
+          <strong>Ingestion incomplete.</strong>
+          <span>
+            Source {metadata.reportSource.type}:{metadata.reportSource.id} · Snapshot {metadata.snapshotId}.
+            Mock fallback disabled.
+          </span>
+        </div>
+      )}
       <MetadataBar {...metadata} compact />
     </header>
   );

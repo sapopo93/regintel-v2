@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   scopeKey,
   extractTenantId,
+  unscopeKey,
   validateKeyBelongsToTenant,
   TenantIsolatedStore,
   TenantBoundaryViolationError,
@@ -36,6 +37,54 @@ describe('security:tenant', () => {
       const ctx: TenantContext = { tenantId: 'tenant-a' };
       const isValid = validateKeyBelongsToTenant(ctx, 'tenant-b:resource-123');
       expect(isValid).toBe(false);
+    });
+
+    it('unscopes keys correctly', () => {
+      const ctx: TenantContext = { tenantId: 'tenant-a' };
+      const unscoped = unscopeKey(ctx, 'tenant-a:resource-123');
+      expect(unscoped).toBe('resource-123');
+    });
+
+    it('unscopes keys with tenant IDs containing colons', () => {
+      // This is the critical test case for the bug fix
+      const ctx: TenantContext = { tenantId: 'tenant:foo' };
+      const unscoped = unscopeKey(ctx, 'tenant:foo:provider-1');
+      expect(unscoped).toBe('provider-1');
+    });
+
+    it('unscopes keys with multiple colons in resource part', () => {
+      const ctx: TenantContext = { tenantId: 'tenant-a' };
+      const unscoped = unscopeKey(ctx, 'tenant-a:resource:sub:resource');
+      expect(unscoped).toBe('resource:sub:resource');
+    });
+
+    it('returns null for keys from wrong tenant', () => {
+      const ctx: TenantContext = { tenantId: 'tenant-a' };
+      const unscoped = unscopeKey(ctx, 'tenant-b:resource-123');
+      expect(unscoped).toBeNull();
+    });
+
+    it('returns null for keys without colons', () => {
+      const ctx: TenantContext = { tenantId: 'tenant-a' };
+      const unscoped = unscopeKey(ctx, 'no-colon-here');
+      expect(unscoped).toBeNull();
+    });
+
+    it('handles round-trip scope/unscope correctly', () => {
+      const ctx: TenantContext = { tenantId: 'tenant-a' };
+      const originalKey = 'provider-1';
+      const scoped = scopeKey(ctx, originalKey);
+      const unscoped = unscopeKey(ctx, scoped);
+      expect(unscoped).toBe(originalKey);
+    });
+
+    it('handles round-trip with tenant ID containing colons', () => {
+      const ctx: TenantContext = { tenantId: 'tenant:foo' };
+      const originalKey = 'provider-1';
+      const scoped = scopeKey(ctx, originalKey);
+      expect(scoped).toBe('tenant:foo:provider-1');
+      const unscoped = unscopeKey(ctx, scoped);
+      expect(unscoped).toBe(originalKey);
     });
   });
 

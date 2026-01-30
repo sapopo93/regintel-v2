@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { createFacility } from '@regintel/domain/facility';
 import { computeBlobHash } from '@regintel/domain/evidence';
-import { TenantIsolatedStore, scopeKey } from '@regintel/security/tenant';
+import { TenantIsolatedStore, scopeKey, unscopeKey } from '@regintel/security/tenant';
 
 export interface ProviderRecord {
   providerId: string;
@@ -70,6 +70,7 @@ export interface MockSessionRecord {
   tenantId: string;
   providerId: string;
   facilityId: string;
+  mode: 'MOCK';
   providerSnapshot: {
     providerId: string;
     providerName: string;
@@ -98,9 +99,11 @@ export interface FindingRecord {
   sessionId: string;
   regulationSectionId: string;
   topicId: string;
-  origin: 'SYSTEM_MOCK';
-  reportingDomain: 'MOCK_SIMULATION';
+  origin: 'SYSTEM_MOCK' | 'ACTUAL_INSPECTION' | 'SELF_IDENTIFIED';
+  reportingDomain: 'MOCK_SIMULATION' | 'REGULATORY_HISTORY';
   severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  impactScore: number;
+  likelihoodScore: number;
   compositeRiskScore: number;
   title: string;
   description: string;
@@ -119,6 +122,14 @@ export interface ExportRecord {
   sessionId: string;
   format: 'CSV' | 'PDF' | 'BLUE_OCEAN' | 'BLUE_OCEAN_BOARD' | 'BLUE_OCEAN_AUDIT';
   content: string;
+  reportingDomain: 'MOCK_SIMULATION' | 'REGULATORY_HISTORY';
+  mode: 'MOCK' | 'REAL';
+  reportSource: {
+    type: 'cqc_upload' | 'mock';
+    id: string;
+    asOf: string;
+  };
+  snapshotId: string;
   generatedAt: string;
   expiresAt: string;
 }
@@ -297,22 +308,24 @@ export class InMemoryStore {
     facilityList.push(record.id);
     this.facilitiesByProvider.set(record.providerId, facilityList);
 
-    const providerKey = record.providerId.split(':').slice(1).join(':');
-    const providerRecord = this.providers.read(ctx, providerKey);
-    if (providerRecord) {
-      const updatedServiceTypes = providerRecord.serviceTypes.includes(record.serviceType)
-        ? providerRecord.serviceTypes
-        : [...providerRecord.serviceTypes, record.serviceType];
-      const updatedBeds = facilityList
-        .map((facilityId) => this.facilities.readByKey(ctx, facilityId))
-        .filter((facility): facility is FacilityRecord => Boolean(facility))
-        .reduce((total, facility) => total + (facility.capacity ?? 0), 0);
+    const providerKey = unscopeKey(ctx, record.providerId);
+    if (providerKey) {
+      const providerRecord = this.providers.read(ctx, providerKey);
+      if (providerRecord) {
+        const updatedServiceTypes = providerRecord.serviceTypes.includes(record.serviceType)
+          ? providerRecord.serviceTypes
+          : [...providerRecord.serviceTypes, record.serviceType];
+        const updatedBeds = facilityList
+          .map((facilityId) => this.facilities.readByKey(ctx, facilityId))
+          .filter((facility): facility is FacilityRecord => Boolean(facility))
+          .reduce((total, facility) => total + (facility.capacity ?? 0), 0);
 
-      this.providers.write(ctx, providerKey, {
-        ...providerRecord,
-        serviceTypes: updatedServiceTypes,
-        registeredBeds: updatedBeds,
-      });
+        this.providers.write(ctx, providerKey, {
+          ...providerRecord,
+          serviceTypes: updatedServiceTypes,
+          registeredBeds: updatedBeds,
+        });
+      }
     }
 
     return record;
@@ -401,7 +414,11 @@ export class InMemoryStore {
       if (!existing) {
         throw new Error('Facility index inconsistent');
       }
-      id = existing.id.split(':').slice(1).join(':'); // Unscoped ID
+      const unscopedId = unscopeKey(ctx, existing.id);
+      if (!unscopedId) {
+        throw new Error('Invalid facility ID format');
+      }
+      id = unscopedId; // Unscoped ID
       createdAt = existing.createdAt;
       createdBy = existing.createdBy;
     } else {
@@ -477,23 +494,25 @@ export class InMemoryStore {
     }
 
     // Update provider's aggregated service types and bed count
-    const providerKey = record.providerId.split(':').slice(1).join(':');
-    const providerRecord = this.providers.read(ctx, providerKey);
-    if (providerRecord) {
-      const allFacilities = this.listFacilitiesByProvider(ctx, record.providerId);
-      const updatedServiceTypes = Array.from(
-        new Set(allFacilities.map((facility) => facility.serviceType))
-      );
-      const updatedBeds = allFacilities.reduce(
-        (total, facility) => total + (facility.capacity ?? 0),
-        0
-      );
+    const providerKey = unscopeKey(ctx, record.providerId);
+    if (providerKey) {
+      const providerRecord = this.providers.read(ctx, providerKey);
+      if (providerRecord) {
+        const allFacilities = this.listFacilitiesByProvider(ctx, record.providerId);
+        const updatedServiceTypes = Array.from(
+          new Set(allFacilities.map((facility) => facility.serviceType))
+        );
+        const updatedBeds = allFacilities.reduce(
+          (total, facility) => total + (facility.capacity ?? 0),
+          0
+        );
 
-      this.providers.write(ctx, providerKey, {
-        ...providerRecord,
-        serviceTypes: updatedServiceTypes,
-        registeredBeds: updatedBeds,
-      });
+        this.providers.write(ctx, providerKey, {
+          ...providerRecord,
+          serviceTypes: updatedServiceTypes,
+          registeredBeds: updatedBeds,
+        });
+      }
     }
 
     return { facility: record, isNew };
@@ -594,6 +613,7 @@ export class InMemoryStore {
       tenantId: ctx.tenantId,
       providerId: input.provider.providerId,
       facilityId: input.facilityId,
+      mode: 'MOCK',
       providerSnapshot: {
         providerId: input.provider.providerId,
         providerName: input.provider.providerName,
@@ -633,8 +653,7 @@ export class InMemoryStore {
   }
 
   updateSession(ctx: TenantContext, session: MockSessionRecord): void {
-    const unscopedId = session.sessionId.split(':').slice(1).join(':');
-    this.sessions.write(ctx, unscopedId, session);
+    this.sessions.writeByKey(ctx, session.sessionId, session);
   }
 
   addFinding(ctx: TenantContext, input: Omit<FindingRecord, 'id' | 'tenantId' | 'deterministicHash' | 'createdAt'>): FindingRecord {
@@ -682,6 +701,14 @@ export class InMemoryStore {
     sessionId: string;
     format: 'CSV' | 'PDF' | 'BLUE_OCEAN' | 'BLUE_OCEAN_BOARD' | 'BLUE_OCEAN_AUDIT';
     content: string;
+    reportingDomain: 'MOCK_SIMULATION' | 'REGULATORY_HISTORY';
+    mode: 'MOCK' | 'REAL';
+    reportSource: {
+      type: 'cqc_upload' | 'mock';
+      id: string;
+      asOf: string;
+    };
+    snapshotId: string;
   }): ExportRecord {
     const id = `export-${this.nextSequence(ctx, 'export')}`;
     const exportId = scopeKey(ctx, id);
@@ -696,6 +723,10 @@ export class InMemoryStore {
       sessionId: input.sessionId,
       format: input.format,
       content: input.content,
+      reportingDomain: input.reportingDomain,
+      mode: input.mode,
+      reportSource: input.reportSource,
+      snapshotId: input.snapshotId,
       generatedAt: now,
       expiresAt,
     };
@@ -714,7 +745,7 @@ export class InMemoryStore {
       .filter((record): record is ExportRecord => Boolean(record))
       .filter((record) => record.providerId === providerId)
       .filter((record) => !facilityId || record.facilityId === facilityId)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt)); // Most recent first
+      .sort((a, b) => b.generatedAt.localeCompare(a.generatedAt)); // Most recent first
   }
 
   listAuditEvents(ctx: TenantContext, providerId: string): AuditEventRecord[] {

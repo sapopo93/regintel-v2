@@ -43,7 +43,7 @@ export default function FacilityDetailPage() {
   // Evidence upload state
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [evidenceType, setEvidenceType] = useState('CQC_REPORT');
+  const [evidenceType, setEvidenceType] = useState('POLICY'); // Default to POLICY (most common)
   const [description, setDescription] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -113,7 +113,7 @@ export default function FacilityDetailPage() {
       setShowUploadForm(false);
       setSelectedFile(null);
       setDescription('');
-      setEvidenceType('CQC_REPORT');
+      setEvidenceType('POLICY'); // Reset to default
     } catch (err: unknown) {
       setUploadError(err instanceof Error ? err.message : 'Failed to upload evidence');
     } finally {
@@ -159,6 +159,10 @@ export default function FacilityDetailPage() {
           snapshotTimestamp={facilityData.snapshotTimestamp}
           domain={facilityData.domain}
           reportingDomain={facilityData.reportingDomain}
+          mode={facilityData.mode}
+          reportSource={facilityData.reportSource}
+          snapshotId={facilityData.snapshotId}
+          ingestionStatus={facilityData.ingestionStatus}
         />
 
         <MetadataBar
@@ -169,6 +173,10 @@ export default function FacilityDetailPage() {
           snapshotTimestamp={facilityData.snapshotTimestamp}
           domain={facilityData.domain}
           reportingDomain={facilityData.reportingDomain}
+          mode={facilityData.mode}
+          reportSource={facilityData.reportSource}
+          snapshotId={facilityData.snapshotId}
+          ingestionStatus={facilityData.ingestionStatus}
         />
 
         <section className={styles.section}>
@@ -270,9 +278,13 @@ export default function FacilityDetailPage() {
                   disabled={uploading}
                   data-testid="evidence-type-select"
                 >
-                  <option value="CQC_REPORT">CQC Report</option>
-                  <option value="POLICY_DOCUMENT">Policy Document</option>
-                  <option value="TRAINING_RECORD">Training Record</option>
+                  <option value="CQC_REPORT">CQC Inspection Report</option>
+                  <option value="POLICY">Policy Document</option>
+                  <option value="TRAINING">Training Record</option>
+                  <option value="AUDIT">Audit Report</option>
+                  <option value="ROTA">Staff Rota</option>
+                  <option value="SKILLS_MATRIX">Skills Matrix</option>
+                  <option value="SUPERVISION">Supervision Records</option>
                   <option value="CERTIFICATE">Certificate</option>
                   <option value="OTHER">Other</option>
                 </select>

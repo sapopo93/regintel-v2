@@ -4,14 +4,38 @@
  * Tests for the type-safe API client including constitutional validation.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterAll, beforeAll } from 'vitest';
 import { ApiClient, ApiError, createApiClient } from './client';
 import { ConstitutionalViolationError } from '../validators';
 
+// Mock localStorage for Node.js test environment
+const localStorageMock = {
+  getItem: vi.fn(() => 'test-token'),
+  setItem: vi.fn(),
+  removeItem: vi.fn(),
+  clear: vi.fn(),
+  key: vi.fn(),
+  length: 0,
+};
+
 describe('API Client', () => {
+  beforeAll(() => {
+    // Set up window.localStorage mock
+    Object.defineProperty(global, 'window', {
+      value: { localStorage: localStorageMock },
+      writable: true,
+    });
+  });
+
+  afterAll(() => {
+    // Clean up
+    vi.restoreAllMocks();
+  });
+
   beforeEach(() => {
     // Reset fetch mock before each test
     vi.restoreAllMocks();
+    localStorageMock.getItem.mockReturnValue('test-token');
   });
 
   describe('Constitutional Validation', () => {
@@ -24,6 +48,14 @@ describe('API Client', () => {
         snapshotTimestamp: '2026-01-23T10:00:00Z',
         domain: 'CQC',
         reportingDomain: 'MOCK_SIMULATION',
+        mode: 'MOCK',
+        snapshotId: 'snapshot:mock:system',
+        ingestionStatus: 'NO_SOURCE',
+        reportSource: {
+          type: 'mock',
+          id: 'system',
+          asOf: '2026-01-23T10:00:00Z',
+        },
         providers: [],
       };
 
@@ -72,6 +104,14 @@ describe('API Client', () => {
         snapshotTimestamp: '2026-01-23T10:00:00Z',
         domain: 'CQC',
         reportingDomain: 'MOCK_SIMULATION',
+        mode: 'MOCK',
+        snapshotId: 'snapshot:mock:system',
+        ingestionStatus: 'NO_SOURCE',
+        reportSource: {
+          type: 'mock',
+          id: 'system',
+          asOf: '2026-01-23T10:00:00Z',
+        },
         providers: [],
       };
 
@@ -136,6 +176,14 @@ describe('API Client', () => {
         snapshotTimestamp: '2026-01-23T10:00:00Z',
         domain: 'CQC',
         reportingDomain: 'MOCK_SIMULATION',
+        mode: 'MOCK',
+        snapshotId: 'snapshot:mock:system',
+        ingestionStatus: 'NO_SOURCE',
+        reportSource: {
+          type: 'mock',
+          id: 'system',
+          asOf: '2026-01-23T10:00:00Z',
+        },
       };
 
       global.fetch = vi.fn(() =>
@@ -241,6 +289,14 @@ describe('API Client', () => {
         snapshotTimestamp: '2026-01-23T10:00:00Z',
         domain: 'CQC',
         reportingDomain: 'MOCK_SIMULATION',
+        mode: 'MOCK',
+        snapshotId: 'snapshot:mock:system',
+        ingestionStatus: 'NO_SOURCE',
+        reportSource: {
+          type: 'mock',
+          id: 'system',
+          asOf: '2026-01-23T10:00:00Z',
+        },
         providers: [],
       };
 
@@ -277,6 +333,14 @@ describe('API Client', () => {
         snapshotTimestamp: '2026-01-23T10:00:00Z',
         domain: 'CQC',
         reportingDomain: 'MOCK_SIMULATION',
+        mode: 'MOCK',
+        snapshotId: 'snapshot:mock:system',
+        ingestionStatus: 'NO_SOURCE',
+        reportSource: {
+          type: 'mock',
+          id: 'system',
+          asOf: '2026-01-23T10:00:00Z',
+        },
         providers: [],
       };
 

@@ -1,0 +1,10 @@
+
+# Next.js build output
+.next/
+
+# Clerk configuration (can include secrets)
+.clerk/
+
+# Test artifacts
+test-results/
+playwright-report/

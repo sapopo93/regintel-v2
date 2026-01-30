@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import {
   SessionStatus,
   type DraftFinding,
@@ -21,9 +22,19 @@ import { computeProvenanceHash, computeCompositeRiskScore } from '@regintel/doma
 import type { Action } from '@regintel/domain/action';
 import { onboardFacility } from '@regintel/domain/onboarding';
 import { scrapeLatestReport, downloadPdfReport } from '@regintel/domain/cqc-scraper';
-import { buildConstitutionalMetadata } from './metadata';
+import { EvidenceType, isValidEvidenceType, getAllRequiredEvidenceTypes } from '@regintel/domain/evidence-types';
+import { buildConstitutionalMetadata, type ReportContext } from './metadata';
 import { authMiddleware } from './auth';
-import { InMemoryStore, type TenantContext, type EvidenceRecordRecord } from './store';
+import {
+  InMemoryStore,
+  type TenantContext,
+  type EvidenceRecordRecord,
+  type MockSessionRecord,
+  type FindingRecord,
+} from './store';
+import { handleClerkWebhook } from './webhooks/clerk';
+import { blobStorage } from './blob-storage';
+import { scanBlob } from './malware-scanner';
 
 const store = new InMemoryStore();
 
@@ -48,7 +59,7 @@ const TOPICS = [
     id: 'safe-care-treatment',
     title: 'Safe Care and Treatment',
     regulationSectionId: 'Reg 12(2)(a)',
-    evidenceRequirements: ['Policy', 'Training', 'Audit'],
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT],
     questionMode: 'evidence_first' as const,
     maxFollowUps: 4,
   },
@@ -56,7 +67,7 @@ const TOPICS = [
     id: 'staffing',
     title: 'Staffing',
     regulationSectionId: 'Reg 18(1)',
-    evidenceRequirements: ['Rota', 'Skills Matrix', 'Supervision Records'],
+    evidenceRequirements: [EvidenceType.ROTA, EvidenceType.SKILLS_MATRIX, EvidenceType.SUPERVISION],
     questionMode: 'narrative_first' as const,
     maxFollowUps: 3,
   },
@@ -100,12 +111,21 @@ function getContext(req: express.Request): TenantContext {
   return { tenantId: req.auth.tenantId, actorId: req.auth.actorId };
 }
 
-function sendWithMetadata(res: express.Response, payload: Record<string, unknown>): void {
-  res.json({ ...buildConstitutionalMetadata(), ...payload });
+function sendWithMetadata(
+  res: express.Response,
+  payload: Record<string, unknown>,
+  metadataOverrides?: Partial<ReportContext>
+): void {
+  res.json({ ...buildConstitutionalMetadata(metadataOverrides), ...payload });
 }
 
-function sendError(res: express.Response, status: number, message: string): void {
-  res.status(status).json({ ...buildConstitutionalMetadata(), error: message });
+function sendError(
+  res: express.Response,
+  status: number,
+  message: string,
+  metadataOverrides?: Partial<ReportContext>
+): void {
+  res.status(status).json({ ...buildConstitutionalMetadata(metadataOverrides), error: message });
 }
 
 function mapEvidenceRecord(record: EvidenceRecordRecord) {
@@ -148,6 +168,111 @@ function serializePdfExport(pdfExport: ReturnType<typeof generatePdfExport>): st
   return lines.join('\n');
 }
 
+function resolveMockContextFromSessions(sessions: MockSessionRecord[]): ReportContext {
+  const latest = [...sessions].sort((a, b) => {
+    const aTime = a.completedAt ?? a.createdAt;
+    const bTime = b.completedAt ?? b.createdAt;
+    return bTime.localeCompare(aTime);
+  })[0];
+
+  const asOf = latest?.completedAt ?? latest?.createdAt ?? new Date().toISOString();
+  const reportSourceId = latest?.sessionId ?? 'mock:uninitialized';
+
+  return {
+    mode: 'MOCK',
+    reportingDomain: ReportingDomain.MOCK_SIMULATION,
+    reportSource: {
+      type: 'mock',
+      id: reportSourceId,
+      asOf,
+    },
+    snapshotId: `snapshot:mock:${reportSourceId}`,
+    snapshotTimestamp: asOf,
+    ingestionStatus: latest
+      ? (latest.status === 'COMPLETED' ? 'READY' : 'INGESTION_INCOMPLETE')
+      : 'NO_SOURCE',
+  };
+}
+
+function resolveReportContextForFacility(
+  ctx: TenantContext,
+  providerId: string,
+  facilityId: string
+): ReportContext {
+  const evidence = store.listEvidenceByFacility(ctx, facilityId);
+  const cqcReports = evidence
+    .filter((record) => record.evidenceType === EvidenceType.CQC_REPORT)
+    .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
+
+  if (cqcReports.length > 0) {
+    const latest = cqcReports[0];
+    const reportSource = {
+      type: 'cqc_upload' as const,
+      id: latest.id,
+      asOf: latest.uploadedAt,
+    };
+
+    const regulatoryFindings = store
+      .listFindingsByProvider(ctx, providerId)
+      .filter((finding) => finding.facilityId === facilityId)
+      .filter((finding) => finding.reportingDomain === ReportingDomain.REGULATORY_HISTORY);
+
+    return {
+      mode: 'REAL',
+      reportingDomain: ReportingDomain.REGULATORY_HISTORY,
+      reportSource,
+      snapshotId: `snapshot:cqc:${latest.id}`,
+      snapshotTimestamp: reportSource.asOf,
+      ingestionStatus: regulatoryFindings.length > 0 ? 'READY' : 'INGESTION_INCOMPLETE',
+    };
+  }
+
+  const sessions = store
+    .listSessionsByProvider(ctx, providerId)
+    .filter((session) => session.facilityId === facilityId);
+  return resolveMockContextFromSessions(sessions);
+}
+
+function resolveReportContextForSession(session: MockSessionRecord): ReportContext {
+  const asOf = session.completedAt ?? session.createdAt;
+  return {
+    mode: 'MOCK',
+    reportingDomain: ReportingDomain.MOCK_SIMULATION,
+    reportSource: {
+      type: 'mock',
+      id: session.sessionId,
+      asOf,
+    },
+    snapshotId: `snapshot:mock:${session.sessionId}`,
+    snapshotTimestamp: asOf,
+    ingestionStatus: session.status === 'COMPLETED' ? 'READY' : 'INGESTION_INCOMPLETE',
+  };
+}
+
+function resolveReportContextForFinding(finding: FindingRecord): ReportContext {
+  const isRegulatory = finding.reportingDomain === ReportingDomain.REGULATORY_HISTORY;
+  const reportSource = isRegulatory
+    ? {
+        type: 'cqc_upload' as const,
+        id: finding.id,
+        asOf: finding.createdAt,
+      }
+    : {
+        type: 'mock' as const,
+        id: finding.sessionId,
+        asOf: finding.createdAt,
+      };
+
+  return {
+    mode: isRegulatory ? 'REAL' : 'MOCK',
+    reportingDomain: finding.reportingDomain,
+    reportSource,
+    snapshotId: `snapshot:${reportSource.type}:${reportSource.id}`,
+    snapshotTimestamp: reportSource.asOf,
+    ingestionStatus: 'READY',
+  };
+}
+
 
 function buildDomainSession(session: {
   sessionId: string;
@@ -187,12 +312,50 @@ function buildDomainSession(session: {
 export function createApp(): express.Express {
   const app = express();
 
-  app.use(cors());
-  app.use(express.json({ limit: '10mb' }));
+  // CORS: Restrict to allowed origins in production
+  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
+    'http://localhost:3000',
+    'http://localhost:3001',
+  ];
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin || allowedOrigins.includes(origin)) {
+          callback(null, true);
+        } else {
+          callback(new Error('Not allowed by CORS'));
+        }
+      },
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+    })
+  );
+
+  // Rate limiting: Prevent DoS attacks and brute-force attempts
+  // Disabled in test mode to allow E2E tests to run without throttling
+  const isTestMode = process.env.NODE_ENV === 'test' || process.env.E2E_TEST_MODE === 'true';
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: isTestMode ? 10000 : 100, // Higher limit for tests
+    standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
+    legacyHeaders: false, // Disable `X-RateLimit-*` headers
+    message: 'Too many requests from this IP, please try again later.',
+  });
+
+  app.use(limiter);
 
   app.get('/health', (_req, res) => {
     res.status(200).json({ status: 'ok' });
   });
+
+  // Clerk webhook (MUST be before express.json() and authMiddleware)
+  // Webhooks need raw body for signature verification
+  app.post('/webhooks/clerk', express.json(), handleClerkWebhook);
+
+  // Apply JSON parsing to all other routes
+  app.use(express.json({ limit: '10mb' }));
 
   app.use('/v1', authMiddleware);
 
@@ -235,24 +398,45 @@ export function createApp(): express.Express {
     }
 
     const facilityEvidence = store.listEvidenceByFacility(ctx, facilityId);
-    const hasCqcReport = facilityEvidence.some((record) => record.evidenceType === 'CQC_REPORT');
-    const evidenceCoverage = hasCqcReport ? 100 : 0;
+    const hasCqcReport = facilityEvidence.some((record) => record.evidenceType === EvidenceType.CQC_REPORT);
 
-    const sessions = store.listSessionsByProvider(ctx, providerId)
-      .filter((session) => session.facilityId === facilityId);
-    const completedSessions = sessions.filter((session) => session.status === 'COMPLETED');
-    const openFindings = store.listFindingsByProvider(ctx, providerId)
-      .filter((finding) => finding.facilityId === facilityId).length;
+    // Calculate evidence coverage based on all required types
+    const evidenceTypesPresent = new Set(facilityEvidence.map((r) => r.evidenceType));
+    const allRequiredTypes = getAllRequiredEvidenceTypes();
+    const matchedTypes = allRequiredTypes.filter((type) => evidenceTypesPresent.has(type));
+    const evidenceCoverage = allRequiredTypes.length > 0
+      ? Math.round((matchedTypes.length / allRequiredTypes.length) * 100)
+      : 0;
+
+    const reportContext = resolveReportContextForFacility(ctx, providerId, facilityId);
+
+    let topicsCompleted = 0;
+    let unansweredQuestions = 0;
+    let openFindings = 0;
+
+    if (reportContext.mode === 'MOCK') {
+      const sessions = store.listSessionsByProvider(ctx, providerId)
+        .filter((session) => session.facilityId === facilityId);
+      const completedSessions = sessions.filter((session) => session.status === 'COMPLETED');
+      topicsCompleted = completedSessions.length;
+      unansweredQuestions = sessions.filter((session) => session.status === 'IN_PROGRESS').length;
+      openFindings = store.listFindingsByProvider(ctx, providerId)
+        .filter((finding) => finding.facilityId === facilityId).length;
+    } else {
+      openFindings = store.listFindingsByProvider(ctx, providerId)
+        .filter((finding) => finding.facilityId === facilityId)
+        .filter((finding) => finding.reportingDomain === ReportingDomain.REGULATORY_HISTORY).length;
+    }
 
     sendWithMetadata(res, {
       provider,
       facility,
       evidenceCoverage,
-      topicsCompleted: completedSessions.length,
+      topicsCompleted,
       totalTopics: TOPICS.length,
-      unansweredQuestions: sessions.filter((session) => session.status === 'IN_PROGRESS').length,
+      unansweredQuestions,
       openFindings,
-    });
+    }, reportContext);
   });
 
   app.get('/v1/providers/:providerId/topics', (req, res) => {
@@ -266,31 +450,50 @@ export function createApp(): express.Express {
       return;
     }
 
-    const sessions = store.listSessionsByProvider(ctx, providerId)
-      .filter((session) => !facilityId || session.facilityId === facilityId);
+    const reportContext = facilityId
+      ? resolveReportContextForFacility(ctx, providerId, facilityId)
+      : undefined;
 
-    const completionStatus = TOPICS.reduce<Record<string, { completed: number; total: number }>>(
+    let completionStatus = TOPICS.reduce<Record<string, { completed: number; total: number }>>(
       (acc, topic) => {
-        const completed = sessions.filter(
-          (session) => session.topicId === topic.id && session.status === 'COMPLETED'
-        ).length;
-        acc[topic.id] = { completed, total: 1 };
+        acc[topic.id] = { completed: 0, total: 1 };
         return acc;
       },
       {}
     );
 
-    sendWithMetadata(res, { topics: TOPICS, completionStatus });
+    if (!reportContext || reportContext.mode === 'MOCK') {
+      const sessions = store.listSessionsByProvider(ctx, providerId)
+        .filter((session) => !facilityId || session.facilityId === facilityId);
+      completionStatus = TOPICS.reduce<Record<string, { completed: number; total: number }>>(
+        (acc, topic) => {
+          const completed = sessions.filter(
+            (session) => session.topicId === topic.id && session.status === 'COMPLETED'
+          ).length;
+          acc[topic.id] = { completed, total: 1 };
+          return acc;
+        },
+        {}
+      );
+    }
+
+    sendWithMetadata(res, { topics: TOPICS, completionStatus }, reportContext);
   });
 
   app.get('/v1/providers/:providerId/topics/:topicId', (req, res) => {
     const { topicId } = req.params;
+    const { providerId } = req.params;
+    const facilityId = req.query.facility as string | undefined;
     const topic = TOPICS.find((item) => item.id === topicId);
     if (!topic) {
       sendError(res, 404, 'Topic not found');
       return;
     }
-    sendWithMetadata(res, topic);
+    const ctx = getContext(req);
+    const reportContext = facilityId
+      ? resolveReportContextForFacility(ctx, providerId, facilityId)
+      : undefined;
+    sendWithMetadata(res, topic, reportContext);
   });
 
   app.get('/v1/providers/:providerId/mock-sessions', (req, res) => {
@@ -300,7 +503,8 @@ export function createApp(): express.Express {
 
     const sessions = store.listSessionsByProvider(ctx, providerId)
       .filter((session) => !facilityId || session.facilityId === facilityId);
-    sendWithMetadata(res, { sessions });
+    const reportContext = resolveMockContextFromSessions(sessions);
+    sendWithMetadata(res, { sessions }, reportContext);
   });
 
   app.post('/v1/providers/:providerId/mock-sessions', (req, res) => {
@@ -343,7 +547,8 @@ export function createApp(): express.Express {
       topicId,
     });
 
-    sendWithMetadata(res, session);
+    const reportContext = resolveReportContextForSession(session);
+    sendWithMetadata(res, session, reportContext);
   });
 
   app.get('/v1/providers/:providerId/mock-sessions/:sessionId', (req, res) => {
@@ -356,7 +561,8 @@ export function createApp(): express.Express {
       return;
     }
 
-    sendWithMetadata(res, session);
+    const reportContext = resolveReportContextForSession(session);
+    sendWithMetadata(res, session, reportContext);
   });
 
   app.post('/v1/providers/:providerId/mock-sessions/:sessionId/answer', (req, res) => {
@@ -397,6 +603,8 @@ export function createApp(): express.Express {
       (required) => !evidenceProvided.includes(required)
     );
 
+    const impactScore = 80;
+    const likelihoodScore = 90;
     const finding = store.addFinding(ctx, {
       providerId,
       facilityId: session.facilityId,
@@ -406,7 +614,9 @@ export function createApp(): express.Express {
       origin: 'SYSTEM_MOCK',
       reportingDomain: 'MOCK_SIMULATION',
       severity: 'HIGH',
-      compositeRiskScore: 72,
+      impactScore,
+      likelihoodScore,
+      compositeRiskScore: computeCompositeRiskScore(impactScore, likelihoodScore),
       title: 'Mock finding generated',
       description: `Automated mock finding from answer: ${answer.slice(0, 120)}`,
       evidenceRequired,
@@ -423,7 +633,8 @@ export function createApp(): express.Express {
       findingId: finding.id,
     });
 
-    sendWithMetadata(res, updated);
+    const reportContext = resolveReportContextForSession(updated);
+    sendWithMetadata(res, updated, reportContext);
   });
 
   app.get('/v1/providers/:providerId/findings', (req, res) => {
@@ -431,9 +642,20 @@ export function createApp(): express.Express {
     const { providerId } = req.params;
     const facilityId = req.query.facility as string | undefined;
 
-    const findings = store.listFindingsByProvider(ctx, providerId)
+    const reportContext = facilityId
+      ? resolveReportContextForFacility(ctx, providerId, facilityId)
+      : undefined;
+
+    let findings = store.listFindingsByProvider(ctx, providerId)
       .filter((finding) => !facilityId || finding.facilityId === facilityId);
-    sendWithMetadata(res, { findings, totalCount: findings.length });
+
+    if (reportContext?.mode === 'REAL') {
+      findings = findings.filter(
+        (finding) => finding.reportingDomain === ReportingDomain.REGULATORY_HISTORY
+      );
+    }
+
+    sendWithMetadata(res, { findings, totalCount: findings.length }, reportContext);
   });
 
   app.get('/v1/providers/:providerId/findings/:findingId', (req, res) => {
@@ -446,11 +668,12 @@ export function createApp(): express.Express {
       return;
     }
 
+    const reportContext = resolveReportContextForFinding(finding);
     sendWithMetadata(res, {
       finding,
       regulationText:
         'Regulation 12(2)(a): Care and treatment must be provided in a safe way for service users.',
-    });
+    }, reportContext);
   });
 
   app.get('/v1/providers/:providerId/evidence', (req, res) => {
@@ -462,10 +685,13 @@ export function createApp(): express.Express {
       ? store.listEvidenceByFacility(ctx, facilityId)
       : store.listEvidenceByProvider(ctx, providerId);
     const mapped = evidence.map(mapEvidenceRecord);
-    sendWithMetadata(res, { evidence: mapped, totalCount: mapped.length });
+    const reportContext = facilityId
+      ? resolveReportContextForFacility(ctx, providerId, facilityId)
+      : undefined;
+    sendWithMetadata(res, { evidence: mapped, totalCount: mapped.length }, reportContext);
   });
 
-  app.post('/v1/evidence/blobs', (req, res) => {
+  app.post('/v1/evidence/blobs', async (req, res) => {
     const ctx = getContext(req);
     const { contentBase64, mimeType } = req.body ?? {};
 
@@ -474,8 +700,83 @@ export function createApp(): express.Express {
       return;
     }
 
-    const blob = store.createEvidenceBlob(ctx, { contentBase64, mimeType });
-    sendWithMetadata(res, blob);
+    try {
+      // Decode base64 content
+      const content = Buffer.from(contentBase64, 'base64');
+
+      // Upload to blob storage (handles deduplication)
+      const blobMetadata = await blobStorage.upload(content, mimeType);
+
+      // Create blob record in store
+      const blob = store.createEvidenceBlob(ctx, { contentBase64, mimeType });
+
+      // Start background malware scan (fire-and-forget)
+      scanBlob(blobMetadata.contentHash).catch((error) => {
+        console.error(`[MALWARE_SCAN] Failed to scan blob ${blobMetadata.contentHash}:`, error);
+      });
+
+      // Return blob metadata
+      sendWithMetadata(res, {
+        blobHash: blobMetadata.contentHash,
+        mimeType: blobMetadata.contentType,
+        sizeBytes: blobMetadata.sizeBytes,
+        uploadedAt: blobMetadata.uploadedAt,
+        scanStatus: 'PENDING', // Will be updated by background scan
+      });
+    } catch (error) {
+      console.error('[BLOB_UPLOAD] Failed:', error);
+      sendError(res, 500, 'Failed to upload blob');
+    }
+  });
+
+  /**
+   * GET /v1/evidence/blobs/:blobHash
+   *
+   * Download blob content by hash.
+   * Returns 404 if blob not found or has been quarantined.
+   */
+  app.get('/v1/evidence/blobs/:blobHash', async (req, res) => {
+    const ctx = getContext(req);
+    const { blobHash } = req.params;
+
+    try {
+      // Verify blob exists
+      const exists = await blobStorage.exists(blobHash);
+      if (!exists) {
+        sendError(res, 404, 'Blob not found');
+        return;
+      }
+
+      // Download blob content
+      const content = await blobStorage.download(blobHash);
+
+      // Get blob metadata from store to determine content type
+      // (In production, store this in DB or metadata file)
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Content-Disposition', `attachment; filename="${blobHash}"`);
+      res.send(content);
+    } catch (error) {
+      console.error('[BLOB_DOWNLOAD] Failed:', error);
+      sendError(res, 500, 'Failed to download blob');
+    }
+  });
+
+  /**
+   * GET /v1/evidence/blobs/:blobHash/scan
+   *
+   * Check malware scan status for a blob.
+   */
+  app.get('/v1/evidence/blobs/:blobHash/scan', async (req, res) => {
+    const ctx = getContext(req);
+    const { blobHash } = req.params;
+
+    try {
+      const scanResult = await scanBlob(blobHash);
+      sendWithMetadata(res, scanResult);
+    } catch (error) {
+      console.error('[BLOB_SCAN] Failed:', error);
+      sendError(res, 500, 'Failed to check scan status');
+    }
   });
 
   app.post('/v1/providers/:providerId/facilities', (req, res) => {
@@ -566,7 +867,8 @@ export function createApp(): express.Express {
       return;
     }
     const provider = store.getProviderById(ctx, facility.providerId);
-    sendWithMetadata(res, { facility, provider });
+    const reportContext = resolveReportContextForFacility(ctx, facility.providerId, facilityId);
+    sendWithMetadata(res, { facility, provider }, reportContext);
   });
 
   /**
@@ -672,6 +974,12 @@ export function createApp(): express.Express {
       return;
     }
 
+    // Validate evidenceType against canonical enum
+    if (!isValidEvidenceType(evidenceType)) {
+      sendError(res, 400, `Invalid evidenceType. Must be one of: ${Object.values(EvidenceType).join(', ')}`);
+      return;
+    }
+
     const facility = store.getFacilityById(ctx, facilityId);
     if (!facility) {
       sendError(res, 404, 'Facility not found');
@@ -693,7 +1001,8 @@ export function createApp(): express.Express {
         evidenceRecordId: record.id,
       });
 
-      sendWithMetadata(res, { record: mapEvidenceRecord(record) });
+      const reportContext = resolveReportContextForFacility(ctx, facility.providerId, facilityId);
+      sendWithMetadata(res, { record: mapEvidenceRecord(record) }, reportContext);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Evidence record failed';
       sendError(res, 400, message);
@@ -710,7 +1019,8 @@ export function createApp(): express.Express {
     }
     const evidence = store.listEvidenceByFacility(ctx, facilityId);
     const mapped = evidence.map(mapEvidenceRecord);
-    sendWithMetadata(res, { evidence: mapped, totalCount: mapped.length });
+    const reportContext = resolveReportContextForFacility(ctx, facility.providerId, facilityId);
+    sendWithMetadata(res, { evidence: mapped, totalCount: mapped.length }, reportContext);
   });
 
   app.get('/v1/providers/:providerId/exports', (req, res) => {
@@ -718,23 +1028,39 @@ export function createApp(): express.Express {
     const { providerId } = req.params;
     const facilityId = req.query.facility as string | undefined;
 
+    const reportContext = facilityId
+      ? resolveReportContextForFacility(ctx, providerId, facilityId)
+      : undefined;
+
     // Get actual exports from store
-    const exports = store.listExportsByProvider(ctx, providerId, facilityId);
+    let exports = store.listExportsByProvider(ctx, providerId, facilityId);
+    if (reportContext) {
+      exports = exports.filter(
+        (record) => record.reportingDomain === reportContext.reportingDomain
+      );
+    }
     const latestExport = exports[0]; // Already sorted by most recent
+
+    const availableFormats = reportContext?.mode === 'REAL'
+      ? ['BLUE_OCEAN_BOARD', 'BLUE_OCEAN_AUDIT']
+      : ['CSV', 'PDF', 'BLUE_OCEAN_BOARD', 'BLUE_OCEAN_AUDIT'];
 
     sendWithMetadata(res, {
       providerId,
-      availableFormats: ['CSV', 'PDF', 'BLUE_OCEAN_BOARD', 'BLUE_OCEAN_AUDIT'],
-      watermark: EXPORT_WATERMARK,
+      availableFormats,
+      watermark:
+        reportContext?.mode === 'REAL'
+          ? 'BLUE OCEAN — REGULATORY HISTORY'
+          : EXPORT_WATERMARK,
       latestExport: latestExport
         ? {
             exportId: latestExport.id,
             format: latestExport.format,
-            generatedAt: latestExport.createdAt,
+            generatedAt: latestExport.generatedAt,
             downloadUrl: `${req.protocol}://${req.get('host')}/v1/exports/${latestExport.id}.${getExportExtension(latestExport.format)}`
           }
         : undefined,
-    });
+    }, reportContext);
   });
 
   app.post('/v1/providers/:providerId/exports', (req, res) => {
@@ -747,14 +1073,131 @@ export function createApp(): express.Express {
       return;
     }
 
+    const safeFormat = normalizeExportFormat(format);
+    const facilityReportContext = resolveReportContextForFacility(ctx, providerId, facilityId);
+
+    if (facilityReportContext.mode === 'REAL') {
+      if (safeFormat !== 'BLUE_OCEAN_BOARD' && safeFormat !== 'BLUE_OCEAN_AUDIT') {
+        sendError(res, 409, 'Regulatory exports require Blue Ocean formats', facilityReportContext);
+        return;
+      }
+
+      const metadata = buildConstitutionalMetadata(facilityReportContext);
+      const topicCatalogSha = metadata.topicCatalogHash.replace('sha256:', '');
+      const prsLogicSha = metadata.prsLogicHash.replace('sha256:', '');
+
+      const regulatoryFindings = store.listFindingsByProvider(ctx, providerId)
+        .filter((finding) => finding.facilityId === facilityId)
+        .filter((finding) => finding.reportingDomain === ReportingDomain.REGULATORY_HISTORY);
+
+      const inspectionFindings = regulatoryFindings.map((finding) => {
+        const provData = {
+          domain: Domain.CQC,
+          origin: finding.origin as FindingOrigin,
+          reportingDomain: finding.reportingDomain as ReportingDomain,
+          contextSnapshotId: facilityReportContext.snapshotId,
+          regulationId: finding.regulationSectionId,
+          regulationSectionId: finding.regulationSectionId,
+          title: finding.title,
+          description: finding.description,
+        };
+        return {
+          id: finding.id,
+          tenantId: finding.tenantId,
+          domain: Domain.CQC,
+          origin: finding.origin as FindingOrigin,
+          reportingDomain: finding.reportingDomain as ReportingDomain,
+          contextSnapshotId: facilityReportContext.snapshotId,
+          regulationId: finding.regulationSectionId,
+          regulationSectionId: finding.regulationSectionId,
+          title: finding.title,
+          description: finding.description,
+          severity: finding.severity as Severity,
+          impactScore: finding.impactScore,
+          likelihoodScore: finding.likelihoodScore,
+          compositeRiskScore: computeCompositeRiskScore(finding.impactScore, finding.likelihoodScore),
+          provenanceHash: computeProvenanceHash(provData),
+          identifiedAt: finding.createdAt,
+          identifiedBy: finding.origin,
+          createdAt: finding.createdAt,
+        };
+      });
+
+      const evidenceRecords = store.listEvidenceByFacility(ctx, facilityId).map((record) => ({
+        id: record.id,
+        tenantId: record.tenantId,
+        blobHashes: [record.blobHash],
+        primaryBlobHash: record.blobHash,
+        title: record.fileName,
+        description: record.description,
+        evidenceType: record.evidenceType,
+        supportsFindingIds: [],
+        supportsPolicyIds: [],
+        collectedAt: record.uploadedAt,
+        collectedBy: record.createdBy,
+        accessRevoked: false,
+        createdAt: record.uploadedAt,
+        createdBy: record.createdBy,
+      }));
+
+      const actions: Action[] = [];
+
+      const blueOceanReport = generateBlueOceanReport({
+        tenantId: ctx.tenantId,
+        domain: Domain.CQC,
+        topicCatalogVersion: metadata.topicCatalogVersion,
+        topicCatalogHash: topicCatalogSha,
+        prsLogicProfilesVersion: metadata.prsLogicVersion,
+        prsLogicProfilesHash: prsLogicSha,
+        findings: inspectionFindings,
+        actions,
+        evidence: evidenceRecords,
+        reportingDomain: ReportingDomain.REGULATORY_HISTORY,
+      });
+
+      const content =
+        safeFormat === 'BLUE_OCEAN_AUDIT'
+          ? serializeBlueOceanAuditMarkdown(blueOceanReport)
+          : serializeBlueOceanBoardMarkdown(blueOceanReport);
+
+      const exportRecord = store.createExport(ctx, {
+        providerId,
+        facilityId,
+        sessionId: facilityReportContext.reportSource.id,
+        format: safeFormat,
+        content,
+        reportingDomain: facilityReportContext.reportingDomain,
+        mode: facilityReportContext.mode,
+        reportSource: facilityReportContext.reportSource,
+        snapshotId: facilityReportContext.snapshotId,
+      });
+
+      store.appendAuditEvent(ctx, providerId, 'EXPORT_GENERATED', {
+        exportId: exportRecord.id,
+        format: safeFormat,
+      });
+
+      const fileExtension = getExportExtension(safeFormat);
+      const downloadUrl = `${req.protocol}://${req.get('host')}/v1/exports/${exportRecord.id}.${fileExtension}`;
+
+      sendWithMetadata(res, {
+        exportId: exportRecord.id,
+        downloadUrl,
+        expiresAt: exportRecord.expiresAt,
+      }, facilityReportContext);
+      return;
+    }
+
     const session = store.listSessionsByProvider(ctx, providerId)
       .filter((item) => item.facilityId === facilityId)
       .find((item) => item.status === 'COMPLETED');
 
     if (!session) {
-      sendError(res, 409, 'No completed session available for export');
+      sendError(res, 409, 'No completed session available for export', facilityReportContext);
       return;
     }
+
+    const reportContext = resolveReportContextForSession(session);
 
     const findings = store.listFindingsByProvider(ctx, providerId)
       .filter((finding) => finding.sessionId === session.sessionId)
@@ -767,8 +1210,8 @@ export function createApp(): express.Express {
         title: finding.title,
         description: finding.description,
         severity: finding.severity,
-        impactScore: 80,
-        likelihoodScore: 90,
+        impactScore: finding.impactScore,
+        likelihoodScore: finding.likelihoodScore,
         draftedAt: finding.createdAt,
         draftedBy: 'system',
       }));
@@ -786,20 +1229,18 @@ export function createApp(): express.Express {
     };
 
     const domainSession = buildDomainSession(session, findings);
-    const safeFormat = normalizeExportFormat(format);
 
     let content: string;
     if (safeFormat === 'CSV') {
       const csvExport = generateCsvExport(domainSession, metadata);
       content = serializeCsvExport(csvExport);
     } else if (safeFormat === 'BLUE_OCEAN_BOARD' || safeFormat === 'BLUE_OCEAN_AUDIT') {
-      // Convert findings to InspectionFinding format for Blue Ocean
-      const inspectionFindings = findings.map(f => {
+      const inspectionFindings = findings.map((f) => {
         const provData = {
           domain: Domain.CQC,
           origin: FindingOrigin.SYSTEM_MOCK,
           reportingDomain: ReportingDomain.MOCK_SIMULATION,
-          contextSnapshotId: 'snapshot-001',
+          contextSnapshotId: reportContext.snapshotId,
           regulationId: f.regulationId,
           regulationSectionId: f.regulationSectionId,
           title: f.title,
@@ -811,7 +1252,7 @@ export function createApp(): express.Express {
           domain: Domain.CQC,
           origin: FindingOrigin.SYSTEM_MOCK,
           reportingDomain: ReportingDomain.MOCK_SIMULATION,
-          contextSnapshotId: 'snapshot-001',
+          contextSnapshotId: reportContext.snapshotId,
           regulationId: f.regulationId,
           regulationSectionId: f.regulationSectionId,
           title: f.title,
@@ -844,7 +1285,6 @@ export function createApp(): express.Express {
         createdBy: record.createdBy,
       }));
 
-      // Use empty actions array for now (store doesn't have actions yet)
       const actions: Action[] = [];
 
       const blueOceanReport = generateBlueOceanReport({
@@ -874,6 +1314,10 @@ export function createApp(): express.Express {
       sessionId: session.sessionId,
       format: safeFormat,
       content,
+      reportingDomain: reportContext.reportingDomain,
+      mode: reportContext.mode,
+      reportSource: reportContext.reportSource,
+      snapshotId: reportContext.snapshotId,
     });
 
     store.appendAuditEvent(ctx, providerId, 'EXPORT_GENERATED', {
@@ -888,7 +1332,7 @@ export function createApp(): express.Express {
       exportId: exportRecord.id,
       downloadUrl,
       expiresAt: exportRecord.expiresAt,
-    });
+    }, reportContext);
   });
 
   app.get('/v1/exports/:exportId.csv', (req, res) => {
@@ -938,8 +1382,12 @@ export function createApp(): express.Express {
   app.get('/v1/providers/:providerId/audit-trail', (req, res) => {
     const ctx = getContext(req);
     const { providerId } = req.params;
+    const facilityId = req.query.facility as string | undefined;
     const events = store.listAuditEvents(ctx, providerId);
-    sendWithMetadata(res, { events, totalCount: events.length });
+    const reportContext = facilityId
+      ? resolveReportContextForFacility(ctx, providerId, facilityId)
+      : undefined;
+    sendWithMetadata(res, { events, totalCount: events.length }, reportContext);
   });
 
   /**
@@ -1253,7 +1701,7 @@ export function createApp(): express.Express {
             facilityId: job.facilityId,
             providerId: job.providerId,
             blobHash: blob.blobHash,
-            evidenceType: 'CQC_REPORT',
+            evidenceType: EvidenceType.CQC_REPORT,
             fileName: `CQC-Report-${report.reportDate || 'latest'}.pdf`,
             description: `CQC inspection report (${report.rating})`,
           });

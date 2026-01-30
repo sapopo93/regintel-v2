@@ -118,6 +118,21 @@
   cursor: pointer;
 }
 
+.statusMessage {
+  font-size: var(--text-sm);
+  color: var(--color-slate-700);
+  background-color: var(--color-slate-50);
+  border: 1px solid var(--color-slate-200);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+}
+
+.statusLink {
+  color: var(--color-slate-900);
+  font-weight: var(--font-semibold);
+  text-decoration: none;
+}
+
 .sectionTitle {
   font-size: var(--text-lg);
   font-weight: var(--font-semibold);

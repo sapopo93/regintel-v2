@@ -1,4 +1,6 @@
 'use client';
+export const dynamic = "force-dynamic";
+
 
 /**
  * Evidence Page
@@ -88,6 +90,10 @@ export default function EvidencePage() {
             snapshotTimestamp={data.snapshotTimestamp}
             domain={data.domain}
             reportingDomain={data.reportingDomain}
+            mode={data.mode}
+            reportSource={data.reportSource}
+            snapshotId={data.snapshotId}
+            ingestionStatus={data.ingestionStatus}
           />
 
           <DisclosurePanel
@@ -141,6 +147,10 @@ export default function EvidencePage() {
                 snapshotTimestamp={data.snapshotTimestamp}
                 domain={data.domain}
                 reportingDomain={data.reportingDomain}
+                mode={data.mode}
+                reportSource={data.reportSource}
+                snapshotId={data.snapshotId}
+                ingestionStatus={data.ingestionStatus}
               />
             )}
           />

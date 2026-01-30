@@ -54,6 +54,10 @@ function expectMetadata(payload: Record<string, unknown>) {
   expect(payload.snapshotTimestamp).toBeDefined();
   expect(payload.domain).toBeDefined();
   expect(payload.reportingDomain).toBeDefined();
+  expect(payload.mode).toBeDefined();
+  expect(payload.snapshotId).toBeDefined();
+  expect(payload.ingestionStatus).toBeDefined();
+  expect((payload as any).reportSource).toBeDefined();
 }
 
 describe('API contract tests', () => {
@@ -105,6 +109,84 @@ describe('API contract tests', () => {
 
     expect(facilityAEvidence.body.evidence.length).toBe(1);
     expect(facilityBEvidence.body.evidence.length).toBe(0);
+  });
+
+  it('avoids mock fallback for CQC evidence exports', async () => {
+    const provider = await createProvider('Regulatory Care');
+    const facility = (await createFacility(provider.providerId)).body.facility;
+
+    const blobResponse = await createBlob();
+    const blobHash = blobResponse.body.blobHash;
+
+    const evidenceResponse = await request(app)
+      .post(`/v1/facilities/${facility.id}/evidence`)
+      .set(AUTH_HEADER)
+      .send({
+        blobHash,
+        evidenceType: 'CQC_REPORT',
+        fileName: 'report.pdf',
+      });
+    expectMetadata(evidenceResponse.body);
+
+    const exportStatus = await request(app)
+      .get(`/v1/providers/${provider.providerId}/exports`)
+      .query({ facility: facility.id })
+      .set(AUTH_HEADER);
+
+    expect(exportStatus.body.reportingDomain).toBe('REGULATORY_HISTORY');
+    expect(exportStatus.body.mode).toBe('REAL');
+    expect(exportStatus.body.ingestionStatus).toBe('INGESTION_INCOMPLETE');
+    expect(exportStatus.body.reportSource?.type).toBe('cqc_upload');
+
+    const exportResponse = await request(app)
+      .post(`/v1/providers/${provider.providerId}/exports`)
+      .set(AUTH_HEADER)
+      .send({ facilityId: facility.id, format: 'BLUE_OCEAN_BOARD' });
+
+    expect(exportResponse.status).toBe(200);
+    expect(exportResponse.body.reportingDomain).toBe('REGULATORY_HISTORY');
+
+    const exportId = exportResponse.body.exportId;
+    const exportDownload = await request(app)
+      .get(`/v1/exports/${encodeURIComponent(exportId)}.md`)
+      .set(AUTH_HEADER);
+
+    expect(exportDownload.text).toContain('BLUE OCEAN — REGULATORY HISTORY');
+    expect(exportDownload.text).not.toContain('BLUE OCEAN (MOCK)');
+    expect(exportDownload.text).not.toContain('Mock finding generated');
+    expect(exportDownload.text).toContain('report.pdf');
+  });
+
+  it('preserves mock exports for explicit mock sessions', async () => {
+    const provider = await createProvider('Mock Export Care');
+    const facility = (await createFacility(provider.providerId)).body.facility;
+
+    const sessionResponse = await request(app)
+      .post(`/v1/providers/${provider.providerId}/mock-sessions`)
+      .set(AUTH_HEADER)
+      .send({ topicId: 'safe-care-treatment', facilityId: facility.id });
+    expectMetadata(sessionResponse.body);
+
+    const answerResponse = await request(app)
+      .post(`/v1/providers/${provider.providerId}/mock-sessions/${sessionResponse.body.sessionId}/answer`)
+      .set(AUTH_HEADER)
+      .send({ answer: 'Mock answer' });
+    expectMetadata(answerResponse.body);
+
+    const exportResponse = await request(app)
+      .post(`/v1/providers/${provider.providerId}/exports`)
+      .set(AUTH_HEADER)
+      .send({ facilityId: facility.id, format: 'BLUE_OCEAN_BOARD' });
+
+    expect(exportResponse.status).toBe(200);
+    expect(exportResponse.body.reportingDomain).toBe('MOCK_SIMULATION');
+
+    const exportId = exportResponse.body.exportId;
+    const exportDownload = await request(app)
+      .get(`/v1/exports/${encodeURIComponent(exportId)}.md`)
+      .set(AUTH_HEADER);
+
+    expect(exportDownload.text).toContain('BLUE OCEAN (MOCK)');
   });
 
   it('includes constitutional metadata on every JSON endpoint', async () => {

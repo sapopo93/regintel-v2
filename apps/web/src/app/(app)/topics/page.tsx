@@ -1,4 +1,6 @@
 'use client';
+export const dynamic = "force-dynamic";
+
 
 /**
  * Topics List Page
@@ -89,6 +91,10 @@ export default function TopicsPage() {
             snapshotTimestamp={data.snapshotTimestamp}
             domain={data.domain}
             reportingDomain={data.reportingDomain}
+            mode={data.mode}
+            reportSource={data.reportSource}
+            snapshotId={data.snapshotId}
+            ingestionStatus={data.ingestionStatus}
           />
 
           <DisclosurePanel
@@ -142,6 +148,10 @@ export default function TopicsPage() {
                 snapshotTimestamp={data.snapshotTimestamp}
                 domain={data.domain}
                 reportingDomain={data.reportingDomain}
+                mode={data.mode}
+                reportSource={data.reportSource}
+                snapshotId={data.snapshotId}
+                ingestionStatus={data.ingestionStatus}
               />
             )}
           />

@@ -1,4 +1,6 @@
 'use client';
+export const dynamic = "force-dynamic";
+
 
 /**
  * Audit Trail Page
@@ -37,7 +39,7 @@ export default function AuditPage() {
 
     Promise.all([
       apiClient.getProviderOverview(providerId, facilityId),
-      apiClient.getAuditTrail(providerId),
+      apiClient.getAuditTrail(providerId, facilityId),
     ])
       .then(([overviewResponse, auditResponse]) => {
         validateConstitutionalRequirements(auditResponse, { strict: true });
@@ -88,6 +90,10 @@ export default function AuditPage() {
             snapshotTimestamp={data.snapshotTimestamp}
             domain={data.domain}
             reportingDomain={data.reportingDomain}
+            mode={data.mode}
+            reportSource={data.reportSource}
+            snapshotId={data.snapshotId}
+            ingestionStatus={data.ingestionStatus}
           />
 
           <DisclosurePanel
@@ -155,6 +161,10 @@ export default function AuditPage() {
                 snapshotTimestamp={data.snapshotTimestamp}
                 domain={data.domain}
                 reportingDomain={data.reportingDomain}
+                mode={data.mode}
+                reportSource={data.reportSource}
+                snapshotId={data.snapshotId}
+                ingestionStatus={data.ingestionStatus}
               />
             )}
           />

@@ -33,6 +33,7 @@ export default defineConfig({
         NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001',
         NEXT_PUBLIC_FOUNDER_TOKEN: process.env.NEXT_PUBLIC_FOUNDER_TOKEN || founderToken,
         NEXT_PUBLIC_PROVIDER_TOKEN: process.env.NEXT_PUBLIC_PROVIDER_TOKEN || providerToken,
+        E2E_TEST_MODE: 'true', // Bypass Clerk middleware for E2E tests
       },
     },
     {
@@ -44,6 +45,8 @@ export default defineConfig({
         ...process.env,
         FOUNDER_TOKEN: founderToken,
         PROVIDER_TOKEN: providerToken,
+        E2E_TEST_MODE: 'true', // Disable rate limiting for E2E tests
+        BLOB_STORAGE_PATH: '/tmp/regintel-test-blobs', // Use temp dir for tests
       },
     },
   ],

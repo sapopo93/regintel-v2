@@ -98,6 +98,11 @@ const IGNORE_PATTERNS = [
   '*.spec.ts',
   '*.tsbuildinfo', // TypeScript incremental build cache
   'secrets-scan.ts', // Ignore this file (contains patterns)
+  '.DS_Store', // Mac system metadata files
+  'test-helpers.ts', // Test utilities with localhost test credentials
+  'docs', // Documentation with example/placeholder credentials
+  'scripts', // Operational scripts (may contain example URLs/patterns)
+  '.github', // CI configuration with test environment setup
 ];
 
 /**

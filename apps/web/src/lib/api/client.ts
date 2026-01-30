@@ -74,6 +74,17 @@ function validateConstitutionalMetadata(
   if (!metadata.snapshotTimestamp) missing.push('snapshotTimestamp');
   if (!metadata.domain) missing.push('domain');
   if (!metadata.reportingDomain) missing.push('reportingDomain');
+  if (!metadata.mode) missing.push('mode');
+  if (!metadata.snapshotId) missing.push('snapshotId');
+  if (!metadata.ingestionStatus) missing.push('ingestionStatus');
+  if (
+    !metadata.reportSource ||
+    !metadata.reportSource.type ||
+    !metadata.reportSource.id ||
+    !metadata.reportSource.asOf
+  ) {
+    missing.push('reportSource');
+  }
 
   if (missing.length > 0) {
     throw new ConstitutionalViolationError(
@@ -97,10 +108,17 @@ export class ApiClient {
     options?: RequestInit
   ): Promise<T> {
     const url = `${this.config.baseUrl}${path}`;
+
+    // Try legacy token first (will be replaced by Clerk)
     const authToken = getAuthToken();
+
+    // TODO: After Clerk migration, get token from Clerk session:
+    // const { getToken } = useAuth();
+    // const clerkToken = await getToken();
 
     const response = await fetch(url, {
       ...options,
+      credentials: 'include', // Send cookies for Clerk session
       headers: {
         'Content-Type': 'application/json',
         ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
@@ -113,7 +131,8 @@ export class ApiClient {
       clearAuthToken();
       if (typeof window !== 'undefined') {
         const next = window.location.pathname + window.location.search;
-        window.location.href = `/login?next=${encodeURIComponent(next)}`;
+        // Redirect to Clerk sign-in (or fallback to legacy login)
+        window.location.href = `/sign-in?redirect_url=${encodeURIComponent(next)}`;
       }
     }
 
@@ -285,9 +304,10 @@ export class ApiClient {
   /**
    * Get audit trail
    */
-  async getAuditTrail(providerId: string): Promise<AuditTrailResponse> {
+  async getAuditTrail(providerId: string, facilityId?: string): Promise<AuditTrailResponse> {
+    const query = facilityId ? `?facility=${encodeURIComponent(facilityId)}` : '';
     return this.fetch<AuditTrailResponse>(
-      `/v1/providers/${providerId}/audit-trail`
+      `/v1/providers/${providerId}/audit-trail${query}`
     );
   }
 

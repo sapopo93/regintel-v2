@@ -1,7 +1,19 @@
+/**
+ * Authentication Library
+ *
+ * Supports both Clerk (production) and legacy demo tokens (migration period).
+ */
+
+// Re-export Clerk hooks for production use
+export { useAuth, useUser } from '@clerk/nextjs';
+
 export const AUTH_TOKEN_KEY = 'regintel.auth.token';
 export const AUTH_ROLE_KEY = 'regintel.auth.role';
 
 export type AuthRole = 'FOUNDER' | 'PROVIDER';
+
+// DEPRECATED: Legacy demo token functions
+// These will be removed after Clerk migration is complete
 
 export function getAuthToken(): string | null {
   if (typeof window === 'undefined') {

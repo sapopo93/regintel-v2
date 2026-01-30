@@ -58,6 +58,62 @@ jobs:
       - name: Run tests
         run: pnpm test
 
+  integration-db:
+    name: Integration DB (RLS)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: regintel_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d regintel_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10.25.0
+
+      - name: Install API dependencies
+        run: pnpm --dir apps/api install --frozen-lockfile
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U postgres -d regintel_test; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Postgres did not become ready in time" >&2
+          exit 1
+
+      - name: Run integration test
+        run: pnpm --dir apps/api test:integration
+        env:
+          TEST_DB_ADMIN_URL: postgres://postgres:postgres@localhost:5432/regintel_test
+          TEST_DB_APP_URL: postgres://regintel_app:regintel_app@localhost:5432/regintel_test
+
   phase-gates:
     name: Phase Gate Validation
     runs-on: ubuntu-latest

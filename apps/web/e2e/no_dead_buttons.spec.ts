@@ -85,7 +85,7 @@ test.describe('No dead buttons', () => {
     await page.selectOption('[data-testid="service-type-select"]', 'residential');
     await page.fill('[data-testid="capacity-input"]', '10');
     responsePromise = page.waitForResponse((response) =>
-      response.url().includes(`/v1/providers/${providerId}/facilities`) &&
+      response.url().includes('/v1/facilities/onboard') &&
       response.request().method() === 'POST'
     );
     await page.click('[data-testid="primary-create-facility"]');

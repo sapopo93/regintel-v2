@@ -24,6 +24,25 @@
   gap: var(--space-4);
 }
 
+.metaLabel {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-slate-500);
+}
+
+.metaValue {
+  font-size: var(--text-sm);
+  color: var(--color-slate-700);
+}
+
+.metaValueMono {
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  color: var(--color-slate-700);
+}
+
 .separator {
   color: var(--color-slate-400);
 }

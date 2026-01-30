@@ -23,6 +23,10 @@ export function MetadataBar({
   prsLogicHash,
   snapshotTimestamp,
   domain,
+  mode,
+  reportSource,
+  snapshotId,
+  ingestionStatus,
   compact = false,
 }: MetadataBarProps) {
   if (compact) {
@@ -56,6 +60,20 @@ export function MetadataBar({
       <div className={styles.row}>
         <VersionBadge label="PRS Logic" version={prsLogicVersion} />
         <HashDisplay hash={prsLogicHash} />
+      </div>
+      <div className={styles.row}>
+        <span className={styles.metaLabel}>Mode</span>
+        <span className={styles.metaValue}>{mode}</span>
+        <span className={styles.metaLabel}>Ingestion</span>
+        <span className={styles.metaValue}>{ingestionStatus}</span>
+      </div>
+      <div className={styles.row}>
+        <span className={styles.metaLabel}>Snapshot ID</span>
+        <span className={styles.metaValueMono}>{snapshotId}</span>
+      </div>
+      <div className={styles.row}>
+        <span className={styles.metaLabel}>Report Source</span>
+        <span className={styles.metaValueMono}>{reportSource.type}:{reportSource.id}</span>
       </div>
     </div>
   );

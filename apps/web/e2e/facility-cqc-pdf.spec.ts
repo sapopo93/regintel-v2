@@ -42,7 +42,7 @@ test('create facility with CQC ID and upload CQC report PDF', async ({ page }) =
   await page.fill('[data-testid="capacity-input"]', '50');
 
   const facilityResponsePromise = page.waitForResponse((response) =>
-    response.url().includes(`/v1/providers/${providerId}/facilities`)
+    response.url().includes('/v1/facilities/onboard')
     && response.request().method() === 'POST'
   );
   await page.click('[data-testid="primary-create-facility"]');

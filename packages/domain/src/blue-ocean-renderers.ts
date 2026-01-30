@@ -40,7 +40,10 @@ function toReferenceCode(reportId: string): string {
   return reportId.slice(0, 8);
 }
 
-function assuranceStatus(score: number): string {
+function assuranceStatus(score: number, reportingDomain: ReportingDomain): string {
+  if (reportingDomain === ReportingDomain.MOCK_SIMULATION) {
+    return 'N/A (mock)';
+  }
   return score >= 95 ? 'Verified' : score >= 80 ? 'On track' : 'Needs attention';
 }
 
@@ -109,7 +112,9 @@ function buildGoldenThreads(report: BlueOceanReport): Array<{
     status: string;
   }> = [];
 
-  for (const finding of findings.slice(0, 3)) {
+  const topFindings = findings.slice(0, 3);
+  for (let i = 0; i < topFindings.length; i += 1) {
+    const finding = topFindings[i];
     const rca = rcaMap.get(finding.findingId);
     const hypothesis = rca?.hypotheses[0]?.hypothesis ?? 'Root cause under review';
     const actions = actionMap.get(finding.findingId) ?? [];
@@ -156,10 +161,10 @@ export function serializeBlueOceanBoardMarkdown(report: BlueOceanReport): string
   lines.push('## How we know we\u2019re safe');
   lines.push('');
   const gates = report.sections.qualityGates;
-  lines.push(`- Verified Integrity: ${assuranceStatus(gates.determinismScore)}`);
-  lines.push(`- Traceability: ${assuranceStatus(gates.domainConsistencyScore)}`);
-  lines.push(`- Consistency: ${assuranceStatus(gates.rcaCoverageScore)}`);
-  lines.push(`- Safety: ${assuranceStatus(gates.mockWatermarkScore)}`);
+  lines.push(`- Verified Integrity: ${assuranceStatus(gates.determinismScore, report.reportingDomain)}`);
+  lines.push(`- Traceability: ${assuranceStatus(gates.domainConsistencyScore, report.reportingDomain)}`);
+  lines.push(`- Consistency: ${assuranceStatus(gates.rcaCoverageScore, report.reportingDomain)}`);
+  lines.push(`- Safety: ${assuranceStatus(gates.mockWatermarkScore, report.reportingDomain)}`);
   lines.push('');
 
   lines.push('## Executive Summary');

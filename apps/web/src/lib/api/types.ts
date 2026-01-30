@@ -8,6 +8,15 @@
 /**
  * Constitutional metadata - required on all API responses
  */
+export type ReportMode = 'REAL' | 'MOCK';
+export type IngestionStatus = 'NO_SOURCE' | 'INGESTION_INCOMPLETE' | 'READY';
+
+export interface ReportSource {
+  type: 'cqc_upload' | 'mock';
+  id: string;
+  asOf: string;
+}
+
 export interface ConstitutionalMetadata {
   topicCatalogVersion: string;
   topicCatalogHash: string;
@@ -16,6 +25,10 @@ export interface ConstitutionalMetadata {
   snapshotTimestamp: string;
   domain: 'CQC' | 'IMMIGRATION';
   reportingDomain: 'MOCK_SIMULATION' | 'REGULATORY_HISTORY';
+  mode: ReportMode;
+  reportSource: ReportSource;
+  snapshotId: string;
+  ingestionStatus: IngestionStatus;
 }
 
 /**
@@ -62,6 +75,7 @@ export interface MockInspectionSession {
   sessionId: string;
   providerId: string;
   facilityId: string;
+  mode: ReportMode;
   providerSnapshot: ProviderContextSnapshot;
   topicId: string;
   status: 'IN_PROGRESS' | 'COMPLETED' | 'ABANDONED';

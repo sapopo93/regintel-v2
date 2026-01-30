@@ -1,4 +1,6 @@
 'use client';
+export const dynamic = "force-dynamic";
+
 
 /**
  * Mock Sessions List Page
@@ -30,6 +32,8 @@ export default function MockSessionsPage() {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [selectedTopic, setSelectedTopic] = useState('');
   const [creating, setCreating] = useState(false);
+  const [createStatus, setCreateStatus] = useState<string | null>(null);
+  const [createdSessionId, setCreatedSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,13 +68,18 @@ export default function MockSessionsPage() {
 
     setCreating(true);
     setError(null);
+    setCreateStatus('Creating mock session...');
+    setCreatedSessionId(null);
 
     try {
-      await apiClient.createMockSession(providerId, selectedTopic, facilityId);
+      const created = await apiClient.createMockSession(providerId, selectedTopic, facilityId);
       const refreshed = await apiClient.getMockSessions(providerId, facilityId);
       setData(refreshed);
+      setCreateStatus(`Session created: ${created.sessionId}`);
+      setCreatedSessionId(created.sessionId);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to start session');
+      setCreateStatus(null);
     } finally {
       setCreating(false);
     }
@@ -116,6 +125,10 @@ export default function MockSessionsPage() {
             snapshotTimestamp={data.snapshotTimestamp}
             domain={data.domain}
             reportingDomain={data.reportingDomain}
+            mode={data.mode}
+            reportSource={data.reportSource}
+            snapshotId={data.snapshotId}
+            ingestionStatus={data.ingestionStatus}
           />
 
           <DisclosurePanel
@@ -177,6 +190,22 @@ export default function MockSessionsPage() {
                     {creating ? 'Starting...' : 'Start Session'}
                   </button>
                 </div>
+                {createStatus && (
+                  <div className={styles.statusMessage} aria-live="polite">
+                    {createStatus}
+                    {createdSessionId && (
+                      <>
+                        {' '}
+                        <Link
+                          className={styles.statusLink}
+                          href={`/mock-session/${createdSessionId}?provider=${providerId}&facility=${facilityId}`}
+                        >
+                          Open session →
+                        </Link>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             )}
             trace={(
@@ -188,6 +217,10 @@ export default function MockSessionsPage() {
                 snapshotTimestamp={data.snapshotTimestamp}
                 domain={data.domain}
                 reportingDomain={data.reportingDomain}
+                mode={data.mode}
+                reportSource={data.reportSource}
+                snapshotId={data.snapshotId}
+                ingestionStatus={data.ingestionStatus}
               />
             )}
           />

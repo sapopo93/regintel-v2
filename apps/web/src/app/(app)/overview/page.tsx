@@ -1,4 +1,6 @@
 'use client';
+export const dynamic = "force-dynamic";
+
 
 /**
  * Provider Overview Page
@@ -70,6 +72,8 @@ export default function OverviewPage() {
     );
   }
 
+  const isRealMode = data.mode === 'REAL';
+
   return (
     <SimulationFrame reportingDomain={data.reportingDomain}>
       <div className={styles.layout}>
@@ -94,6 +98,10 @@ export default function OverviewPage() {
             snapshotTimestamp={data.snapshotTimestamp}
             domain={data.domain}
             reportingDomain={data.reportingDomain}
+            mode={data.mode}
+            reportSource={data.reportSource}
+            snapshotId={data.snapshotId}
+            ingestionStatus={data.ingestionStatus}
           />
 
           <SimulationModeBadge reportingDomain={data.reportingDomain} />
@@ -104,8 +112,14 @@ export default function OverviewPage() {
                 <div className={styles.card}>
                   <div className={styles.cardLabel}>Evidence Coverage</div>
                   <div className={styles.cardValue}>{data.evidenceCoverage}%</div>
-                  <div className={styles.cardNote}>Percentage of required evidence uploaded</div>
-                  <div className={styles.cardProvenance}>Calculated from Topic Catalog {data.topicCatalogVersion} requirements</div>
+                  <div className={styles.cardNote}>
+                    {isRealMode ? 'CQC evidence uploaded for regulatory ingestion' : 'Percentage of required evidence uploaded'}
+                  </div>
+                  <div className={styles.cardProvenance}>
+                    {isRealMode
+                      ? `Source: ${data.reportSource.type}:${data.reportSource.id}`
+                      : `Calculated from Topic Catalog ${data.topicCatalogVersion} requirements`}
+                  </div>
                 </div>
 
                 <div className={styles.card}>
@@ -113,22 +127,36 @@ export default function OverviewPage() {
                   <div className={styles.cardValue}>
                     {data.topicsCompleted} / {data.totalTopics}
                   </div>
-                  <div className={styles.cardNote}>Mock inspection topics addressed</div>
-                  <div className={styles.cardProvenance}>Based on mock inspection sessions</div>
+                  <div className={styles.cardNote}>
+                    {isRealMode ? 'Regulatory topic mapping pending ingestion' : 'Mock inspection topics addressed'}
+                  </div>
+                  <div className={styles.cardProvenance}>
+                    {isRealMode ? 'Awaiting regulatory ingestion' : 'Based on mock inspection sessions'}
+                  </div>
                 </div>
 
                 <div className={styles.card}>
                   <div className={styles.cardLabel}>Unanswered Questions</div>
                   <div className={styles.cardValue}>{data.unansweredQuestions}</div>
-                  <div className={styles.cardNote}>Questions requiring provider response</div>
-                  <div className={styles.cardProvenance}>Awaiting provider response</div>
+                  <div className={styles.cardNote}>
+                    {isRealMode ? 'Regulatory questions unavailable until ingestion completes' : 'Questions requiring provider response'}
+                  </div>
+                  <div className={styles.cardProvenance}>
+                    {isRealMode ? 'Regulatory ingestion pending' : 'Awaiting provider response'}
+                  </div>
                 </div>
 
                 <div className={styles.card}>
                   <div className={styles.cardLabel}>Open Findings</div>
                   <div className={styles.cardValue}>{data.openFindings}</div>
-                  <div className={styles.cardNote}>Findings without remediation</div>
-                  <div className={styles.cardProvenance}>Generated via PRS Logic {data.prsLogicVersion} (mock domain)</div>
+                  <div className={styles.cardNote}>
+                    {isRealMode ? 'Regulatory findings available after ingestion' : 'Findings without remediation'}
+                  </div>
+                  <div className={styles.cardProvenance}>
+                    {isRealMode
+                      ? `Regulatory history (${data.reportingDomain})`
+                      : `Generated via PRS Logic ${data.prsLogicVersion} (mock domain)`}
+                  </div>
                 </div>
               </div>
             )}
@@ -169,6 +197,10 @@ export default function OverviewPage() {
                 snapshotTimestamp={data.snapshotTimestamp}
                 domain={data.domain}
                 reportingDomain={data.reportingDomain}
+                mode={data.mode}
+                reportSource={data.reportSource}
+                snapshotId={data.snapshotId}
+                ingestionStatus={data.ingestionStatus}
               />
             )}
           />

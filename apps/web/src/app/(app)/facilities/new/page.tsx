@@ -116,11 +116,7 @@ export default function NewFacilityPage() {
       return;
     }
 
-    if (!fetchAttempted) {
-      setError('Please fetch facility data from CQC first using the "Fetch from CQC" button');
-      return;
-    }
-
+    // Validate all required fields are filled (CQC fetch is optional)
     if (!facilityName.trim() || !addressLine1.trim() || !townCity.trim() || !postcode.trim() || !cqcLocationId.trim() || !serviceType.trim()) {
       setError('All required fields must be filled');
       return;
@@ -207,8 +203,8 @@ export default function NewFacilityPage() {
               </small>
             </div>
 
-            {/* Auto-populated fields - shown after fetching */}
-            {fetchAttempted && (
+            {/* Form fields - always visible (CQC fetch will auto-populate) */}
+            {(
               <>
                 <div className={styles.formGroup}>
                   <label htmlFor="facilityName" className={styles.label}>
@@ -325,7 +321,7 @@ export default function NewFacilityPage() {
                 <button
                   type="submit"
                   className={styles.submitButton}
-                disabled={submitting || fetching || !fetchAttempted}
+                  disabled={submitting || fetching || !facilityName.trim() || !addressLine1.trim() || !townCity.trim() || !postcode.trim() || !cqcLocationId.trim() || !serviceType.trim()}
                   data-testid="primary-create-facility"
                 >
                 {submitting ? 'Creating...' : 'Create Facility'}
