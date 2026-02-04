@@ -15,7 +15,9 @@
       "@regintel/domain": ["../../packages/domain/src"],
       "@regintel/domain/*": ["../../packages/domain/src/*"],
       "@regintel/security": ["../../packages/security/src"],
-      "@regintel/security/*": ["../../packages/security/src/*"]
+      "@regintel/security/*": ["../../packages/security/src/*"],
+      "@regintel/queue": ["../../packages/queue/src"],
+      "@regintel/queue/*": ["../../packages/queue/src/*"]
     }
   },
   "include": ["src/**/*"]
