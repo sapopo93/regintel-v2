@@ -137,7 +137,7 @@ TENANT_ID=demo
 PORT=3001
 
 # Database (required for integration tests and API)
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/regintel_dev
+DATABASE_URL=<your-postgres-connection-string>
 
 # CQC API (optional — unauthenticated works with lower rate limits)
 CQC_API_KEY=your-cqc-api-key-here

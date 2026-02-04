@@ -22,6 +22,11 @@ Source of truth for UI routes and API endpoints. Update this file when navigatio
       "endpoints": []
     },
     {
+      "route": "/sign-up/[[...sign-up]]",
+      "status": "LIVE",
+      "endpoints": []
+    },
+    {
       "route": "/providers",
       "status": "LIVE",
       "endpoints": [
@@ -162,7 +167,12 @@ Source of truth for UI routes and API endpoints. Update this file when navigatio
     "POST /v1/facilities/onboard",
     "POST /v1/evidence/blobs",
     "POST /v1/facilities/:facilityId/evidence",
-    "GET /v1/facilities/:facilityId/evidence"
+    "GET /v1/facilities/:facilityId/evidence",
+    "/v1/background-jobs/${jobId}",
+    "/v1/evidence/blobs/${blobHash}/scan",
+    "/v1/providers/:providerId/mock-sessions/:sessionId/ai-insights",
+    "/v1/facilities/:facilityId/sync-latest-report",
+    "/v1/facilities/onboard-bulk"
   ]
 }
 ```
