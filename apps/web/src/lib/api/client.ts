@@ -6,7 +6,6 @@
  */
 
 import { ConstitutionalViolationError } from '../validators';
-import { getAuthToken, clearAuthToken } from '../auth';
 import type {
   ConstitutionalMetadata,
   ProviderOverviewResponse,
@@ -30,9 +29,15 @@ import type {
   CreateProviderRequest,
   ProviderDetailResponse,
   CreateEvidenceBlobRequest,
-  CreateEvidenceBlobResponse,
+  CreateEvidenceBlobResponseWithScan,
   CreateFacilityEvidenceRequest,
   CreateFacilityEvidenceResponse,
+  BackgroundJobResponse,
+  MalwareScanResponse,
+  AIInsightsResponse,
+  SyncReportResponse,
+  BulkOnboardRequest,
+  BulkOnboardResponse,
 } from './types';
 
 /**
@@ -41,6 +46,7 @@ import type {
 interface ApiClientConfig {
   baseUrl: string;
   tenantId?: string;
+  getToken?: () => Promise<string | null>;
 }
 
 /**
@@ -98,7 +104,14 @@ function validateConstitutionalMetadata(
  * Type-safe API client
  */
 export class ApiClient {
-  constructor(private config: ApiClientConfig) {}
+  constructor(private config: ApiClientConfig) { }
+
+  /**
+   * Update client configuration (e.g., to inject token provider)
+   */
+  updateConfig(config: Partial<ApiClientConfig>): void {
+    this.config = { ...this.config, ...config };
+  }
 
   /**
    * Generic fetch wrapper with error handling
@@ -109,12 +122,11 @@ export class ApiClient {
   ): Promise<T> {
     const url = `${this.config.baseUrl}${path}`;
 
-    // Try legacy token first (will be replaced by Clerk)
-    const authToken = getAuthToken();
-
-    // TODO: After Clerk migration, get token from Clerk session:
-    // const { getToken } = useAuth();
-    // const clerkToken = await getToken();
+    // Try token provider first (Clerk)
+    let authToken: string | null = null;
+    if (this.config.getToken) {
+      authToken = await this.config.getToken();
+    }
 
     const response = await fetch(url, {
       ...options,
@@ -127,13 +139,16 @@ export class ApiClient {
       },
     });
 
+    // FIXED: Don't auto-redirect on 401/403 - this causes redirect loops with Clerk
+    // that trigger bot protection. Instead, throw an error and let the page handle it.
+    // The page can show a "session expired" message or use Clerk's <RedirectToSignIn />.
     if (response.status === 401 || response.status === 403) {
-      clearAuthToken();
-      if (typeof window !== 'undefined') {
-        const next = window.location.pathname + window.location.search;
-        // Redirect to Clerk sign-in (or fallback to legacy login)
-        window.location.href = `/sign-in?redirect_url=${encodeURIComponent(next)}`;
-      }
+      const errorData = await response.json().catch(() => ({}));
+      throw new ApiError(
+        errorData.error || 'Authentication required',
+        response.status,
+        errorData
+      );
     }
 
     if (!response.ok) {
@@ -381,10 +396,10 @@ export class ApiClient {
   }
 
   /**
-   * Create evidence blob
+   * Create evidence blob (returns scan status)
    */
-  async createEvidenceBlob(request: CreateEvidenceBlobRequest): Promise<CreateEvidenceBlobResponse> {
-    return this.fetch<CreateEvidenceBlobResponse>(
+  async createEvidenceBlob(request: CreateEvidenceBlobRequest): Promise<CreateEvidenceBlobResponseWithScan> {
+    return this.fetch<CreateEvidenceBlobResponseWithScan>(
       '/v1/evidence/blobs',
       {
         method: 'POST',
@@ -416,6 +431,55 @@ export class ApiClient {
       `/v1/facilities/${facilityId}/evidence`
     );
   }
+
+  /**
+   * Get background job status
+   */
+  async getBackgroundJob(jobId: string): Promise<BackgroundJobResponse> {
+    return this.fetch<BackgroundJobResponse>(`/v1/background-jobs/${jobId}`);
+  }
+
+  /**
+   * Get malware scan status for a blob
+   */
+  async getMalwareScanStatus(blobHash: string): Promise<MalwareScanResponse> {
+    return this.fetch<MalwareScanResponse>(`/v1/evidence/blobs/${blobHash}/scan`);
+  }
+
+  /**
+   * Get AI insights for a mock session (advisory only)
+   */
+  async getAIInsights(
+    providerId: string,
+    sessionId: string
+  ): Promise<AIInsightsResponse> {
+    return this.fetch<AIInsightsResponse>(
+      `/v1/providers/${providerId}/mock-sessions/${sessionId}/ai-insights`
+    );
+  }
+
+  /**
+   * Trigger CQC report sync for a facility
+   */
+  async syncLatestReport(facilityId: string): Promise<SyncReportResponse> {
+    return this.fetch<SyncReportResponse>(
+      `/v1/facilities/${facilityId}/sync-latest-report`,
+      { method: 'POST' }
+    );
+  }
+
+  /**
+   * Bulk onboard facilities from CQC
+   */
+  async bulkOnboardFacilities(request: BulkOnboardRequest): Promise<BulkOnboardResponse> {
+    return this.fetch<BulkOnboardResponse>(
+      `/v1/facilities/onboard-bulk`,
+      {
+        method: 'POST',
+        body: JSON.stringify(request),
+      }
+    );
+  }
 }
 
 /**
@@ -426,8 +490,44 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
 }
 
 /**
+ * SECURITY HARDENING: Validate API base URL configuration
+ *
+ * In production (or when not in E2E mode), using localhost is a configuration error.
+ * We log an error but don't throw to avoid breaking the app at runtime.
+ */
+function getValidatedApiBaseUrl(): string {
+  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+  const isE2EMode = process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true';
+
+  if (!baseUrl) {
+    if (!isE2EMode && typeof window !== 'undefined') {
+      console.error(
+        '[API CLIENT ERROR] NEXT_PUBLIC_API_BASE_URL is not set. ' +
+        'API requests will default to localhost:3001. ' +
+        'This is incorrect for production deployments.'
+      );
+    }
+    return 'http://localhost:3001';
+  }
+
+  // Warn if using localhost in what appears to be production
+  if (baseUrl.includes('localhost') && !isE2EMode && typeof window !== 'undefined') {
+    // Check if we're likely in production (not localhost hostname)
+    if (!window.location.hostname.includes('localhost')) {
+      console.error(
+        '[API CLIENT ERROR] NEXT_PUBLIC_API_BASE_URL contains localhost but ' +
+        'app is not running on localhost. This is a configuration error. ' +
+        `Current API URL: ${baseUrl}, App hostname: ${window.location.hostname}`
+      );
+    }
+  }
+
+  return baseUrl;
+}
+
+/**
  * Default API client instance
  */
 export const apiClient = createApiClient({
-  baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001',
+  baseUrl: getValidatedApiBaseUrl(),
 });

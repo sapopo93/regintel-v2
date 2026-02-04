@@ -13,16 +13,36 @@ import {
   generatePdfExport,
   serializeCsvExport,
 } from '@regintel/domain/readiness-export';
+import {
+  QUEUE_NAMES,
+  getQueueAdapter,
+  processInMemoryJob,
+  type QueueName,
+  type ScrapeReportJobData,
+  type ScrapeReportJobResult,
+  type MalwareScanJobData,
+  type MalwareScanJobResult,
+  type EvidenceProcessJobData,
+  type AIInsightJobData,
+  type AIInsightJobResult,
+} from '@regintel/queue';
 import { generateBlueOceanReport } from '@regintel/domain/blue-ocean-report';
 import {
   serializeBlueOceanBoardMarkdown,
   serializeBlueOceanAuditMarkdown,
 } from '@regintel/domain/blue-ocean-renderers';
+import { z, type ZodTypeAny, ZodError } from 'zod';
 import { computeProvenanceHash, computeCompositeRiskScore } from '@regintel/domain/inspection-finding';
 import type { Action } from '@regintel/domain/action';
 import { onboardFacility } from '@regintel/domain/onboarding';
-import { scrapeLatestReport, downloadPdfReport } from '@regintel/domain/cqc-scraper';
-import { EvidenceType, isValidEvidenceType, getAllRequiredEvidenceTypes } from '@regintel/domain/evidence-types';
+import {
+  scrapeLatestReport,
+  downloadPdfReport,
+  buildCqcReportSummary,
+  isWebsiteReportNewer,
+} from '@regintel/domain/cqc-scraper';
+import { EvidenceType, getAllRequiredEvidenceTypes } from '@regintel/domain/evidence-types';
+import { fetchCqcLocation } from '@regintel/domain/cqc-client';
 import { buildConstitutionalMetadata, type ReportContext } from './metadata';
 import { authMiddleware } from './auth';
 import {
@@ -32,27 +52,26 @@ import {
   type MockSessionRecord,
   type FindingRecord,
 } from './store';
+import { PrismaStore } from './db-store';
 import { handleClerkWebhook } from './webhooks/clerk';
 import { blobStorage } from './blob-storage';
 import { scanBlob } from './malware-scanner';
 
-const store = new InMemoryStore();
+const useDbStore =
+  process.env.USE_DB_STORE === 'true' ||
+  (process.env.NODE_ENV !== 'test' && process.env.USE_DB_STORE !== 'false');
+const store = useDbStore ? new PrismaStore() : new InMemoryStore();
 
-// Simple background job queue (in-memory for now)
-interface BackgroundJob {
-  id: string;
-  type: 'SCRAPE_LATEST_REPORT' | 'BASELINE_CREATION';
-  facilityId: string;
-  cqcLocationId: string;
-  tenantId: string;
-  providerId: string;
-  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
-  createdAt: string;
-  completedAt?: string;
-  error?: string;
-}
+// Queue adapters (BullMQ with in-memory fallback)
+const scrapeReportQueue = getQueueAdapter(QUEUE_NAMES.SCRAPE_REPORT);
+const malwareScanQueue = getQueueAdapter(QUEUE_NAMES.MALWARE_SCAN);
+const evidenceProcessQueue = getQueueAdapter(QUEUE_NAMES.EVIDENCE_PROCESS);
+const aiInsightQueue = getQueueAdapter(QUEUE_NAMES.AI_INSIGHT);
 
-const backgroundJobs: BackgroundJob[] = [];
+// In-memory job indexes (fallback only)
+const blobScanJobs = new Map<string, string>();
+const evidenceProcessJobs = new Map<string, string>();
+const mockInsightJobs = new Map<string, string>();
 
 const TOPICS = [
   {
@@ -73,6 +92,8 @@ const TOPICS = [
   },
 ];
 
+const DEFAULT_MAX_TOTAL_QUESTIONS = 10;
+
 const SERVICE_TYPES = new Set([
   'residential',
   'nursing',
@@ -86,6 +107,64 @@ const CQC_LOCATION_ID_PATTERN = /^1-[0-9]{9,11}$/;
 function isValidCqcLocationId(id: string): boolean {
   return CQC_LOCATION_ID_PATTERN.test(id.trim());
 }
+
+const zQueryString = z.preprocess(
+  (value) => (Array.isArray(value) ? value[0] : value),
+  z.string().trim().min(1)
+);
+const zOptionalQueryString = zQueryString.optional();
+
+const zId = z.string().trim().min(1);
+const zProviderId = zId;
+const zFacilityId = zId;
+const zTopicId = zId;
+const zSessionId = zId;
+const zFindingId = zId;
+const zExportId = zId;
+const zJobId = zId;
+
+const zBlobHash = z
+  .string()
+  .trim()
+  .transform((value) => value.toLowerCase())
+  .refine(
+    (value) =>
+      /^sha256:[a-f0-9]{64}$/.test(value) || /^[a-f0-9]{64}$/.test(value),
+    'Invalid blob hash'
+  )
+  .transform((value) => (value.startsWith('sha256:') ? value : `sha256:${value}`));
+
+const zCqcLocationId = z
+  .string()
+  .trim()
+  .regex(CQC_LOCATION_ID_PATTERN, 'Invalid CQC Location ID format (1-123456789 or 1-1234567890)');
+
+const zServiceType = z
+  .string()
+  .trim()
+  .refine((value) => SERVICE_TYPES.has(value), 'Invalid serviceType');
+
+const zOptionalPositiveInt = z.preprocess(
+  (value) => (value === undefined || value === null || value === '' ? undefined : value),
+  z.coerce.number().int().nonnegative()
+);
+
+const zMimeType = z
+  .string()
+  .trim()
+  .regex(/^[^/]+\/[^/]+$/, 'Invalid mimeType');
+
+const zBase64 = z.string().min(1);
+
+const zEvidenceType = z.nativeEnum(EvidenceType);
+
+const zExportFormat = z.enum([
+  'CSV',
+  'PDF',
+  'BLUE_OCEAN',
+  'BLUE_OCEAN_BOARD',
+  'BLUE_OCEAN_AUDIT',
+]);
 
 type ExportFormat = 'CSV' | 'PDF' | 'BLUE_OCEAN' | 'BLUE_OCEAN_BOARD' | 'BLUE_OCEAN_AUDIT';
 
@@ -109,6 +188,101 @@ function getBlueOceanFilename(exportId: string, format: ExportFormat): string {
 
 function getContext(req: express.Request): TenantContext {
   return { tenantId: req.auth.tenantId, actorId: req.auth.actorId };
+}
+
+const QUEUE_NAME_VALUES: QueueName[] = Object.values(QUEUE_NAMES);
+
+function resolveQueueNameFromJobId(jobId: string): QueueName | null {
+  for (const name of QUEUE_NAME_VALUES) {
+    if (jobId.startsWith(`${name}-`)) return name;
+  }
+  return null;
+}
+
+function mapQueueStateToStatus(state: string): 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' {
+  if (state === 'completed') return 'COMPLETED';
+  if (state === 'failed') return 'FAILED';
+  if (state === 'active') return 'PROCESSING';
+  return 'PENDING';
+}
+
+type ValidationIssue = {
+  path: string;
+  message: string;
+  code: string;
+};
+
+type ValidationSchemas = {
+  params?: ZodTypeAny;
+  query?: ZodTypeAny;
+  body?: ZodTypeAny;
+};
+
+function formatZodIssues(source: 'params' | 'query' | 'body', error: ZodError): ValidationIssue[] {
+  return error.issues.map((issue) => ({
+    path: [source, ...issue.path].join('.'),
+    message: issue.message,
+    code: issue.code,
+  }));
+}
+
+function sendValidationError(
+  res: express.Response,
+  issues: ValidationIssue[],
+  metadataOverrides?: Partial<ReportContext>
+): void {
+  res.status(400).json({
+    ...buildConstitutionalMetadata(metadataOverrides),
+    error: 'VALIDATION_ERROR',
+    message: 'Invalid request',
+    issues,
+  });
+}
+
+function validateRequest(
+  req: express.Request,
+  res: express.Response,
+  schemas: ValidationSchemas,
+  metadataOverrides?: Partial<ReportContext>
+): { params: Record<string, unknown>; query: Record<string, unknown>; body: unknown } | null {
+  const issues: ValidationIssue[] = [];
+  let params: Record<string, unknown> = req.params ?? {};
+  let query: Record<string, unknown> = req.query ?? {};
+  let body: unknown = req.body;
+
+  if (schemas.params) {
+    const result = schemas.params.safeParse(req.params ?? {});
+    if (!result.success) {
+      issues.push(...formatZodIssues('params', result.error));
+    } else {
+      params = result.data as Record<string, unknown>;
+    }
+  }
+
+  if (schemas.query) {
+    const result = schemas.query.safeParse(req.query ?? {});
+    if (!result.success) {
+      issues.push(...formatZodIssues('query', result.error));
+    } else {
+      query = result.data as Record<string, unknown>;
+    }
+  }
+
+  if (schemas.body) {
+    const result = schemas.body.safeParse(req.body ?? {});
+    if (!result.success) {
+      issues.push(...formatZodIssues('body', result.error));
+    } else {
+      body = result.data;
+    }
+  }
+
+  if (issues.length > 0) {
+    sendValidationError(res, issues, metadataOverrides);
+    return null;
+  }
+
+  return { params, query, body };
 }
 
 function sendWithMetadata(
@@ -141,6 +315,7 @@ function mapEvidenceRecord(record: EvidenceRecordRecord) {
     evidenceType: record.evidenceType,
     fileName: record.fileName,
     description: record.description,
+    metadata: record.metadata,
     uploadedAt: record.uploadedAt,
   };
 }
@@ -194,12 +369,12 @@ function resolveMockContextFromSessions(sessions: MockSessionRecord[]): ReportCo
   };
 }
 
-function resolveReportContextForFacility(
+async function resolveReportContextForFacility(
   ctx: TenantContext,
   providerId: string,
   facilityId: string
-): ReportContext {
-  const evidence = store.listEvidenceByFacility(ctx, facilityId);
+): Promise<ReportContext> {
+  const evidence = await store.listEvidenceByFacility(ctx, facilityId);
   const cqcReports = evidence
     .filter((record) => record.evidenceType === EvidenceType.CQC_REPORT)
     .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
@@ -212,8 +387,7 @@ function resolveReportContextForFacility(
       asOf: latest.uploadedAt,
     };
 
-    const regulatoryFindings = store
-      .listFindingsByProvider(ctx, providerId)
+    const regulatoryFindings = (await store.listFindingsByProvider(ctx, providerId))
       .filter((finding) => finding.facilityId === facilityId)
       .filter((finding) => finding.reportingDomain === ReportingDomain.REGULATORY_HISTORY);
 
@@ -227,8 +401,7 @@ function resolveReportContextForFacility(
     };
   }
 
-  const sessions = store
-    .listSessionsByProvider(ctx, providerId)
+  const sessions = (await store.listSessionsByProvider(ctx, providerId))
     .filter((session) => session.facilityId === facilityId);
   return resolveMockContextFromSessions(sessions);
 }
@@ -253,15 +426,15 @@ function resolveReportContextForFinding(finding: FindingRecord): ReportContext {
   const isRegulatory = finding.reportingDomain === ReportingDomain.REGULATORY_HISTORY;
   const reportSource = isRegulatory
     ? {
-        type: 'cqc_upload' as const,
-        id: finding.id,
-        asOf: finding.createdAt,
-      }
+      type: 'cqc_upload' as const,
+      id: finding.id,
+      asOf: finding.createdAt,
+    }
     : {
-        type: 'mock' as const,
-        id: finding.sessionId,
-        asOf: finding.createdAt,
-      };
+      type: 'mock' as const,
+      id: finding.sessionId,
+      asOf: finding.createdAt,
+    };
 
   return {
     mode: isRegulatory ? 'REAL' : 'MOCK',
@@ -295,7 +468,7 @@ function buildDomainSession(session: {
     totalQuestionsAsked: 1,
     totalFindingsDrafted: findings.length,
     maxFollowUpsPerTopic: session.maxFollowUps,
-    maxTotalQuestions: 10,
+    maxTotalQuestions: DEFAULT_MAX_TOTAL_QUESTIONS,
     startedAt: session.createdAt,
     completedAt: session.completedAt ?? session.createdAt,
     createdBy: 'system',
@@ -312,11 +485,30 @@ function buildDomainSession(session: {
 export function createApp(): express.Express {
   const app = express();
 
-  // CORS: Restrict to allowed origins in production
-  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
-    'http://localhost:3000',
-    'http://localhost:3001',
-  ];
+  // SECURITY HARDENING: CORS configuration with production validation
+  // In production, ALLOWED_ORIGINS must be explicitly set - no localhost fallback
+  const isProduction = process.env.NODE_ENV === 'production';
+  const isTestMode = process.env.NODE_ENV === 'test' || process.env.E2E_TEST_MODE === 'true';
+
+  let allowedOrigins: string[];
+  if (process.env.ALLOWED_ORIGINS) {
+    allowedOrigins = process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim());
+  } else if (isProduction) {
+    // CRITICAL: In production, fail fast if ALLOWED_ORIGINS is not set
+    throw new Error(
+      '[SECURITY] ALLOWED_ORIGINS environment variable is required in production. ' +
+      'Example: ALLOWED_ORIGINS=https://app.example.com,https://www.example.com'
+    );
+  } else {
+    // Development/test fallback - log warning to make this visible
+    allowedOrigins = ['http://localhost:3000', 'http://localhost:3001'];
+    if (!isTestMode) {
+      console.warn(
+        '[CORS WARNING] ALLOWED_ORIGINS not set - using localhost defaults. ' +
+        'Set ALLOWED_ORIGINS for production deployments.'
+      );
+    }
+  }
   app.use(
     cors({
       origin: (origin, callback) => {
@@ -335,16 +527,21 @@ export function createApp(): express.Express {
 
   // Rate limiting: Prevent DoS attacks and brute-force attempts
   // Disabled in test mode to allow E2E tests to run without throttling
-  const isTestMode = process.env.NODE_ENV === 'test' || process.env.E2E_TEST_MODE === 'true';
-  const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: isTestMode ? 10000 : 100, // Higher limit for tests
-    standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
-    legacyHeaders: false, // Disable `X-RateLimit-*` headers
-    message: 'Too many requests from this IP, please try again later.',
-  });
+  // Can also be disabled via DISABLE_RATE_LIMIT=true for local development
+  // Note: isTestMode already defined above in CORS section
+  const disableRateLimit = process.env.DISABLE_RATE_LIMIT === 'true';
 
-  app.use(limiter);
+  if (!disableRateLimit) {
+    const limiter = rateLimit({
+      windowMs: 15 * 60 * 1000, // 15 minutes
+      max: isTestMode ? 10000 : 100, // Higher limit for tests
+      standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
+      legacyHeaders: false, // Disable `X-RateLimit-*` headers
+      message: 'Too many requests from this IP, please try again later.',
+    });
+
+    app.use(limiter);
+  }
 
   app.get('/health', (_req, res) => {
     res.status(200).json({ status: 'ok' });
@@ -359,45 +556,49 @@ export function createApp(): express.Express {
 
   app.use('/v1', authMiddleware);
 
-  app.get('/v1/providers', (req, res) => {
+  app.get('/v1/providers', async (req, res) => {
     const ctx = getContext(req);
-    const providers = store.listProviders(ctx);
+    const providers = await store.listProviders(ctx);
     sendWithMetadata(res, { providers });
   });
 
-  app.post('/v1/providers', (req, res) => {
+  app.post('/v1/providers', async (req, res) => {
     const ctx = getContext(req);
-    const { providerName, orgRef } = req.body ?? {};
+    const parsed = validateRequest(req, res, {
+      body: z
+        .object({
+          providerName: z.string().trim().min(1),
+          orgRef: z.string().trim().optional(),
+        })
+        .strip(),
+    });
+    if (!parsed) return;
+    const { providerName, orgRef } = parsed.body as { providerName: string; orgRef?: string };
 
-    if (!providerName || typeof providerName !== 'string') {
-      sendError(res, 400, 'providerName is required');
-      return;
-    }
-
-    const provider = store.createProvider(ctx, { providerName: providerName.trim(), orgRef });
-    store.appendAuditEvent(ctx, provider.providerId, 'PROVIDER_CREATED', { providerId: provider.providerId });
+    const provider = await store.createProvider(ctx, { providerName: providerName.trim(), orgRef });
+    await store.appendAuditEvent(ctx, provider.providerId, 'PROVIDER_CREATED', { providerId: provider.providerId });
     sendWithMetadata(res, { provider });
   });
 
-  app.get('/v1/providers/:providerId/overview', (req, res) => {
+  app.get('/v1/providers/:providerId/overview', async (req, res) => {
     const ctx = getContext(req);
-    const { providerId } = req.params;
-    const facilityId = req.query.facility as string | undefined;
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId }).strip(),
+      query: z.object({ facility: zQueryString }).strip(),
+    });
+    if (!parsed) return;
+    const { providerId } = parsed.params as { providerId: string };
+    const { facility: facilityId } = parsed.query as { facility: string };
 
-    if (!facilityId) {
-      sendError(res, 400, 'facility query param is required');
-      return;
-    }
-
-    const provider = store.getProviderById(ctx, providerId);
-    const facility = store.getFacilityById(ctx, facilityId);
+    const provider = await store.getProviderById(ctx, providerId);
+    const facility = await store.getFacilityById(ctx, facilityId);
 
     if (!provider || !facility || facility.providerId !== providerId) {
       sendError(res, 404, 'Provider or facility not found');
       return;
     }
 
-    const facilityEvidence = store.listEvidenceByFacility(ctx, facilityId);
+    const facilityEvidence = await store.listEvidenceByFacility(ctx, facilityId);
     const hasCqcReport = facilityEvidence.some((record) => record.evidenceType === EvidenceType.CQC_REPORT);
 
     // Calculate evidence coverage based on all required types
@@ -408,22 +609,22 @@ export function createApp(): express.Express {
       ? Math.round((matchedTypes.length / allRequiredTypes.length) * 100)
       : 0;
 
-    const reportContext = resolveReportContextForFacility(ctx, providerId, facilityId);
+    const reportContext = await resolveReportContextForFacility(ctx, providerId, facilityId);
 
     let topicsCompleted = 0;
     let unansweredQuestions = 0;
     let openFindings = 0;
 
     if (reportContext.mode === 'MOCK') {
-      const sessions = store.listSessionsByProvider(ctx, providerId)
+      const sessions = (await store.listSessionsByProvider(ctx, providerId))
         .filter((session) => session.facilityId === facilityId);
       const completedSessions = sessions.filter((session) => session.status === 'COMPLETED');
       topicsCompleted = completedSessions.length;
       unansweredQuestions = sessions.filter((session) => session.status === 'IN_PROGRESS').length;
-      openFindings = store.listFindingsByProvider(ctx, providerId)
+      openFindings = (await store.listFindingsByProvider(ctx, providerId))
         .filter((finding) => finding.facilityId === facilityId).length;
     } else {
-      openFindings = store.listFindingsByProvider(ctx, providerId)
+      openFindings = (await store.listFindingsByProvider(ctx, providerId))
         .filter((finding) => finding.facilityId === facilityId)
         .filter((finding) => finding.reportingDomain === ReportingDomain.REGULATORY_HISTORY).length;
     }
@@ -439,19 +640,24 @@ export function createApp(): express.Express {
     }, reportContext);
   });
 
-  app.get('/v1/providers/:providerId/topics', (req, res) => {
+  app.get('/v1/providers/:providerId/topics', async (req, res) => {
     const ctx = getContext(req);
-    const { providerId } = req.params;
-    const facilityId = req.query.facility as string | undefined;
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId }).strip(),
+      query: z.object({ facility: zOptionalQueryString }).strip(),
+    });
+    if (!parsed) return;
+    const { providerId } = parsed.params as { providerId: string };
+    const { facility: facilityId } = parsed.query as { facility?: string };
 
-    const provider = store.getProviderById(ctx, providerId);
+    const provider = await store.getProviderById(ctx, providerId);
     if (!provider) {
       sendError(res, 404, 'Provider not found');
       return;
     }
 
     const reportContext = facilityId
-      ? resolveReportContextForFacility(ctx, providerId, facilityId)
+      ? await resolveReportContextForFacility(ctx, providerId, facilityId)
       : undefined;
 
     let completionStatus = TOPICS.reduce<Record<string, { completed: number; total: number }>>(
@@ -463,7 +669,7 @@ export function createApp(): express.Express {
     );
 
     if (!reportContext || reportContext.mode === 'MOCK') {
-      const sessions = store.listSessionsByProvider(ctx, providerId)
+      const sessions = (await store.listSessionsByProvider(ctx, providerId))
         .filter((session) => !facilityId || session.facilityId === facilityId);
       completionStatus = TOPICS.reduce<Record<string, { completed: number; total: number }>>(
         (acc, topic) => {
@@ -480,10 +686,14 @@ export function createApp(): express.Express {
     sendWithMetadata(res, { topics: TOPICS, completionStatus }, reportContext);
   });
 
-  app.get('/v1/providers/:providerId/topics/:topicId', (req, res) => {
-    const { topicId } = req.params;
-    const { providerId } = req.params;
-    const facilityId = req.query.facility as string | undefined;
+  app.get('/v1/providers/:providerId/topics/:topicId', async (req, res) => {
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId, topicId: zTopicId }).strip(),
+      query: z.object({ facility: zOptionalQueryString }).strip(),
+    });
+    if (!parsed) return;
+    const { topicId, providerId } = parsed.params as { topicId: string; providerId: string };
+    const { facility: facilityId } = parsed.query as { facility?: string };
     const topic = TOPICS.find((item) => item.id === topicId);
     if (!topic) {
       sendError(res, 404, 'Topic not found');
@@ -491,34 +701,39 @@ export function createApp(): express.Express {
     }
     const ctx = getContext(req);
     const reportContext = facilityId
-      ? resolveReportContextForFacility(ctx, providerId, facilityId)
+      ? await resolveReportContextForFacility(ctx, providerId, facilityId)
       : undefined;
     sendWithMetadata(res, topic, reportContext);
   });
 
-  app.get('/v1/providers/:providerId/mock-sessions', (req, res) => {
+  app.get('/v1/providers/:providerId/mock-sessions', async (req, res) => {
     const ctx = getContext(req);
-    const { providerId } = req.params;
-    const facilityId = req.query.facility as string | undefined;
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId }).strip(),
+      query: z.object({ facility: zOptionalQueryString }).strip(),
+    });
+    if (!parsed) return;
+    const { providerId } = parsed.params as { providerId: string };
+    const { facility: facilityId } = parsed.query as { facility?: string };
 
-    const sessions = store.listSessionsByProvider(ctx, providerId)
+    const sessions = (await store.listSessionsByProvider(ctx, providerId))
       .filter((session) => !facilityId || session.facilityId === facilityId);
     const reportContext = resolveMockContextFromSessions(sessions);
     sendWithMetadata(res, { sessions }, reportContext);
   });
 
-  app.post('/v1/providers/:providerId/mock-sessions', (req, res) => {
+  app.post('/v1/providers/:providerId/mock-sessions', async (req, res) => {
     const ctx = getContext(req);
-    const { providerId } = req.params;
-    const { topicId, facilityId } = req.body ?? {};
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId }).strip(),
+      body: z.object({ topicId: zTopicId, facilityId: zFacilityId }).strip(),
+    });
+    if (!parsed) return;
+    const { providerId } = parsed.params as { providerId: string };
+    const { topicId, facilityId } = parsed.body as { topicId: string; facilityId: string };
 
-    if (!topicId || !facilityId) {
-      sendError(res, 400, 'topicId and facilityId are required');
-      return;
-    }
-
-    const provider = store.getProviderById(ctx, providerId);
-    const facility = store.getFacilityById(ctx, facilityId);
+    const provider = await store.getProviderById(ctx, providerId);
+    const facility = await store.getFacilityById(ctx, facilityId);
     if (!provider || !facility || facility.providerId !== providerId) {
       sendError(res, 404, 'Provider or facility not found');
       return;
@@ -531,7 +746,7 @@ export function createApp(): express.Express {
     }
 
     const metadata = buildConstitutionalMetadata();
-    const session = store.createMockSession(ctx, {
+    const session = await store.createMockSession(ctx, {
       provider,
       facilityId,
       topicId,
@@ -539,9 +754,11 @@ export function createApp(): express.Express {
       topicCatalogHash: metadata.topicCatalogHash,
       prsLogicProfilesVersion: metadata.prsLogicVersion,
       prsLogicProfilesHash: metadata.prsLogicHash,
+      maxFollowUps: topic.maxFollowUps,
+      maxTotalQuestions: DEFAULT_MAX_TOTAL_QUESTIONS,
     });
 
-    store.appendAuditEvent(ctx, providerId, 'MOCK_SESSION_STARTED', {
+    await store.appendAuditEvent(ctx, providerId, 'MOCK_SESSION_STARTED', {
       sessionId: session.sessionId,
       facilityId,
       topicId,
@@ -551,10 +768,14 @@ export function createApp(): express.Express {
     sendWithMetadata(res, session, reportContext);
   });
 
-  app.get('/v1/providers/:providerId/mock-sessions/:sessionId', (req, res) => {
+  app.get('/v1/providers/:providerId/mock-sessions/:sessionId', async (req, res) => {
     const ctx = getContext(req);
-    const { providerId, sessionId } = req.params;
-    const session = store.getSessionById(ctx, sessionId);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId, sessionId: zSessionId }).strip(),
+    });
+    if (!parsed) return;
+    const { providerId, sessionId } = parsed.params as { providerId: string; sessionId: string };
+    const session = await store.getSessionById(ctx, sessionId);
 
     if (!session || session.providerId !== providerId) {
       sendError(res, 404, 'Session not found');
@@ -565,17 +786,17 @@ export function createApp(): express.Express {
     sendWithMetadata(res, session, reportContext);
   });
 
-  app.post('/v1/providers/:providerId/mock-sessions/:sessionId/answer', (req, res) => {
+  app.post('/v1/providers/:providerId/mock-sessions/:sessionId/answer', async (req, res) => {
     const ctx = getContext(req);
-    const { providerId, sessionId } = req.params;
-    const { answer } = req.body ?? {};
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId, sessionId: zSessionId }).strip(),
+      body: z.object({ answer: z.string().trim().min(1) }).strip(),
+    });
+    if (!parsed) return;
+    const { providerId, sessionId } = parsed.params as { providerId: string; sessionId: string };
+    const { answer } = parsed.body as { answer: string };
 
-    if (!answer || typeof answer !== 'string') {
-      sendError(res, 400, 'answer is required');
-      return;
-    }
-
-    const session = store.getSessionById(ctx, sessionId);
+    const session = await store.getSessionById(ctx, sessionId);
     if (!session || session.providerId !== providerId) {
       sendError(res, 404, 'Session not found');
       return;
@@ -593,19 +814,20 @@ export function createApp(): express.Express {
       completedAt: new Date().toISOString(),
     };
 
-    store.updateSession(ctx, updated);
+    await store.updateSession(ctx, updated);
 
     const topic = TOPICS.find((item) => item.id === session.topicId);
     const evidenceRequired = topic?.evidenceRequirements ?? [];
-    const facilityEvidence = store.listEvidenceByFacility(ctx, session.facilityId);
+    const facilityEvidence = await store.listEvidenceByFacility(ctx, session.facilityId);
     const evidenceProvided = facilityEvidence.map((record) => record.evidenceType);
     const evidenceMissing = evidenceRequired.filter(
       (required) => !evidenceProvided.includes(required)
     );
+    const facility = await store.getFacilityById(ctx, session.facilityId);
 
     const impactScore = 80;
     const likelihoodScore = 90;
-    const finding = store.addFinding(ctx, {
+    const finding = await store.addFinding(ctx, {
       providerId,
       facilityId: session.facilityId,
       sessionId,
@@ -624,29 +846,121 @@ export function createApp(): express.Express {
       evidenceMissing,
     });
 
-    store.appendAuditEvent(ctx, providerId, 'MOCK_SESSION_ANSWERED', {
+    await store.appendAuditEvent(ctx, providerId, 'MOCK_SESSION_ANSWERED', {
       sessionId,
       answerLength: answer.length,
     });
-    store.appendAuditEvent(ctx, providerId, 'MOCK_SESSION_COMPLETED', {
+    await store.appendAuditEvent(ctx, providerId, 'MOCK_SESSION_COMPLETED', {
       sessionId,
       findingId: finding.id,
     });
+
+    if (process.env.ENABLE_AI_INSIGHTS !== 'false') {
+      try {
+        const job = await aiInsightQueue.add({
+          tenantId: ctx.tenantId,
+          actorId: ctx.actorId,
+          sessionId,
+          providerId,
+          facilityId: session.facilityId,
+          topicId: session.topicId,
+          topicTitle: topic?.title,
+          regulationSectionId: topic?.regulationSectionId,
+          question: topic?.title ? `Mock inspection topic: ${topic.title}` : 'Mock inspection topic',
+          answer,
+          serviceType: facility?.serviceType,
+        } as AIInsightJobData);
+
+        mockInsightJobs.set(sessionId, job.id);
+      } catch (error) {
+        console.error('[AI_INSIGHTS] Failed to enqueue job:', error);
+      }
+    }
 
     const reportContext = resolveReportContextForSession(updated);
     sendWithMetadata(res, updated, reportContext);
   });
 
-  app.get('/v1/providers/:providerId/findings', (req, res) => {
+  /**
+   * GET /v1/providers/:providerId/mock-sessions/:sessionId/ai-insights
+   *
+   * Fetch advisory AI insights for a mock session (if available).
+   */
+  app.get('/v1/providers/:providerId/mock-sessions/:sessionId/ai-insights', async (req, res) => {
     const ctx = getContext(req);
-    const { providerId } = req.params;
-    const facilityId = req.query.facility as string | undefined;
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId, sessionId: zSessionId }).strip(),
+    });
+    if (!parsed) return;
+    const { providerId, sessionId } = parsed.params as { providerId: string; sessionId: string };
+
+    const session = await store.getSessionById(ctx, sessionId);
+    if (!session || session.providerId !== providerId) {
+      sendError(res, 404, 'Session not found');
+      return;
+    }
+
+    const jobId = mockInsightJobs.get(sessionId);
+    if (!jobId) {
+      sendError(res, 404, 'AI insights not available');
+      return;
+    }
+
+    try {
+      const job = await aiInsightQueue.getJob(jobId);
+      if (!job) {
+        sendError(res, 404, 'AI insight job not found');
+        return;
+      }
+
+      if (job.state === 'completed' && job.returnvalue) {
+        const result = job.returnvalue as AIInsightJobResult;
+        const usedFallback = result.validationReport?.usedFallback ?? false;
+
+        sendWithMetadata(res, {
+          sessionId,
+          insights: result.insights,
+          suggestedFollowUp: result.suggestedFollowUp,
+          riskIndicators: result.riskIndicators,
+          isFallback: usedFallback,
+          fallbackReason: usedFallback ? 'Validation fallback' : undefined,
+          status: 'COMPLETED',
+          jobId,
+        });
+        return;
+      }
+
+      sendWithMetadata(res, {
+        sessionId,
+        insights: [],
+        suggestedFollowUp: undefined,
+        riskIndicators: [],
+        isFallback: false,
+        status: mapQueueStateToStatus(job.state),
+        jobId,
+        error: job.failedReason,
+      });
+    } catch (error) {
+      console.error('[AI_INSIGHTS] Failed:', error);
+      sendError(res, 500, 'Failed to fetch AI insights');
+    }
+  });
+
+  app.get('/v1/providers/:providerId/findings', async (req, res) => {
+    const ctx = getContext(req);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId }).strip(),
+      query: z.object({ facility: zOptionalQueryString }).strip(),
+    });
+    if (!parsed) return;
+    const { providerId } = parsed.params as { providerId: string };
+    const { facility: facilityId } = parsed.query as { facility?: string };
 
     const reportContext = facilityId
-      ? resolveReportContextForFacility(ctx, providerId, facilityId)
+      ? await resolveReportContextForFacility(ctx, providerId, facilityId)
       : undefined;
 
-    let findings = store.listFindingsByProvider(ctx, providerId)
+    let findings = (await store.listFindingsByProvider(ctx, providerId))
       .filter((finding) => !facilityId || finding.facilityId === facilityId);
 
     if (reportContext?.mode === 'REAL') {
@@ -658,10 +972,14 @@ export function createApp(): express.Express {
     sendWithMetadata(res, { findings, totalCount: findings.length }, reportContext);
   });
 
-  app.get('/v1/providers/:providerId/findings/:findingId', (req, res) => {
+  app.get('/v1/providers/:providerId/findings/:findingId', async (req, res) => {
     const ctx = getContext(req);
-    const { providerId, findingId } = req.params;
-    const finding = store.getFindingById(ctx, findingId);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId, findingId: zFindingId }).strip(),
+    });
+    if (!parsed) return;
+    const { providerId, findingId } = parsed.params as { providerId: string; findingId: string };
+    const finding = await store.getFindingById(ctx, findingId);
 
     if (!finding || finding.providerId !== providerId) {
       sendError(res, 404, 'Finding not found');
@@ -676,29 +994,41 @@ export function createApp(): express.Express {
     }, reportContext);
   });
 
-  app.get('/v1/providers/:providerId/evidence', (req, res) => {
+  app.get('/v1/providers/:providerId/evidence', async (req, res) => {
     const ctx = getContext(req);
-    const { providerId } = req.params;
-    const facilityId = req.query.facility as string | undefined;
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId }).strip(),
+      query: z.object({ facility: zOptionalQueryString }).strip(),
+    });
+    if (!parsed) return;
+    const { providerId } = parsed.params as { providerId: string };
+    const { facility: facilityId } = parsed.query as { facility?: string };
 
     const evidence = facilityId
-      ? store.listEvidenceByFacility(ctx, facilityId)
-      : store.listEvidenceByProvider(ctx, providerId);
+      ? await store.listEvidenceByFacility(ctx, facilityId)
+      : await store.listEvidenceByProvider(ctx, providerId);
     const mapped = evidence.map(mapEvidenceRecord);
     const reportContext = facilityId
-      ? resolveReportContextForFacility(ctx, providerId, facilityId)
+      ? await resolveReportContextForFacility(ctx, providerId, facilityId)
       : undefined;
     sendWithMetadata(res, { evidence: mapped, totalCount: mapped.length }, reportContext);
   });
 
   app.post('/v1/evidence/blobs', async (req, res) => {
     const ctx = getContext(req);
-    const { contentBase64, mimeType } = req.body ?? {};
-
-    if (!contentBase64 || !mimeType) {
-      sendError(res, 400, 'contentBase64 and mimeType are required');
-      return;
-    }
+    const parsed = validateRequest(req, res, {
+      body: z
+        .object({
+          contentBase64: zBase64,
+          mimeType: zMimeType,
+        })
+        .strip(),
+    });
+    if (!parsed) return;
+    const { contentBase64, mimeType } = parsed.body as {
+      contentBase64: string;
+      mimeType: string;
+    };
 
     try {
       // Decode base64 content
@@ -708,12 +1038,47 @@ export function createApp(): express.Express {
       const blobMetadata = await blobStorage.upload(content, mimeType);
 
       // Create blob record in store
-      const blob = store.createEvidenceBlob(ctx, { contentBase64, mimeType });
-
-      // Start background malware scan (fire-and-forget)
-      scanBlob(blobMetadata.contentHash).catch((error) => {
-        console.error(`[MALWARE_SCAN] Failed to scan blob ${blobMetadata.contentHash}:`, error);
+      await store.createEvidenceBlob(ctx, {
+        contentHash: blobMetadata.contentHash,
+        contentType: blobMetadata.contentType,
+        sizeBytes: blobMetadata.sizeBytes,
+        uploadedAt: blobMetadata.uploadedAt,
+        storagePath: blobMetadata.storagePath,
       });
+
+      // Enqueue malware scan
+      const scanJob = await malwareScanQueue.add({
+        tenantId: ctx.tenantId,
+        actorId: ctx.actorId,
+        blobHash: blobMetadata.contentHash,
+        mimeType,
+      } as MalwareScanJobData);
+
+      blobScanJobs.set(blobMetadata.contentHash, scanJob.id);
+
+      if (await malwareScanQueue.isInMemory()) {
+        await processInMemoryJob(
+          QUEUE_NAMES.MALWARE_SCAN,
+          scanJob.id,
+          async (data: MalwareScanJobData): Promise<MalwareScanJobResult> => {
+            const result = await scanBlob(data.blobHash);
+            const status =
+              result.status === 'INFECTED'
+                ? 'INFECTED'
+                : result.status === 'CLEAN'
+                  ? 'CLEAN'
+                  : 'ERROR';
+            return {
+              blobHash: data.blobHash,
+              status,
+              threat: result.threat,
+              scanEngine: result.scanEngine || 'stub-scanner-v1',
+              scannedAt: result.scannedAt,
+              quarantined: status === 'INFECTED',
+            };
+          }
+        );
+      }
 
       // Return blob metadata
       sendWithMetadata(res, {
@@ -722,6 +1087,7 @@ export function createApp(): express.Express {
         sizeBytes: blobMetadata.sizeBytes,
         uploadedAt: blobMetadata.uploadedAt,
         scanStatus: 'PENDING', // Will be updated by background scan
+        scanJobId: scanJob.id,
       });
     } catch (error) {
       console.error('[BLOB_UPLOAD] Failed:', error);
@@ -733,14 +1099,27 @@ export function createApp(): express.Express {
    * GET /v1/evidence/blobs/:blobHash
    *
    * Download blob content by hash.
-   * Returns 404 if blob not found or has been quarantined.
+   * Returns 404 if blob not found, quarantined, or not owned by tenant.
+   * Security: Validates blob belongs to requesting tenant via EvidenceRecord lookup.
    */
   app.get('/v1/evidence/blobs/:blobHash', async (req, res) => {
     const ctx = getContext(req);
-    const { blobHash } = req.params;
+    const parsed = validateRequest(req, res, {
+      params: z.object({ blobHash: zBlobHash }).strip(),
+    });
+    if (!parsed) return;
+    const { blobHash } = parsed.params as { blobHash: string };
 
     try {
-      // Verify blob exists
+      // Security: Verify blob belongs to this tenant via EvidenceRecord
+      const evidenceRecord = await store.getEvidenceRecordByContentHash(ctx, blobHash);
+      if (!evidenceRecord) {
+        // Return 404 to avoid revealing blob existence to other tenants
+        sendError(res, 404, 'Blob not found');
+        return;
+      }
+
+      // Verify blob exists in storage
       const exists = await blobStorage.exists(blobHash);
       if (!exists) {
         sendError(res, 404, 'Blob not found');
@@ -750,10 +1129,9 @@ export function createApp(): express.Express {
       // Download blob content
       const content = await blobStorage.download(blobHash);
 
-      // Get blob metadata from store to determine content type
-      // (In production, store this in DB or metadata file)
-      res.setHeader('Content-Type', 'application/octet-stream');
-      res.setHeader('Content-Disposition', `attachment; filename="${blobHash}"`);
+      // Use content type from evidence record
+      res.setHeader('Content-Type', evidenceRecord.mimeType || 'application/octet-stream');
+      res.setHeader('Content-Disposition', `attachment; filename="${evidenceRecord.fileName || blobHash}"`);
       res.send(content);
     } catch (error) {
       console.error('[BLOB_DOWNLOAD] Failed:', error);
@@ -767,21 +1145,81 @@ export function createApp(): express.Express {
    * Check malware scan status for a blob.
    */
   app.get('/v1/evidence/blobs/:blobHash/scan', async (req, res) => {
-    const ctx = getContext(req);
-    const { blobHash } = req.params;
+    const parsed = validateRequest(req, res, {
+      params: z.object({ blobHash: zBlobHash }).strip(),
+    });
+    if (!parsed) return;
+    const { blobHash } = parsed.params as { blobHash: string };
 
     try {
-      const scanResult = await scanBlob(blobHash);
-      sendWithMetadata(res, scanResult);
+      const jobId = blobScanJobs.get(blobHash);
+      if (!jobId) {
+        sendError(res, 404, 'Scan job not found for blob');
+        return;
+      }
+
+      const job = await malwareScanQueue.getJob(jobId);
+      if (!job) {
+        sendError(res, 404, 'Scan job not found');
+        return;
+      }
+
+      if (job.state === 'completed' && job.returnvalue) {
+        const result = job.returnvalue as MalwareScanJobResult;
+        const status =
+          result.status === 'INFECTED'
+            ? 'INFECTED'
+            : result.status === 'CLEAN'
+              ? 'CLEAN'
+              : 'PENDING';
+
+        sendWithMetadata(res, {
+          contentHash: blobHash,
+          status,
+          scannedAt: result.scannedAt,
+          threat: result.threat,
+          scanEngine: result.scanEngine,
+          scanJobId: jobId,
+          error: result.status === 'ERROR' ? 'Scan failed' : undefined,
+        });
+        return;
+      }
+
+      const status = 'PENDING';
+      const scannedAt = job.finishedOn
+        ? new Date(job.finishedOn).toISOString()
+        : new Date(job.timestamp ?? Date.now()).toISOString();
+      sendWithMetadata(res, {
+        contentHash: blobHash,
+        status,
+        scannedAt,
+        scanJobId: jobId,
+        error: job.failedReason,
+      });
     } catch (error) {
       console.error('[BLOB_SCAN] Failed:', error);
       sendError(res, 500, 'Failed to check scan status');
     }
   });
 
-  app.post('/v1/providers/:providerId/facilities', (req, res) => {
+  app.post('/v1/providers/:providerId/facilities', async (req, res) => {
     const ctx = getContext(req);
-    const { providerId } = req.params;
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId }).strip(),
+      body: z
+        .object({
+          facilityName: z.string().trim().min(1),
+          addressLine1: z.string().trim().min(1),
+          townCity: z.string().trim().min(1),
+          postcode: z.string().trim().min(1),
+          cqcLocationId: zCqcLocationId,
+          serviceType: zServiceType,
+          capacity: zOptionalPositiveInt.optional(),
+        })
+        .strip(),
+    });
+    if (!parsed) return;
+    const { providerId } = parsed.params as { providerId: string };
     const {
       facilityName,
       addressLine1,
@@ -790,32 +1228,18 @@ export function createApp(): express.Express {
       cqcLocationId,
       serviceType,
       capacity,
-    } = req.body ?? {};
-
-    if (
-      !facilityName ||
-      !addressLine1 ||
-      !townCity ||
-      !postcode ||
-      !cqcLocationId ||
-      !serviceType
-    ) {
-      sendError(res, 400, 'Missing required facility fields');
-      return;
-    }
-
-    if (!isValidCqcLocationId(cqcLocationId)) {
-      sendError(res, 400, 'Invalid CQC Location ID format (1-123456789 or 1-1234567890)');
-      return;
-    }
-
-    if (!SERVICE_TYPES.has(serviceType)) {
-      sendError(res, 400, 'Invalid serviceType');
-      return;
-    }
+    } = parsed.body as {
+      facilityName: string;
+      addressLine1: string;
+      townCity: string;
+      postcode: string;
+      cqcLocationId: string;
+      serviceType: string;
+      capacity?: number;
+    };
 
     try {
-      const facility = store.createFacility(ctx, {
+      const facility = await store.createFacility(ctx, {
         providerId,
         facilityName: facilityName.trim(),
         addressLine1: addressLine1.trim(),
@@ -825,7 +1249,7 @@ export function createApp(): express.Express {
         serviceType: serviceType.trim(),
         capacity: typeof capacity === 'number' ? capacity : undefined,
       });
-      store.appendAuditEvent(ctx, providerId, 'FACILITY_CREATED', {
+      await store.appendAuditEvent(ctx, providerId, 'FACILITY_CREATED', {
         facilityId: facility.id,
         cqcLocationId: facility.cqcLocationId,
       });
@@ -840,34 +1264,42 @@ export function createApp(): express.Express {
     }
   });
 
-  app.get('/v1/providers/:providerId/facilities', (req, res) => {
+  app.get('/v1/providers/:providerId/facilities', async (req, res) => {
     const ctx = getContext(req);
-    const { providerId } = req.params;
-    const provider = store.getProviderById(ctx, providerId);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId }).strip(),
+    });
+    if (!parsed) return;
+    const { providerId } = parsed.params as { providerId: string };
+    const provider = await store.getProviderById(ctx, providerId);
     if (!provider) {
       sendError(res, 404, 'Provider not found');
       return;
     }
-    const facilities = store.listFacilitiesByProvider(ctx, providerId);
+    const facilities = await store.listFacilitiesByProvider(ctx, providerId);
     sendWithMetadata(res, { provider, facilities, totalCount: facilities.length });
   });
 
-  app.get('/v1/facilities', (req, res) => {
+  app.get('/v1/facilities', async (req, res) => {
     const ctx = getContext(req);
-    const facilities = store.listFacilities(ctx);
+    const facilities = await store.listFacilities(ctx);
     sendWithMetadata(res, { facilities, totalCount: facilities.length });
   });
 
-  app.get('/v1/facilities/:facilityId', (req, res) => {
+  app.get('/v1/facilities/:facilityId', async (req, res) => {
     const ctx = getContext(req);
-    const { facilityId } = req.params;
-    const facility = store.getFacilityById(ctx, facilityId);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ facilityId: zFacilityId }).strip(),
+    });
+    if (!parsed) return;
+    const { facilityId } = parsed.params as { facilityId: string };
+    const facility = await store.getFacilityById(ctx, facilityId);
     if (!facility) {
       sendError(res, 404, 'Facility not found');
       return;
     }
-    const provider = store.getProviderById(ctx, facility.providerId);
-    const reportContext = resolveReportContextForFacility(ctx, facility.providerId, facilityId);
+    const provider = await store.getProviderById(ctx, facility.providerId);
+    const reportContext = await resolveReportContextForFacility(ctx, facility.providerId, facilityId);
     sendWithMetadata(res, { facility, provider }, reportContext);
   });
 
@@ -887,6 +1319,21 @@ export function createApp(): express.Express {
    */
   app.post('/v1/facilities/onboard', async (req, res) => {
     const ctx = getContext(req);
+    const parsed = validateRequest(req, res, {
+      body: z
+        .object({
+          providerId: zProviderId,
+          cqcLocationId: zCqcLocationId,
+          facilityName: z.string().trim().min(1).optional(),
+          addressLine1: z.string().trim().min(1).optional(),
+          townCity: z.string().trim().min(1).optional(),
+          postcode: z.string().trim().min(1).optional(),
+          serviceType: zServiceType.optional(),
+          capacity: zOptionalPositiveInt.optional(),
+        })
+        .strip(),
+    });
+    if (!parsed) return;
     const {
       providerId,
       cqcLocationId,
@@ -896,22 +1343,19 @@ export function createApp(): express.Express {
       postcode,
       serviceType,
       capacity,
-    } = req.body ?? {};
-
-    // Validate required fields
-    if (!providerId || !cqcLocationId) {
-      sendError(res, 400, 'providerId and cqcLocationId are required');
-      return;
-    }
-
-    // Validate CQC Location ID format
-    if (!isValidCqcLocationId(cqcLocationId)) {
-      sendError(res, 400, 'Invalid CQC Location ID format (expected: 1-XXXXXXXXX with 9-11 digits)');
-      return;
-    }
+    } = parsed.body as {
+      providerId: string;
+      cqcLocationId: string;
+      facilityName?: string;
+      addressLine1?: string;
+      townCity?: string;
+      postcode?: string;
+      serviceType?: string;
+      capacity?: number;
+    };
 
     // Validate provider exists
-    const provider = store.getProviderById(ctx, providerId);
+    const provider = await store.getProviderById(ctx, providerId);
     if (!provider) {
       sendError(res, 404, 'Provider not found');
       return;
@@ -936,14 +1380,14 @@ export function createApp(): express.Express {
       );
 
       // Upsert the facility (create or update)
-      const { facility, isNew } = store.upsertFacility(ctx, {
+      const { facility, isNew } = await store.upsertFacility(ctx, {
         ...onboardingResult.facilityData,
         providerId,
       });
 
       // Audit the event
       const eventType = isNew ? 'FACILITY_ONBOARDED' : 'FACILITY_UPDATED';
-      store.appendAuditEvent(ctx, providerId, eventType, {
+      await store.appendAuditEvent(ctx, providerId, eventType, {
         facilityId: facility.id,
         cqcLocationId: facility.cqcLocationId,
         dataSource: facility.dataSource,
@@ -964,30 +1408,36 @@ export function createApp(): express.Express {
     }
   });
 
-  app.post('/v1/facilities/:facilityId/evidence', (req, res) => {
+  app.post('/v1/facilities/:facilityId/evidence', async (req, res) => {
     const ctx = getContext(req);
-    const { facilityId } = req.params;
-    const { blobHash, evidenceType, fileName, description } = req.body ?? {};
+    const parsed = validateRequest(req, res, {
+      params: z.object({ facilityId: zFacilityId }).strip(),
+      body: z
+        .object({
+          blobHash: zBlobHash,
+          evidenceType: zEvidenceType,
+          fileName: z.string().trim().min(1),
+          description: z.string().trim().min(1).optional(),
+        })
+        .strip(),
+    });
+    if (!parsed) return;
+    const { facilityId } = parsed.params as { facilityId: string };
+    const { blobHash, evidenceType, fileName, description } = parsed.body as {
+      blobHash: string;
+      evidenceType: EvidenceType;
+      fileName: string;
+      description?: string;
+    };
 
-    if (!blobHash || !evidenceType || !fileName) {
-      sendError(res, 400, 'blobHash, evidenceType, and fileName are required');
-      return;
-    }
-
-    // Validate evidenceType against canonical enum
-    if (!isValidEvidenceType(evidenceType)) {
-      sendError(res, 400, `Invalid evidenceType. Must be one of: ${Object.values(EvidenceType).join(', ')}`);
-      return;
-    }
-
-    const facility = store.getFacilityById(ctx, facilityId);
+    const facility = await store.getFacilityById(ctx, facilityId);
     if (!facility) {
       sendError(res, 404, 'Facility not found');
       return;
     }
 
     try {
-      const record = store.createEvidenceRecord(ctx, {
+      const record = await store.createEvidenceRecord(ctx, {
         facilityId,
         providerId: facility.providerId,
         blobHash,
@@ -996,44 +1446,86 @@ export function createApp(): express.Express {
         description,
       });
 
-      store.appendAuditEvent(ctx, facility.providerId, 'EVIDENCE_RECORDED', {
+      await store.appendAuditEvent(ctx, facility.providerId, 'EVIDENCE_RECORDED', {
         facilityId,
         evidenceRecordId: record.id,
       });
 
-      const reportContext = resolveReportContextForFacility(ctx, facility.providerId, facilityId);
-      sendWithMetadata(res, { record: mapEvidenceRecord(record) }, reportContext);
+      const reportContext = await resolveReportContextForFacility(ctx, facility.providerId, facilityId);
+      const processJob = await evidenceProcessQueue.add({
+        tenantId: ctx.tenantId,
+        actorId: ctx.actorId,
+        evidenceRecordId: record.id,
+        blobHash: record.blobHash,
+        mimeType: record.mimeType,
+        fileName: record.fileName,
+        evidenceType: record.evidenceType as EvidenceType,
+        facilityId,
+        providerId: facility.providerId,
+      } as EvidenceProcessJobData);
+
+      evidenceProcessJobs.set(record.id, processJob.id);
+
+      if (await evidenceProcessQueue.isInMemory()) {
+        await processInMemoryJob(
+          QUEUE_NAMES.EVIDENCE_PROCESS,
+          processJob.id,
+          async () => ({
+            evidenceRecordId: record.id,
+            processingTimeMs: 0,
+          })
+        );
+      }
+
+      sendWithMetadata(
+        res,
+        {
+          record: mapEvidenceRecord(record),
+          processingJobId: processJob.id,
+          processingStatus: 'PENDING',
+        },
+        reportContext
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Evidence record failed';
       sendError(res, 400, message);
     }
   });
 
-  app.get('/v1/facilities/:facilityId/evidence', (req, res) => {
+  app.get('/v1/facilities/:facilityId/evidence', async (req, res) => {
     const ctx = getContext(req);
-    const { facilityId } = req.params;
-    const facility = store.getFacilityById(ctx, facilityId);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ facilityId: zFacilityId }).strip(),
+    });
+    if (!parsed) return;
+    const { facilityId } = parsed.params as { facilityId: string };
+    const facility = await store.getFacilityById(ctx, facilityId);
     if (!facility) {
       sendError(res, 404, 'Facility not found');
       return;
     }
-    const evidence = store.listEvidenceByFacility(ctx, facilityId);
+    const evidence = await store.listEvidenceByFacility(ctx, facilityId);
     const mapped = evidence.map(mapEvidenceRecord);
-    const reportContext = resolveReportContextForFacility(ctx, facility.providerId, facilityId);
+    const reportContext = await resolveReportContextForFacility(ctx, facility.providerId, facilityId);
     sendWithMetadata(res, { evidence: mapped, totalCount: mapped.length }, reportContext);
   });
 
-  app.get('/v1/providers/:providerId/exports', (req, res) => {
+  app.get('/v1/providers/:providerId/exports', async (req, res) => {
     const ctx = getContext(req);
-    const { providerId } = req.params;
-    const facilityId = req.query.facility as string | undefined;
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId }).strip(),
+      query: z.object({ facility: zOptionalQueryString }).strip(),
+    });
+    if (!parsed) return;
+    const { providerId } = parsed.params as { providerId: string };
+    const { facility: facilityId } = parsed.query as { facility?: string };
 
     const reportContext = facilityId
-      ? resolveReportContextForFacility(ctx, providerId, facilityId)
+      ? await resolveReportContextForFacility(ctx, providerId, facilityId)
       : undefined;
 
     // Get actual exports from store
-    let exports = store.listExportsByProvider(ctx, providerId, facilityId);
+    let exports = await store.listExportsByProvider(ctx, providerId, facilityId);
     if (reportContext) {
       exports = exports.filter(
         (record) => record.reportingDomain === reportContext.reportingDomain
@@ -1054,27 +1546,35 @@ export function createApp(): express.Express {
           : EXPORT_WATERMARK,
       latestExport: latestExport
         ? {
-            exportId: latestExport.id,
-            format: latestExport.format,
-            generatedAt: latestExport.generatedAt,
-            downloadUrl: `${req.protocol}://${req.get('host')}/v1/exports/${latestExport.id}.${getExportExtension(latestExport.format)}`
-          }
+          exportId: latestExport.id,
+          format: latestExport.format,
+          generatedAt: latestExport.generatedAt,
+          downloadUrl: `${req.protocol}://${req.get('host')}/v1/exports/${latestExport.id}.${getExportExtension(latestExport.format)}`
+        }
         : undefined,
     }, reportContext);
   });
 
-  app.post('/v1/providers/:providerId/exports', (req, res) => {
+  app.post('/v1/providers/:providerId/exports', async (req, res) => {
     const ctx = getContext(req);
-    const { providerId } = req.params;
-    const { format, facilityId } = req.body ?? {};
-
-    if (!facilityId) {
-      sendError(res, 400, 'facilityId is required');
-      return;
-    }
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId }).strip(),
+      body: z
+        .object({
+          facilityId: zFacilityId,
+          format: zExportFormat.optional(),
+        })
+        .strip(),
+    });
+    if (!parsed) return;
+    const { providerId } = parsed.params as { providerId: string };
+    const { facilityId, format } = parsed.body as {
+      facilityId: string;
+      format?: string;
+    };
 
     const safeFormat = normalizeExportFormat(format);
-    const facilityReportContext = resolveReportContextForFacility(ctx, providerId, facilityId);
+    const facilityReportContext = await resolveReportContextForFacility(ctx, providerId, facilityId);
 
     if (facilityReportContext.mode === 'REAL') {
       if (safeFormat !== 'BLUE_OCEAN_BOARD' && safeFormat !== 'BLUE_OCEAN_AUDIT') {
@@ -1086,7 +1586,7 @@ export function createApp(): express.Express {
       const topicCatalogSha = metadata.topicCatalogHash.replace('sha256:', '');
       const prsLogicSha = metadata.prsLogicHash.replace('sha256:', '');
 
-      const regulatoryFindings = store.listFindingsByProvider(ctx, providerId)
+      const regulatoryFindings = (await store.listFindingsByProvider(ctx, providerId))
         .filter((finding) => finding.facilityId === facilityId)
         .filter((finding) => finding.reportingDomain === ReportingDomain.REGULATORY_HISTORY);
 
@@ -1123,7 +1623,7 @@ export function createApp(): express.Express {
         };
       });
 
-      const evidenceRecords = store.listEvidenceByFacility(ctx, facilityId).map((record) => ({
+      const evidenceRecords = (await store.listEvidenceByFacility(ctx, facilityId)).map((record) => ({
         id: record.id,
         tenantId: record.tenantId,
         blobHashes: [record.blobHash],
@@ -1160,7 +1660,7 @@ export function createApp(): express.Express {
           ? serializeBlueOceanAuditMarkdown(blueOceanReport)
           : serializeBlueOceanBoardMarkdown(blueOceanReport);
 
-      const exportRecord = store.createExport(ctx, {
+      const exportRecord = await store.createExport(ctx, {
         providerId,
         facilityId,
         sessionId: facilityReportContext.reportSource.id,
@@ -1172,7 +1672,7 @@ export function createApp(): express.Express {
         snapshotId: facilityReportContext.snapshotId,
       });
 
-      store.appendAuditEvent(ctx, providerId, 'EXPORT_GENERATED', {
+      await store.appendAuditEvent(ctx, providerId, 'EXPORT_GENERATED', {
         exportId: exportRecord.id,
         format: safeFormat,
       });
@@ -1188,7 +1688,7 @@ export function createApp(): express.Express {
       return;
     }
 
-    const session = store.listSessionsByProvider(ctx, providerId)
+    const session = (await store.listSessionsByProvider(ctx, providerId))
       .filter((item) => item.facilityId === facilityId)
       .find((item) => item.status === 'COMPLETED');
 
@@ -1199,7 +1699,7 @@ export function createApp(): express.Express {
 
     const reportContext = resolveReportContextForSession(session);
 
-    const findings = store.listFindingsByProvider(ctx, providerId)
+    const findings = (await store.listFindingsByProvider(ctx, providerId))
       .filter((finding) => finding.sessionId === session.sessionId)
       .map<DraftFinding>((finding) => ({
         id: finding.id,
@@ -1268,7 +1768,7 @@ export function createApp(): express.Express {
         };
       });
 
-      const evidenceRecords = store.listEvidenceByFacility(ctx, facilityId).map((record) => ({
+      const evidenceRecords = (await store.listEvidenceByFacility(ctx, facilityId)).map((record) => ({
         id: record.id,
         tenantId: record.tenantId,
         blobHashes: [record.blobHash],
@@ -1308,7 +1808,7 @@ export function createApp(): express.Express {
       content = serializePdfExport(pdfExport);
     }
 
-    const exportRecord = store.createExport(ctx, {
+    const exportRecord = await store.createExport(ctx, {
       providerId,
       facilityId,
       sessionId: session.sessionId,
@@ -1320,7 +1820,7 @@ export function createApp(): express.Express {
       snapshotId: reportContext.snapshotId,
     });
 
-    store.appendAuditEvent(ctx, providerId, 'EXPORT_GENERATED', {
+    await store.appendAuditEvent(ctx, providerId, 'EXPORT_GENERATED', {
       exportId: exportRecord.id,
       format: safeFormat,
     });
@@ -1335,9 +1835,14 @@ export function createApp(): express.Express {
     }, reportContext);
   });
 
-  app.get('/v1/exports/:exportId.csv', (req, res) => {
+  app.get('/v1/exports/:exportId.csv', async (req, res) => {
     const ctx = getContext(req);
-    const exportRecord = store.getExportById(ctx, req.params.exportId);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ exportId: zExportId }).strip(),
+    });
+    if (!parsed) return;
+    const { exportId } = parsed.params as { exportId: string };
+    const exportRecord = await store.getExportById(ctx, exportId);
     if (!exportRecord || exportRecord.format !== 'CSV') {
       sendError(res, 404, 'Export not found');
       return;
@@ -1347,9 +1852,14 @@ export function createApp(): express.Express {
     res.send(exportRecord.content);
   });
 
-  app.get('/v1/exports/:exportId.pdf', (req, res) => {
+  app.get('/v1/exports/:exportId.pdf', async (req, res) => {
     const ctx = getContext(req);
-    const exportRecord = store.getExportById(ctx, req.params.exportId);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ exportId: zExportId }).strip(),
+    });
+    if (!parsed) return;
+    const { exportId } = parsed.params as { exportId: string };
+    const exportRecord = await store.getExportById(ctx, exportId);
     if (!exportRecord || exportRecord.format !== 'PDF') {
       sendError(res, 404, 'Export not found');
       return;
@@ -1359,9 +1869,14 @@ export function createApp(): express.Express {
     res.send(exportRecord.content);
   });
 
-  app.get('/v1/exports/:exportId.md', (req, res) => {
+  app.get('/v1/exports/:exportId.md', async (req, res) => {
     const ctx = getContext(req);
-    const exportRecord = store.getExportById(ctx, req.params.exportId);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ exportId: zExportId }).strip(),
+    });
+    if (!parsed) return;
+    const { exportId } = parsed.params as { exportId: string };
+    const exportRecord = await store.getExportById(ctx, exportId);
     if (
       !exportRecord ||
       (exportRecord.format !== 'BLUE_OCEAN' &&
@@ -1379,13 +1894,18 @@ export function createApp(): express.Express {
     res.send(exportRecord.content);
   });
 
-  app.get('/v1/providers/:providerId/audit-trail', (req, res) => {
+  app.get('/v1/providers/:providerId/audit-trail', async (req, res) => {
     const ctx = getContext(req);
-    const { providerId } = req.params;
-    const facilityId = req.query.facility as string | undefined;
-    const events = store.listAuditEvents(ctx, providerId);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId }).strip(),
+      query: z.object({ facility: zOptionalQueryString }).strip(),
+    });
+    if (!parsed) return;
+    const { providerId } = parsed.params as { providerId: string };
+    const { facility: facilityId } = parsed.query as { facility?: string };
+    const events = await store.listAuditEvents(ctx, providerId);
     const reportContext = facilityId
-      ? resolveReportContextForFacility(ctx, providerId, facilityId)
+      ? await resolveReportContextForFacility(ctx, providerId, facilityId)
       : undefined;
     sendWithMetadata(res, { events, totalCount: events.length }, reportContext);
   });
@@ -1399,19 +1919,27 @@ export function createApp(): express.Express {
    */
   app.post('/v1/facilities/onboard-bulk', async (req, res) => {
     const ctx = getContext(req);
-    const { providerId, cqcLocationIds, autoSyncReports = false } = req.body ?? {};
+    const parsed = validateRequest(req, res, {
+      body: z
+        .object({
+          providerId: zProviderId,
+          cqcLocationIds: z.array(zCqcLocationId).min(1).max(50),
+          autoSyncReports: z.boolean().optional(),
+        })
+        .strip(),
+    });
+    if (!parsed) return;
+    const {
+      providerId,
+      cqcLocationIds,
+      autoSyncReports = false,
+    } = parsed.body as {
+      providerId: string;
+      cqcLocationIds: string[];
+      autoSyncReports?: boolean;
+    };
 
-    if (!providerId || !Array.isArray(cqcLocationIds) || cqcLocationIds.length === 0) {
-      sendError(res, 400, 'providerId and cqcLocationIds array are required');
-      return;
-    }
-
-    if (cqcLocationIds.length > 50) {
-      sendError(res, 400, 'Maximum 50 facilities per bulk onboarding request');
-      return;
-    }
-
-    const provider = store.getProviderById(ctx, providerId);
+    const provider = await store.getProviderById(ctx, providerId);
     if (!provider) {
       sendError(res, 404, 'Provider not found');
       return;
@@ -1440,13 +1968,13 @@ export function createApp(): express.Express {
           }
         );
 
-        const { facility, isNew } = store.upsertFacility(ctx, {
+        const { facility, isNew } = await store.upsertFacility(ctx, {
           ...onboardingResult.facilityData,
           providerId,
         });
 
         const eventType = isNew ? 'FACILITY_ONBOARDED' : 'FACILITY_UPDATED';
-        store.appendAuditEvent(ctx, providerId, eventType, {
+        await store.appendAuditEvent(ctx, providerId, eventType, {
           facilityId: facility.id,
           cqcLocationId: facility.cqcLocationId,
           dataSource: facility.dataSource,
@@ -1456,17 +1984,21 @@ export function createApp(): express.Express {
 
         // Auto-enqueue report scraping if requested
         if (autoSyncReports) {
-          const jobId = `job-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-          backgroundJobs.push({
-            id: jobId,
-            type: 'SCRAPE_LATEST_REPORT',
+          const job = await scrapeReportQueue.add({
+            tenantId: ctx.tenantId,
+            actorId: ctx.actorId,
             facilityId: facility.id,
             cqcLocationId: facility.cqcLocationId,
-            tenantId: ctx.tenantId,
             providerId,
-            status: 'PENDING',
-            createdAt: new Date().toISOString(),
           });
+
+          if (await scrapeReportQueue.isInMemory()) {
+            await processInMemoryJob(
+              QUEUE_NAMES.SCRAPE_REPORT,
+              job.id,
+              async (data: ScrapeReportJobData) => handleScrapeReportJob(data, ctx)
+            );
+          }
         }
 
         results.push({
@@ -1512,35 +2044,37 @@ export function createApp(): express.Express {
    */
   app.post('/v1/facilities/:facilityId/sync-latest-report', async (req, res) => {
     const ctx = getContext(req);
-    const { facilityId } = req.params;
+    const parsed = validateRequest(req, res, {
+      params: z.object({ facilityId: zFacilityId }).strip(),
+    });
+    if (!parsed) return;
+    const { facilityId } = parsed.params as { facilityId: string };
 
-    const facility = store.getFacilityById(ctx, facilityId);
+    const facility = await store.getFacilityById(ctx, facilityId);
     if (!facility) {
       sendError(res, 404, 'Facility not found');
       return;
     }
 
-    // Create background job
-    const jobId = `job-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    backgroundJobs.push({
-      id: jobId,
-      type: 'SCRAPE_LATEST_REPORT',
+    const job = await scrapeReportQueue.add({
+      tenantId: ctx.tenantId,
+      actorId: ctx.actorId,
       facilityId,
       cqcLocationId: facility.cqcLocationId,
-      tenantId: ctx.tenantId,
       providerId: facility.providerId,
-      status: 'PENDING',
-      createdAt: new Date().toISOString(),
     });
 
-    // Process immediately in this demo (in production, use a job queue)
-    processReportScrapeJob(jobId, ctx).catch((err) => {
-      console.error('Background job failed:', err);
-    });
+    if (await scrapeReportQueue.isInMemory()) {
+      await processInMemoryJob(
+        QUEUE_NAMES.SCRAPE_REPORT,
+        job.id,
+        async (data: ScrapeReportJobData) => handleScrapeReportJob(data, ctx)
+      );
+    }
 
     sendWithMetadata(res, {
       message: 'Report sync started',
-      jobId,
+      jobId: job.id,
       status: 'queued',
       estimatedCompletion: '30-60 seconds',
     });
@@ -1554,9 +2088,13 @@ export function createApp(): express.Express {
    */
   app.post('/v1/facilities/:facilityId/create-baseline', async (req, res) => {
     const ctx = getContext(req);
-    const { facilityId } = req.params;
+    const parsed = validateRequest(req, res, {
+      params: z.object({ facilityId: zFacilityId }).strip(),
+    });
+    if (!parsed) return;
+    const { facilityId } = parsed.params as { facilityId: string };
 
-    const facility = store.getFacilityById(ctx, facilityId);
+    const facility = await store.getFacilityById(ctx, facilityId);
     if (!facility) {
       sendError(res, 404, 'Facility not found');
       return;
@@ -1568,7 +2106,7 @@ export function createApp(): express.Express {
     }
 
     // Guide: Create a baseline mock inspection for never-inspected facilities
-    const provider = store.getProviderById(ctx, facility.providerId);
+    const provider = await store.getProviderById(ctx, facility.providerId);
     if (!provider) {
       sendError(res, 500, 'Provider not found');
       return;
@@ -1620,71 +2158,157 @@ export function createApp(): express.Express {
    * GET /v1/background-jobs/:jobId
    *
    * Check status of a background job.
+   * Security: Validates job belongs to requesting tenant.
    */
-  app.get('/v1/background-jobs/:jobId', (req, res) => {
-    const { jobId } = req.params;
-    const job = backgroundJobs.find((j) => j.id === jobId);
+  app.get('/v1/background-jobs/:jobId', async (req, res) => {
+    const ctx = getContext(req);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ jobId: zJobId }).strip(),
+    });
+    if (!parsed) return;
+    const { jobId } = parsed.params as { jobId: string };
+    const queueName = resolveQueueNameFromJobId(jobId);
 
-    if (!job) {
+    if (!queueName) {
       sendError(res, 404, 'Job not found');
       return;
     }
 
-    sendWithMetadata(res, {
-      job: {
-        id: job.id,
-        type: job.type,
-        status: job.status,
-        createdAt: job.createdAt,
-        completedAt: job.completedAt,
-        error: job.error,
-      },
-    });
-  });
-
-  /**
-   * Background job processor for report scraping.
-   * In production, this would be a separate worker service.
-   */
-  async function processReportScrapeJob(jobId: string, ctx: TenantContext) {
-    const job = backgroundJobs.find((j) => j.id === jobId);
-    if (!job) return;
-
-    job.status = 'PROCESSING';
-
     try {
-      // Scrape latest report from CQC website
-      const scrapeResult = await scrapeLatestReport(job.cqcLocationId);
-
-      if (!scrapeResult.success) {
-        job.status = 'FAILED';
-        job.error = scrapeResult.error.message;
-        job.completedAt = new Date().toISOString();
+      const job = await getQueueAdapter(queueName).getJob(jobId);
+      if (!job) {
+        sendError(res, 404, 'Job not found');
         return;
       }
 
+      // Security: Verify job belongs to requesting tenant
+      const jobData = job.data as { tenantId?: string } | undefined;
+      if (!jobData?.tenantId || jobData.tenantId !== ctx.tenantId) {
+        // Return 404 to avoid revealing job existence to other tenants
+        sendError(res, 404, 'Job not found');
+        return;
+      }
+
+      const status = mapQueueStateToStatus(job.state);
+      const createdAt = job.timestamp ? new Date(job.timestamp).toISOString() : undefined;
+      const completedAt = job.finishedOn ? new Date(job.finishedOn).toISOString() : undefined;
+
+      sendWithMetadata(res, {
+        job: {
+          id: job.id,
+          type: queueName,
+          status,
+          state: job.state,
+          createdAt,
+          completedAt,
+          error: job.failedReason,
+          attemptsMade: job.attemptsMade,
+          result: job.returnvalue,
+        },
+      });
+    } catch (error) {
+      console.error('[JOB_STATUS] Failed:', error);
+      sendError(res, 500, 'Failed to fetch job status');
+    }
+  });
+
+  /**
+   * Report scraping processor (used for in-memory fallback).
+   */
+  async function handleScrapeReportJob(
+    job: ScrapeReportJobData,
+    ctx: TenantContext
+  ): Promise<ScrapeReportJobResult> {
+    const { cqcLocationId, facilityId, providerId } = job;
+
+    try {
+      const apiResult = await fetchCqcLocation(cqcLocationId, {
+        apiKey: process.env.CQC_API_KEY,
+      });
+      const apiData = apiResult.success ? apiResult.data : null;
+      const apiReportDate = apiData?.currentRatings?.overall?.reportDate;
+
+      // Scrape latest report from CQC website
+      const scrapeResult = await scrapeLatestReport(cqcLocationId);
+
+      if (!scrapeResult.success) {
+        return {
+          success: false,
+          hasReport: false,
+          apiReportDate,
+          error: scrapeResult.error.message,
+        };
+      }
+
       const { report } = scrapeResult;
-      const facility = store.getFacilityById(ctx, job.facilityId);
+      const websiteReportDate = report.reportDate || undefined;
+      const facility = await store.getFacilityById(ctx, facilityId);
 
       if (!facility) {
-        job.status = 'FAILED';
-        job.error = 'Facility not found';
-        job.completedAt = new Date().toISOString();
-        return;
+        return {
+          success: false,
+          hasReport: false,
+          apiReportDate,
+          error: 'Facility not found',
+        };
       }
 
       // Handle never-inspected facilities
       if (!report.hasReport) {
         // Update facility status
-        store.upsertFacility(ctx, {
+        await store.upsertFacility(ctx, {
           ...facility,
           inspectionStatus: 'NEVER_INSPECTED',
           lastReportScrapedAt: new Date().toISOString(),
         });
 
-        job.status = 'COMPLETED';
-        job.completedAt = new Date().toISOString();
-        return;
+        return {
+          success: true,
+          hasReport: false,
+          apiReportDate,
+          websiteReportDate,
+          reportDate: report.reportDate,
+          reportUrl: report.reportUrl,
+          pdfUrl: report.pdfUrl,
+        };
+      }
+
+      const shouldDownloadReport =
+        report.hasReport &&
+        (isWebsiteReportNewer(websiteReportDate, apiReportDate) ||
+          (!apiReportDate && Boolean(websiteReportDate)));
+
+      const summary = buildCqcReportSummary(report, apiData);
+
+      if (!shouldDownloadReport) {
+        const skipReason = !websiteReportDate
+          ? 'WEBSITE_DATE_UNAVAILABLE'
+          : apiReportDate
+            ? 'API_REPORT_UP_TO_DATE'
+            : 'API_REPORT_DATE_MISSING';
+        await store.upsertFacility(ctx, {
+          ...facility,
+          latestRating: summary.rating || facility.latestRating,
+          latestRatingDate: summary.reportDate || facility.latestRatingDate,
+          inspectionStatus: report.hasReport ? 'INSPECTED' : 'NEVER_INSPECTED',
+          lastReportScrapedAt: new Date().toISOString(),
+          lastScrapedReportDate: report.reportDate,
+          lastScrapedReportUrl: report.reportUrl,
+        });
+
+        return {
+          success: true,
+          hasReport: true,
+          skipped: true,
+          reason: skipReason,
+          apiReportDate,
+          websiteReportDate,
+          rating: summary.rating,
+          reportDate: summary.reportDate,
+          reportUrl: report.reportUrl,
+          pdfUrl: report.pdfUrl,
+          summary,
+        };
       }
 
       // Download PDF if available
@@ -1692,50 +2316,100 @@ export function createApp(): express.Express {
       if (report.pdfUrl) {
         const pdfResult = await downloadPdfReport(report.pdfUrl);
         if (pdfResult.success) {
-          const blob = store.createEvidenceBlob(ctx, {
-            contentBase64: pdfResult.contentBase64,
-            mimeType: 'application/pdf',
+          const pdfBuffer = Buffer.from(pdfResult.contentBase64, 'base64');
+          const blobMetadata = await blobStorage.upload(pdfBuffer, 'application/pdf');
+          await store.createEvidenceBlob(ctx, {
+            contentHash: blobMetadata.contentHash,
+            contentType: blobMetadata.contentType,
+            sizeBytes: blobMetadata.sizeBytes,
+            uploadedAt: blobMetadata.uploadedAt,
+            storagePath: blobMetadata.storagePath,
           });
 
-          const evidenceRecord = store.createEvidenceRecord(ctx, {
-            facilityId: job.facilityId,
-            providerId: job.providerId,
-            blobHash: blob.blobHash,
+          const evidenceRecord = await store.createEvidenceRecord(ctx, {
+            facilityId,
+            providerId,
+            blobHash: blobMetadata.contentHash,
             evidenceType: EvidenceType.CQC_REPORT,
             fileName: `CQC-Report-${report.reportDate || 'latest'}.pdf`,
-            description: `CQC inspection report (${report.rating})`,
+            description: `CQC inspection report (${summary.rating || report.rating})`,
+            metadata: {
+              cqcReportSummary: summary,
+              apiReportDate,
+              websiteReportDate,
+            },
           });
 
           evidenceRecordId = evidenceRecord.id;
         }
+      } else if (report.htmlContent) {
+        // Fallback: Save HTML report if PDF is not available
+        const htmlBuffer = Buffer.from(report.htmlContent, 'utf-8');
+        const blobMetadata = await blobStorage.upload(htmlBuffer, 'text/html');
+        await store.createEvidenceBlob(ctx, {
+          contentHash: blobMetadata.contentHash,
+          contentType: blobMetadata.contentType,
+          sizeBytes: blobMetadata.sizeBytes,
+          uploadedAt: blobMetadata.uploadedAt,
+          storagePath: blobMetadata.storagePath,
+        });
+
+        const evidenceRecord = await store.createEvidenceRecord(ctx, {
+          facilityId,
+          providerId,
+          blobHash: blobMetadata.contentHash,
+          evidenceType: EvidenceType.CQC_REPORT,
+          fileName: `CQC-Report-${report.reportDate || 'latest'}.html`,
+          description: `CQC inspection report (HTML) - ${summary.rating || report.rating}`,
+          metadata: {
+            cqcReportSummary: summary,
+            apiReportDate,
+            websiteReportDate,
+          },
+        });
+
+        evidenceRecordId = evidenceRecord.id;
       }
 
       // Update facility with scraped data
-      store.upsertFacility(ctx, {
+      await store.upsertFacility(ctx, {
         ...facility,
-        latestRating: report.rating || facility.latestRating,
-        latestRatingDate: report.reportDate || facility.latestRatingDate,
+        latestRating: summary.rating || report.rating || facility.latestRating,
+        latestRatingDate: summary.reportDate || report.reportDate || facility.latestRatingDate,
         inspectionStatus: report.hasReport ? 'INSPECTED' : 'NEVER_INSPECTED',
         lastReportScrapedAt: new Date().toISOString(),
         lastScrapedReportDate: report.reportDate,
         lastScrapedReportUrl: report.reportUrl,
       });
 
-      store.appendAuditEvent(ctx, job.providerId, 'REPORT_SCRAPED', {
-        facilityId: job.facilityId,
-        cqcLocationId: job.cqcLocationId,
+      await store.appendAuditEvent(ctx, providerId, 'REPORT_SCRAPED', {
+        facilityId,
+        cqcLocationId,
         rating: report.rating,
         reportDate: report.reportDate,
         evidenceRecordId,
         hasReport: report.hasReport,
+        summary,
       });
 
-      job.status = 'COMPLETED';
-      job.completedAt = new Date().toISOString();
+      return {
+        success: true,
+        hasReport: report.hasReport,
+        rating: summary.rating,
+        reportDate: summary.reportDate,
+        reportUrl: report.reportUrl,
+        pdfUrl: report.pdfUrl,
+        evidenceRecordId,
+        apiReportDate,
+        websiteReportDate,
+        summary,
+      };
     } catch (error) {
-      job.status = 'FAILED';
-      job.error = error instanceof Error ? error.message : 'Unknown error';
-      job.completedAt = new Date().toISOString();
+      return {
+        success: false,
+        hasReport: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
     }
   }
 
@@ -1746,10 +2420,24 @@ export function createApp(): express.Express {
       actorId: 'SYSTEM',
     };
 
-    const provider = store.seedDemoProvider(demoContext);
+    // Handle both sync (InMemoryStore) and async (PrismaStore) seed methods
+    try {
+      const result = store.seedDemoProvider(demoContext);
+      const handleResult = (provider: typeof result extends Promise<infer T> ? T : typeof result) => {
+        if (provider) {
+          console.log(`[SEED] Demo provider created: ${(provider as any).providerId}`);
+        }
+      };
 
-    if (provider) {
-      console.log(`[SEED] Demo provider created: ${provider.providerId}`);
+      if (result && typeof (result as any).then === 'function') {
+        (result as Promise<any>).then(handleResult).catch((error: unknown) => {
+          console.warn('[SEED] Demo provider seed skipped:', error instanceof Error ? error.message : error);
+        });
+      } else {
+        handleResult(result as any);
+      }
+    } catch (error) {
+      console.warn('[SEED] Demo provider seed skipped:', error instanceof Error ? error.message : error);
     }
   }
 

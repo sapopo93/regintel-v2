@@ -2,6 +2,7 @@
 
 import { useEffect, useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth, RedirectToSignIn } from '@clerk/nextjs';
 import { apiClient } from '@/lib/api/client';
 import type {
   ProvidersListResponse,
@@ -13,6 +14,7 @@ import styles from './page.module.css';
 
 export default function ProvidersPage() {
   const router = useRouter();
+  const { isLoaded, isSignedIn } = useAuth();
 
   const [data, setData] = useState<ProvidersListResponse | null>(null);
   const [providerName, setProviderName] = useState('');
@@ -20,21 +22,50 @@ export default function ProvidersPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState(false);
 
   const loadProviders = () => {
     setLoading(true);
+    setAuthError(false);
     apiClient.getProviders()
       .then((response) => {
         validateConstitutionalRequirements(response, { strict: true });
         setData(response);
       })
-      .catch((err) => setError(err.message))
+      .catch((err) => {
+        // Check if it's an auth error (401/403)
+        if (err.status === 401 || err.status === 403) {
+          setAuthError(true);
+        } else {
+          setError(err.message);
+        }
+      })
       .finally(() => setLoading(false));
   };
 
+  // Wait for Clerk to load and confirm user is signed in before fetching data
   useEffect(() => {
-    loadProviders();
-  }, []);
+    if (isLoaded && isSignedIn) {
+      loadProviders();
+    } else if (isLoaded && !isSignedIn) {
+      // Not signed in - will be handled by RedirectToSignIn below
+      setLoading(false);
+    }
+  }, [isLoaded, isSignedIn]);
+
+  // Show loading while Clerk initializes
+  if (!isLoaded) {
+    return (
+      <div className={styles.layout}>
+        <div className={styles.loading}>Initializing...</div>
+      </div>
+    );
+  }
+
+  // If not signed in, redirect to sign-in (using Clerk component, not window.location)
+  if (!isSignedIn || authError) {
+    return <RedirectToSignIn />;
+  }
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();

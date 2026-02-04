@@ -23,7 +23,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { MetadataBar } from '@/components/constitutional/MetadataBar';
 import { apiClient } from '@/lib/api/client';
-import type { FacilityDetailResponse, EvidenceListResponse } from '@/lib/api/types';
+import type { FacilityDetailResponse, EvidenceListResponse, ScanStatus } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
 import styles from './page.module.css';
 
@@ -47,6 +47,11 @@ export default function FacilityDetailPage() {
   const [description, setDescription] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [lastUploadScanStatus, setLastUploadScanStatus] = useState<ScanStatus | null>(null);
+
+  // CQC report sync state
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -97,6 +102,9 @@ export default function FacilityDetailPage() {
         mimeType,
       });
 
+      // Show scan status from blob upload
+      setLastUploadScanStatus(blobResponse.scanStatus);
+
       await apiClient.createFacilityEvidence({
         facilityId,
         blobHash: blobResponse.blobHash,
@@ -118,6 +126,47 @@ export default function FacilityDetailPage() {
       setUploadError(err instanceof Error ? err.message : 'Failed to upload evidence');
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleSyncReport = async () => {
+    setSyncing(true);
+    setSyncMessage(null);
+
+    try {
+      const response = await apiClient.syncLatestReport(facilityId);
+      setSyncMessage(`${response.message} Job ID: ${response.jobId}`);
+    } catch (err: unknown) {
+      setSyncMessage(err instanceof Error ? err.message : 'Failed to sync report');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleDownloadEvidence = async (blobHash: string, fileName: string) => {
+    try {
+      // Use environment variable - logged warning in API client if misconfigured
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
+      const response = await fetch(`${baseUrl}/v1/evidence/blobs/${blobHash}`, {
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to download file');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error('Download failed:', err);
+      alert('Failed to download file');
     }
   };
 
@@ -230,6 +279,21 @@ export default function FacilityDetailPage() {
               <span className={styles.detailValue}>{facility.asOf}</span>
             </div>
           </div>
+
+          {/* Sync CQC Report Section */}
+          <div className={styles.syncSection}>
+            <button
+              className={styles.syncButton}
+              onClick={handleSyncReport}
+              disabled={syncing}
+              data-testid="sync-report-button"
+            >
+              {syncing ? 'Syncing...' : 'Sync Latest CQC Report'}
+            </button>
+            {syncMessage && (
+              <span className={styles.syncMessage}>{syncMessage}</span>
+            )}
+          </div>
         </section>
 
         <section className={styles.section}>
@@ -243,6 +307,18 @@ export default function FacilityDetailPage() {
               {showUploadForm ? 'Cancel Upload' : 'Upload Evidence'}
             </button>
           </div>
+
+          {lastUploadScanStatus && (
+            <div className={styles.scanStatusBanner} data-testid="scan-status-banner">
+              <span className={styles.scanStatusLabel}>Last Upload Scan Status:</span>
+              <span className={`${styles.scanStatusValue} ${styles[`scan${lastUploadScanStatus}`]}`}>
+                {lastUploadScanStatus}
+              </span>
+              {lastUploadScanStatus === 'PENDING' && (
+                <span className={styles.scanStatusHint}>Malware scan in progress...</span>
+              )}
+            </div>
+          )}
 
           {showUploadForm && (
             <form onSubmit={handleUploadSubmit} className={styles.uploadForm}>
@@ -322,7 +398,16 @@ export default function FacilityDetailPage() {
             ) : (
               evidenceData.evidence.map((record) => (
                 <div key={record.evidenceRecordId} className={styles.evidenceCard}>
-                  <h4 className={styles.evidenceTitle}>{record.fileName}</h4>
+                  <div className={styles.evidenceCardHeader}>
+                    <h4 className={styles.evidenceTitle}>{record.fileName}</h4>
+                    <button
+                      className={styles.downloadButton}
+                      onClick={() => handleDownloadEvidence(record.blobHash, record.fileName)}
+                      data-testid={`download-${record.evidenceRecordId}`}
+                    >
+                      Download
+                    </button>
+                  </div>
                   <div className={styles.evidenceDetails}>
                     <span className={styles.evidenceDetail}>Type: {record.mimeType}</span>
                     <span className={styles.evidenceDetail}>
