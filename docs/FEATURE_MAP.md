@@ -27,6 +27,16 @@ Source of truth for UI routes and API endpoints. Update this file when navigatio
       "endpoints": []
     },
     {
+      "route": "/terms",
+      "status": "LIVE",
+      "endpoints": []
+    },
+    {
+      "route": "/privacy",
+      "status": "LIVE",
+      "endpoints": []
+    },
+    {
       "route": "/providers",
       "status": "LIVE",
       "endpoints": [

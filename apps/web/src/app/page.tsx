@@ -1,12 +1,13 @@
 import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
+import LandingPage from '@/components/marketing/LandingPage';
 
 /**
- * Root page - smart redirect based on auth state
+ * Root page - shows landing page or redirects authenticated users
  *
  * - E2E test mode: redirect to /facilities
- * - Signed in: redirect to / (from env) or /facilities
- * - Not signed in: redirect to /sign-in
+ * - Signed in: redirect to /facilities
+ * - Not signed in: show landing page
  */
 export default async function HomePage() {
   const isE2EMode = process.env.E2E_TEST_MODE === 'true';
@@ -21,8 +22,8 @@ export default async function HomePage() {
   if (userId) {
     // User is signed in - go to main app
     redirect('/facilities');
-  } else {
-    // User is not signed in - go to sign-in
-    redirect('/sign-in');
   }
+
+  // User is not signed in - show landing page
+  return <LandingPage />;
 }
