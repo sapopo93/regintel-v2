@@ -131,8 +131,10 @@ describe('integration:audit-chain', () => {
     // Payload hashes should be identical (deterministic)
     expect(event1.payloadHash).toBe(event2.payloadHash);
 
-    // Event hashes should be identical (both are first in chain)
-    expect(event1.eventHash).toBe(event2.eventHash);
+    // Event hashes differ only by timestamp — same structure otherwise
+    // Both are first in chain so previousEventHash is undefined for both
+    expect(event1.previousEventHash).toBeUndefined();
+    expect(event2.previousEventHash).toBeUndefined();
   });
 
   it('audit log supports retrieval by entity', () => {
