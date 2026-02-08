@@ -2,7 +2,8 @@
 
 import { useEffect, useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth, RedirectToSignIn } from '@clerk/nextjs';
+import { RedirectToSignIn } from '@clerk/nextjs';
+import { useAuth } from '@/lib/auth';
 import { apiClient } from '@/lib/api/client';
 import type {
   ProvidersListResponse,

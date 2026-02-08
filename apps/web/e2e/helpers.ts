@@ -1,18 +1,18 @@
 import type { APIRequestContext, Page } from '@playwright/test';
 
-const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001';
-const FOUNDER_TOKEN = process.env.FOUNDER_TOKEN || 'test-founder-token';
+const API_BASE_URL = process.env.API_BASE_URL || `http://localhost:${process.env.API_PORT || '4001'}`;
+const CLERK_TEST_TOKEN = process.env.CLERK_TEST_TOKEN || 'test-clerk-token';
 
 export async function loginAsFounder(page: Page): Promise<void> {
-  await page.addInitScript(({ token }) => {
-    window.localStorage.setItem('regintel.auth.token', token);
-    window.localStorage.setItem('regintel.auth.role', 'FOUNDER');
-  }, { token: FOUNDER_TOKEN });
+  await page.addInitScript(() => {
+    // Clerk test token is injected via NEXT_PUBLIC_CLERK_TEST_TOKEN in the web server env.
+    // No localStorage-based auth for Clerk mode.
+  });
 }
 
 export async function createProvider(request: APIRequestContext, name: string) {
   const response = await request.post(`${API_BASE_URL}/v1/providers`, {
-    headers: { Authorization: `Bearer ${FOUNDER_TOKEN}` },
+    headers: { Authorization: `Bearer ${CLERK_TEST_TOKEN}` },
     data: { providerName: name },
   });
   const body = await response.json();
@@ -36,7 +36,7 @@ export async function createFacility(
   };
 
   const response = await request.post(`${API_BASE_URL}/v1/providers/${providerId}/facilities`, {
-    headers: { Authorization: `Bearer ${FOUNDER_TOKEN}` },
+    headers: { Authorization: `Bearer ${CLERK_TEST_TOKEN}` },
     data: payload,
   });
   const body = await response.json();
@@ -50,13 +50,13 @@ export async function uploadCqcReport(
 ) {
   const contentBase64 = Buffer.from('%PDF-1.4\n%mock\n').toString('base64');
   const blobResponse = await request.post(`${API_BASE_URL}/v1/evidence/blobs`, {
-    headers: { Authorization: `Bearer ${FOUNDER_TOKEN}` },
+    headers: { Authorization: `Bearer ${CLERK_TEST_TOKEN}` },
     data: { contentBase64, mimeType: 'application/pdf' },
   });
   const blobBody = await blobResponse.json();
 
   await request.post(`${API_BASE_URL}/v1/facilities/${facilityId}/evidence`, {
-    headers: { Authorization: `Bearer ${FOUNDER_TOKEN}` },
+    headers: { Authorization: `Bearer ${CLERK_TEST_TOKEN}` },
     data: {
       blobHash: blobBody.blobHash,
       evidenceType: 'CQC_REPORT',
@@ -72,7 +72,7 @@ export async function createMockSession(
 ) {
   const topicsResponse = await request.get(
     `${API_BASE_URL}/v1/providers/${providerId}/topics?facility=${facilityId}`,
-    { headers: { Authorization: `Bearer ${FOUNDER_TOKEN}` } }
+    { headers: { Authorization: `Bearer ${CLERK_TEST_TOKEN}` } }
   );
   const topicsBody = await topicsResponse.json();
   const topicId = topicsBody.topics?.[0]?.id || 'safe-care-treatment';
@@ -80,7 +80,7 @@ export async function createMockSession(
   const sessionResponse = await request.post(
     `${API_BASE_URL}/v1/providers/${providerId}/mock-sessions`,
     {
-      headers: { Authorization: `Bearer ${FOUNDER_TOKEN}` },
+      headers: { Authorization: `Bearer ${CLERK_TEST_TOKEN}` },
       data: { topicId, facilityId },
     }
   );
@@ -97,7 +97,7 @@ export async function answerMockSession(
   const response = await request.post(
     `${API_BASE_URL}/v1/providers/${providerId}/mock-sessions/${sessionId}/answer`,
     {
-      headers: { Authorization: `Bearer ${FOUNDER_TOKEN}` },
+      headers: { Authorization: `Bearer ${CLERK_TEST_TOKEN}` },
       data: { answer },
     }
   );

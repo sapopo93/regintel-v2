@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { loginAsFounder } from './helpers';
 import { readFile } from 'node:fs/promises';
 
-const BASE_URL = 'http://localhost:3000';
+const BASE_URL = `http://localhost:${process.env.PORT || '4000'}`;
 
 test('founder full journey from onboarding to export', async ({ page }) => {
   await loginAsFounder(page);

@@ -5,3 +5,7 @@ dist/
 .DS_Store
 coverage/
 *.tsbuildinfo
+output/
+tmp/
+*.png
+!apps/web/public/**/*.png

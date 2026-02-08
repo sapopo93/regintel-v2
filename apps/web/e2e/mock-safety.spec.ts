@@ -16,7 +16,7 @@ import {
  * - Exports include watermark
  */
 
-const BASE_URL = 'http://localhost:3000';
+const BASE_URL = `http://localhost:${process.env.PORT || '4000'}`;
 
 test.describe('Mock Safety', () => {
   let providerId = '';

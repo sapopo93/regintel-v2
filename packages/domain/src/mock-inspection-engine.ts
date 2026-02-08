@@ -763,7 +763,7 @@ export function selectNextQuestion(
       questionId,
       topicId,
       templateId,
-      questionText: templateId, // Placeholder - would resolve from template registry
+      questionText: templateId, // Template ID — resolved to display text by API layer
       isFollowUp: false,
       followupIndex: 0,
     };
@@ -801,7 +801,7 @@ export function selectNextQuestion(
     questionId,
     topicId,
     templateId,
-    questionText: templateId, // Placeholder - would resolve from template registry
+    questionText: templateId, // Template ID — resolved to display text by API layer
     isFollowUp: true,
     followupIndex,
   };

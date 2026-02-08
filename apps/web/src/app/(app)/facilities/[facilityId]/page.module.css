@@ -136,9 +136,32 @@
   padding: 16px;
 }
 
+.evidenceCardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
 .evidenceTitle {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 16px;
+}
+
+.downloadButton {
+  border: 1px solid #1b1a17;
+  background: transparent;
+  color: #1b1a17;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.downloadButton:hover {
+  background: #f4f6f8;
 }
 
 .evidenceDetails {
@@ -163,4 +186,78 @@
 
 .empty {
   color: #6b7280;
+}
+
+/* Sync Section */
+.syncSection {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #e6e8ec;
+}
+
+.syncButton {
+  border: 1px solid #1b1a17;
+  background: transparent;
+  color: #1b1a17;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.syncButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.syncMessage {
+  font-size: 12px;
+  color: #5a6470;
+}
+
+/* Scan Status Banner */
+.scanStatusBanner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #f4f6f8;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.scanStatusLabel {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #5a6470;
+}
+
+.scanStatusValue {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.scanPENDING {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.scanCLEAN {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.scanINFECTED {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.scanStatusHint {
+  font-size: 12px;
+  color: #92400e;
 }

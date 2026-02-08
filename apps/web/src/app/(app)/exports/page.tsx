@@ -17,7 +17,7 @@ import { DisclosurePanel } from '@/components/disclosure/DisclosurePanel';
 import { MetadataBar } from '@/components/constitutional/MetadataBar';
 import { SimulationFrame } from '@/components/mock/SimulationFrame';
 import { apiClient } from '@/lib/api/client';
-import { getAuthRole, getAuthToken } from '@/lib/auth';
+import { useAuth, useUser, type AuthRole } from '@/lib/auth';
 import type { ExportStatusResponse, ProviderOverviewResponse, ExportFormat } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
 import styles from './page.module.css';
@@ -26,6 +26,8 @@ export default function ExportsPage() {
   const searchParams = useSearchParams();
   const providerId = searchParams.get('provider');
   const facilityId = searchParams.get('facility');
+  const { getToken } = useAuth();
+  const { user } = useUser();
 
   const [overview, setOverview] = useState<ProviderOverviewResponse | null>(null);
   const [statusData, setStatusData] = useState<ExportStatusResponse | null>(null);
@@ -35,6 +37,9 @@ export default function ExportsPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [previewContent, setPreviewContent] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   useEffect(() => {
     if (!providerId || !facilityId) {
@@ -53,7 +58,13 @@ export default function ExportsPage() {
       .catch((err) => setLoadError(err.message));
   }, [providerId, facilityId]);
 
-  const authRole = getAuthRole();
+  const roleValue = user?.publicMetadata?.role;
+  const authRole: AuthRole | null =
+    typeof roleValue === 'string' && roleValue.toUpperCase() === 'FOUNDER'
+      ? 'FOUNDER'
+      : roleValue
+        ? 'PROVIDER'
+        : null;
   const enableAuditExport = searchParams.get('enableAuditExport') === 'true';
   const allowAuditExport =
     authRole === 'FOUNDER' ||
@@ -101,7 +112,7 @@ export default function ExportsPage() {
         format,
         includeWatermark,
       });
-      const token = getAuthToken();
+      const token = getToken ? await getToken() : null;
       if (token) {
         setDownloadUrl(`${response.downloadUrl}?token=${encodeURIComponent(token)}`);
       } else {
@@ -112,6 +123,33 @@ export default function ExportsPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const isMarkdownFormat = format === 'BLUE_OCEAN_BOARD' || format === 'BLUE_OCEAN_AUDIT' || format === 'BLUE_OCEAN';
+
+  const handlePreview = async () => {
+    if (!downloadUrl || !isMarkdownFormat) return;
+
+    setPreviewLoading(true);
+    setPreviewContent(null);
+
+    try {
+      const response = await fetch(downloadUrl);
+      if (!response.ok) {
+        throw new Error('Failed to fetch preview');
+      }
+      const text = await response.text();
+      setPreviewContent(text);
+      setShowPreview(true);
+    } catch (err: any) {
+      setExportError(`Preview failed: ${err.message}`);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const closePreview = () => {
+    setShowPreview(false);
   };
 
   if (!providerId || !facilityId) {
@@ -234,13 +272,45 @@ export default function ExportsPage() {
                   <div className={styles.section}>
                     <h2 className={styles.sectionTitle}>Export Ready</h2>
                     <p className={styles.successMessage}>Your export has been generated.</p>
-                    <a
-                      href={downloadUrl}
-                      download
-                      className={styles.downloadButton}
-                    >
-                      Download {formatLabel(format)}
-                    </a>
+                    <div className={styles.buttonGroup}>
+                      <a
+                        href={downloadUrl}
+                        download
+                        className={styles.downloadButton}
+                      >
+                        Download {formatLabel(format)}
+                      </a>
+                      {isMarkdownFormat && (
+                        <button
+                          onClick={handlePreview}
+                          className={styles.previewButton}
+                          disabled={previewLoading}
+                          data-testid="preview-markdown-button"
+                        >
+                          {previewLoading ? 'Loading...' : 'Preview Markdown'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {showPreview && previewContent && (
+                  <div className={styles.previewOverlay} onClick={closePreview}>
+                    <div className={styles.previewModal} onClick={(e) => e.stopPropagation()}>
+                      <div className={styles.previewHeader}>
+                        <h3 className={styles.previewTitle}>Blue Ocean Report Preview</h3>
+                        <button
+                          onClick={closePreview}
+                          className={styles.closeButton}
+                          data-testid="close-preview-button"
+                        >
+                          ×
+                        </button>
+                      </div>
+                      <div className={styles.previewContent}>
+                        <pre className={styles.markdownPre}>{previewContent}</pre>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

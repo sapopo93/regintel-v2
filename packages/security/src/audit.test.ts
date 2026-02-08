@@ -172,8 +172,6 @@ describe('audit:chain', () => {
       });
 
       // Directly mutate the events array (simulating tampering)
-      const events = auditLog.getEvents() as any;
-      // @ts-ignore - accessing private data for test
       const internalEvents = (auditLog as any).events;
       internalEvents[0].payload = { name: 'Tampered Name' };
 

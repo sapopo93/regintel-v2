@@ -11,14 +11,20 @@
  * - Retry logic
  */
 
+import type { CqcLocationData } from './cqc-client.js';
+
 export interface CqcInspectionReport {
   locationId: string;
-  reportDate: string;
+  reportDate: string; // ISO date when available
   publishedDate: string;
-  rating: string; // Good, Requires Improvement, Inadequate, Outstanding
+  rating: string; // Good, Requires improvement, Inadequate, Outstanding
   reportUrl: string;
   pdfUrl?: string;
   hasReport: boolean; // False for never-inspected facilities
+  facilityName?: string;
+  addressLine1?: string;
+  townCity?: string;
+  postcode?: string;
   findings?: {
     safe?: string;
     effective?: string;
@@ -27,6 +33,19 @@ export interface CqcInspectionReport {
     wellLed?: string;
     overall?: string;
   };
+  htmlContent?: string;
+}
+
+export interface CqcReportSummary {
+  facilityName?: string;
+  addressLine1?: string;
+  townCity?: string;
+  postcode?: string;
+  rating?: string;
+  reportDate?: string;
+  reportUrl?: string;
+  pdfUrl?: string;
+  source: 'CQC_WEBSITE' | 'CQC_API';
 }
 
 export interface ScrapeError {
@@ -73,7 +92,9 @@ export async function scrapeLatestReport(
       method: 'GET',
       headers: {
         Accept: 'text/html',
-        'User-Agent': 'RegIntel/2.0 (Compliance Platform)',
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-GB,en;q=0.9',
       },
       signal: controller.signal,
     });
@@ -108,7 +129,10 @@ export async function scrapeLatestReport(
 
     return {
       success: true,
-      report,
+      report: {
+        ...report,
+        htmlContent: html,
+      },
     };
   } catch (error) {
     // Handle timeout
@@ -131,6 +155,33 @@ export async function scrapeLatestReport(
       },
     };
   }
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
+function stripTags(value: string): string {
+  return value.replace(/<[^>]*>/g, '').trim();
+}
+
+function normalizeWhitespace(value?: string): string | undefined {
+  if (!value) return undefined;
+  const cleaned = value.replace(/\s+/g, ' ').trim();
+  return cleaned.length > 0 ? cleaned : undefined;
+}
+
+function parseReportDate(value?: string): string | undefined {
+  if (!value) return undefined;
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) return undefined;
+  return new Date(parsed).toISOString().slice(0, 10);
 }
 
 /**
@@ -168,13 +219,43 @@ function parseReportFromHtml(html: string, locationId: string): CqcInspectionRep
     };
   }
 
+  // Extract facility name
+  const ogTitleMatch = html.match(/property="og:title" content="([^"]+)"/i);
+  const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+  const rawName =
+    (h1Match ? stripTags(h1Match[1]) : undefined) ||
+    (ogTitleMatch ? ogTitleMatch[1] : undefined);
+  const facilityName = normalizeWhitespace(rawName ? decodeHtmlEntities(rawName) : undefined);
+
+  // Extract address (microdata or common address blocks)
+  const streetMatch = html.match(/itemprop="streetAddress"[^>]*>([^<]+)</i);
+  const localityMatch = html.match(/itemprop="addressLocality"[^>]*>([^<]+)</i);
+  const postalMatch = html.match(/itemprop="postalCode"[^>]*>([^<]+)</i);
+  const addressBlockMatch = html.match(/class="address"[^>]*>([\s\S]*?)<\/div>/i);
+  const addressBlock = addressBlockMatch ? stripTags(addressBlockMatch[1]) : undefined;
+  const addressParts = addressBlock ? addressBlock.split(',').map((part) => part.trim()) : [];
+
+  const addressLine1 = normalizeWhitespace(
+    streetMatch ? decodeHtmlEntities(streetMatch[1]) : addressParts[0]
+  );
+  const townCity = normalizeWhitespace(
+    localityMatch ? decodeHtmlEntities(localityMatch[1]) : addressParts[1]
+  );
+  const postcode = normalizeWhitespace(
+    postalMatch ? decodeHtmlEntities(postalMatch[1]) : addressParts[addressParts.length - 1]
+  );
+
   // Extract rating (simplified regex - production would use DOM parser)
-  const ratingMatch = html.match(/rating[^>]*>(Good|Outstanding|Requires improvement|Inadequate|Insufficient evidence)/i);
+  const ratingMatch = html.match(
+    /rating[^>]*>(Good|Outstanding|Requires improvement|Inadequate|Insufficient evidence)/i
+  );
   const rating = ratingMatch ? ratingMatch[1] : 'Unknown';
 
   // Extract report date (simplified)
+  const timeMatch = html.match(/<time[^>]*>([^<]+)<\/time>/i);
   const dateMatch = html.match(/(\d{1,2}\s+\w+\s+\d{4})/);
-  const reportDate = dateMatch ? dateMatch[1] : '';
+  const rawDate = timeMatch ? timeMatch[1] : dateMatch ? dateMatch[1] : '';
+  const reportDate = parseReportDate(rawDate) ?? '';
 
   // Extract PDF URL (simplified)
   const pdfMatch = html.match(/href="([^"]*\.pdf)"/);
@@ -188,10 +269,58 @@ function parseReportFromHtml(html: string, locationId: string): CqcInspectionRep
     reportUrl: `https://www.cqc.org.uk/location/${locationId}`,
     pdfUrl,
     hasReport: true,
+    facilityName,
+    addressLine1,
+    townCity,
+    postcode,
     findings: {
       // These would be extracted from the HTML
       overall: `This location is rated ${rating}`,
     },
+  };
+}
+
+function toComparableDate(value?: string): number | null {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+export function isWebsiteReportNewer(
+  websiteReportDate?: string,
+  apiReportDate?: string
+): boolean {
+  const website = toComparableDate(websiteReportDate);
+  const api = toComparableDate(apiReportDate);
+  if (!website) return false;
+  if (!api) return true;
+  return website > api;
+}
+
+export function buildCqcReportSummary(
+  report: CqcInspectionReport,
+  apiData?: CqcLocationData | null
+): CqcReportSummary {
+  const apiRating = apiData?.currentRatings?.overall?.rating;
+  const apiReportDate = apiData?.currentRatings?.overall?.reportDate;
+
+  const facilityName = report.facilityName ?? apiData?.name;
+  const addressLine1 = report.addressLine1 ?? apiData?.postalAddressLine1;
+  const townCity = report.townCity ?? apiData?.postalAddressTownCity;
+  const postcode = report.postcode ?? apiData?.postalCode;
+  const rating = report.rating || apiRating;
+  const reportDate = report.reportDate || apiReportDate;
+
+  return {
+    facilityName,
+    addressLine1,
+    townCity,
+    postcode,
+    rating,
+    reportDate,
+    reportUrl: report.reportUrl,
+    pdfUrl: report.pdfUrl,
+    source: 'CQC_WEBSITE',
   };
 }
 

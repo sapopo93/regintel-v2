@@ -501,7 +501,7 @@ export function createApp(): express.Express {
     );
   } else {
     // Development/test fallback - log warning to make this visible
-    allowedOrigins = ['http://localhost:3000', 'http://localhost:3001'];
+    allowedOrigins = ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:4000', 'http://localhost:4001'];
     if (!isTestMode) {
       console.warn(
         '[CORS WARNING] ALLOWED_ORIGINS not set - using localhost defaults. ' +
@@ -1072,7 +1072,7 @@ export function createApp(): express.Express {
               blobHash: data.blobHash,
               status,
               threat: result.threat,
-              scanEngine: result.scanEngine || 'stub-scanner-v1',
+              scanEngine: result.scanEngine || 'worker-delegated',
               scannedAt: result.scannedAt,
               quarantined: status === 'INFECTED',
             };
@@ -2440,6 +2440,23 @@ export function createApp(): express.Express {
       console.warn('[SEED] Demo provider seed skipped:', error instanceof Error ? error.message : error);
     }
   }
+
+  // Global error handler — must be 4-argument to be recognized by Express
+  app.use(
+    (
+      err: Error,
+      _req: express.Request,
+      res: express.Response,
+      _next: express.NextFunction
+    ) => {
+      const isDev = process.env.NODE_ENV !== 'production';
+      console.error('[UNHANDLED_ERROR]', err.message, isDev ? err.stack : '');
+      res.status(500).json({
+        ...buildConstitutionalMetadata(),
+        error: isDev ? err.message : 'Internal server error',
+      });
+    }
+  );
 
   return app;
 }

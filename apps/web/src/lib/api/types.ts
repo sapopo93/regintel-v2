@@ -124,6 +124,7 @@ export interface EvidenceRecord {
   evidenceType: string;
   fileName: string;
   description?: string;
+  metadata?: Record<string, unknown>;
   uploadedAt: string;
 }
 
@@ -388,4 +389,125 @@ export interface CreateFacilityEvidenceRequest {
 
 export interface CreateFacilityEvidenceResponse extends ConstitutionalMetadata {
   record: EvidenceRecord;
+  processingJobId?: string;
+  processingStatus?: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+}
+
+/**
+ * Background job status
+ */
+export type JobStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+
+export interface BackgroundJob {
+  id: string;
+  type: string;
+  status: JobStatus;
+  createdAt: string;
+  completedAt?: string;
+  error?: string;
+  result?: unknown;
+}
+
+export interface BackgroundJobResponse extends ConstitutionalMetadata {
+  job: BackgroundJob;
+}
+
+/**
+ * Malware scan status
+ */
+export type ScanStatus = 'PENDING' | 'CLEAN' | 'INFECTED';
+
+export interface MalwareScanResponse extends ConstitutionalMetadata {
+  contentHash: string;
+  status: ScanStatus;
+  scannedAt: string;
+  threat?: string;
+  scanEngine?: string;
+  scanJobId?: string;
+  error?: string;
+}
+
+/**
+ * Updated blob response with scan job
+ */
+export interface CreateEvidenceBlobResponseWithScan extends ConstitutionalMetadata {
+  blobHash: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedAt: string;
+  scanStatus: ScanStatus;
+  scanJobId?: string;
+}
+
+/**
+ * AI Insight types
+ */
+export type InsightType = 'strength' | 'gap' | 'suggestion' | 'follow_up';
+export type RiskSeverity = 'LOW' | 'MEDIUM' | 'HIGH';
+
+export interface AIInsight {
+  type: InsightType;
+  content: string;
+  confidence: number;
+  regulationRef?: string;
+}
+
+export interface RiskIndicator {
+  indicator: string;
+  severity: RiskSeverity;
+}
+
+export interface AIInsightsResponse extends ConstitutionalMetadata {
+  sessionId: string;
+  insights: AIInsight[];
+  suggestedFollowUp?: string;
+  riskIndicators: RiskIndicator[];
+  isFallback: boolean;
+  fallbackReason?: string;
+  status?: JobStatus;
+  jobId?: string;
+  error?: string;
+}
+
+/**
+ * Sync report response
+ */
+export interface SyncReportResponse extends ConstitutionalMetadata {
+  message: string;
+  jobId: string;
+  status: string;
+  estimatedCompletion: string;
+}
+
+/**
+ * Bulk onboard request/response
+ */
+export interface BulkOnboardRequest {
+  providerId: string;
+  cqcLocationIds: string[];
+  autoSyncReports?: boolean;
+}
+
+export interface BulkOnboardResult {
+  cqcLocationId: string;
+  success: boolean;
+  facility?: {
+    id: string;
+    facilityName: string;
+    inspectionStatus?: string;
+    latestRating?: string;
+    dataSource: string;
+  };
+  isNew?: boolean;
+  error?: string;
+}
+
+export interface BulkOnboardResponse extends ConstitutionalMetadata {
+  summary: {
+    total: number;
+    succeeded: number;
+    failed: number;
+  };
+  results: BulkOnboardResult[];
+  backgroundJobsQueued: number;
 }

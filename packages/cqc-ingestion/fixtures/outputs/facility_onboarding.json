@@ -1,0 +1,31 @@
+{
+  "facility": {
+    "location_id": "1-123456789",
+    "provider_id": "1-987654321",
+    "service_name": "Global Healthcare Solutions",
+    "address": "Laurels, Station Road, Marks Tey, Colchester, Essex, CO6 1EE",
+    "phone": "(01206) 211825",
+    "provider_name": "Essex Care Consortium Limited",
+    "regulated_activities": [
+      "Accommodation for persons who require nursing or personal care",
+      "Treatment of disease, disorder or injury"
+    ],
+    "population_groups": [
+      "Older people",
+      "People with dementia"
+    ],
+    "registration_status": "Registered",
+    "ratings": {
+      "overall": "Good",
+      "safe": "Good",
+      "effective": "Good",
+      "caring": "Good",
+      "responsive": "Requires improvement",
+      "well_led": "Good"
+    }
+  },
+  "quality": {
+    "parse_confidence": 1,
+    "warnings": []
+  }
+}

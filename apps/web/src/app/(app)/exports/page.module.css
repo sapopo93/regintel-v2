@@ -170,3 +170,106 @@
   font-size: var(--text-lg);
   color: var(--color-slate-600);
 }
+
+.buttonGroup {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.previewButton {
+  display: inline-block;
+  padding: var(--space-3) var(--space-6);
+  background-color: var(--color-white);
+  color: var(--color-charcoal);
+  border: 1px solid var(--color-charcoal);
+  border-radius: var(--radius-sm);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.previewButton:hover:not(:disabled) {
+  background-color: var(--color-slate-100);
+}
+
+.previewButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.previewOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: var(--space-6);
+}
+
+.previewModal {
+  background-color: var(--color-white);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 900px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-xl);
+}
+
+.previewHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--color-slate-200);
+}
+
+.previewTitle {
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--color-charcoal);
+  margin: 0;
+}
+
+.closeButton {
+  background: none;
+  border: none;
+  font-size: 28px;
+  color: var(--color-slate-500);
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.closeButton:hover {
+  color: var(--color-charcoal);
+}
+
+.previewContent {
+  padding: var(--space-4);
+  overflow-y: auto;
+  flex: 1;
+}
+
+.markdownPre {
+  margin: 0;
+  padding: var(--space-4);
+  background-color: var(--color-slate-50);
+  border-radius: var(--radius-sm);
+  font-family: 'SFMono-Regular', ui-monospace, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  color: var(--color-charcoal);
+  max-height: 60vh;
+  overflow-y: auto;
+}

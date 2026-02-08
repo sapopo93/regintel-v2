@@ -11,7 +11,7 @@ import { createFacility, createProvider, loginAsFounder } from './helpers';
  * - Domain
  */
 
-const BASE_URL = 'http://localhost:3000';
+const BASE_URL = `http://localhost:${process.env.PORT || '4000'}`;
 
 test.describe('Constitutional Requirements', () => {
   let providerId = '';

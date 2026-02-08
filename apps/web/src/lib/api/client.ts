@@ -527,7 +527,17 @@ function getValidatedApiBaseUrl(): string {
 
 /**
  * Default API client instance
+ *
+ * In E2E test mode, inject a getToken that returns the test token so
+ * all page-initiated API calls are authenticated against the API server.
+ * In production, pages must call apiClient.updateConfig({ getToken }) after
+ * obtaining the Clerk token provider.
  */
+const _e2eMode = process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true';
+
 export const apiClient = createApiClient({
   baseUrl: getValidatedApiBaseUrl(),
+  ...(_e2eMode
+    ? { getToken: async () => process.env.NEXT_PUBLIC_CLERK_TEST_TOKEN || 'test-clerk-token' }
+    : {}),
 });

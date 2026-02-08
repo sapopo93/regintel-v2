@@ -1,0 +1,24 @@
+{
+  "name": "@regintel/cqc-ingestion",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "bin": {
+    "cqc-ingest": "./src/cli.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0-rc.12",
+    "pdfjs-dist": "^4.4.168"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  }
+}

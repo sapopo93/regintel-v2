@@ -1,0 +1,29 @@
+{
+  "locationId": "1-123456789",
+  "providerId": "1-987654321",
+  "name": "Global Healthcare Solutions",
+  "serviceName": "Global Healthcare Solutions",
+  "postalAddressLine1": "Laurels, Station Road",
+  "postalAddressTownCity": "Marks Tey, Colchester",
+  "postalAddressCounty": "Essex",
+  "postalCode": "CO6 1EE",
+  "phoneNumber": "(01206) 211825",
+  "providerName": "Essex Care Consortium Limited",
+  "regulatedActivities": [
+    { "name": "Accommodation for persons who require nursing or personal care" },
+    { "name": "Treatment of disease, disorder or injury" }
+  ],
+  "serviceUsers": [
+    { "name": "Older people" },
+    { "name": "People with dementia" }
+  ],
+  "registrationStatus": "Registered",
+  "currentRatings": {
+    "overall": { "rating": "Good" },
+    "safe": { "rating": "Good" },
+    "effective": { "rating": "Good" },
+    "caring": { "rating": "Good" },
+    "responsive": { "rating": "Requires improvement" },
+    "wellLed": { "rating": "Good" }
+  }
+}

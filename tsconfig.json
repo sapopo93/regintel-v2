@@ -6,7 +6,12 @@
     "baseUrl": ".",
     "paths": {
       "@regintel/domain/*": ["packages/domain/src/*"],
-      "@regintel/security/*": ["packages/security/src/*"]
+      "@regintel/security/*": ["packages/security/src/*"],
+      "@regintel/queue/*": ["packages/queue/src/*"],
+      "@regintel/ai-validation/*": ["packages/ai-validation/src/*"],
+      "@regintel/ai-workers/*": ["packages/ai-workers/src/*"],
+      "@regintel/storage": ["packages/storage/src"],
+      "@regintel/storage/*": ["packages/storage/src/*"]
     },
     "esModuleInterop": true,
     "strict": true,

@@ -1,0 +1,156 @@
+{
+  "facility": {
+    "location_id": "1-123456789",
+    "provider_id": "1-987654321",
+    "service_name": "Global Healthcare Solutions",
+    "address": "Laurels, Station Road, Marks Tey, Colchester, Essex, CO6 1EE",
+    "phone": "(01206) 211825",
+    "provider_name": "Essex Care Consortium Limited",
+    "regulated_activities": [
+      "Accommodation for persons who require nursing or personal care",
+      "Treatment of disease, disorder or injury"
+    ],
+    "population_groups": [
+      "Older people",
+      "People with dementia"
+    ],
+    "registration_status": "Registered",
+    "ratings": {
+      "overall": "Good",
+      "safe": "Good",
+      "effective": "Good",
+      "caring": "Good",
+      "responsive": "Requires improvement",
+      "well_led": "Good"
+    }
+  },
+  "assessment_event": {
+    "assessment_id": "assessment-2024-12",
+    "assessment_date_start": "2024-11-01",
+    "assessment_date_end": "2024-11-03",
+    "publication_date": "2025-01-15",
+    "ratings_snapshot": {
+      "overall": "Good",
+      "safe": "Good",
+      "effective": "Good",
+      "caring": "Good",
+      "responsive": "Requires improvement",
+      "well_led": "Good"
+    }
+  },
+  "artifacts": {
+    "html_bundle": {
+      "location_id": "1-123456789",
+      "assessment_id": "assessment-2024-12",
+      "source_url": "https://www.cqc.org.uk/location/1-123456789/reports/assessment-2024-12/overall",
+      "retrieved_at": "2026-02-03T10:00:00.000Z",
+      "sections": [
+        {
+          "domain": "overall",
+          "headings": [
+            "Overall assessment",
+            "Summary",
+            "Key findings"
+          ],
+          "paragraphs": [
+            "This section covers overall performance for Global Healthcare Solutions.",
+            "We observed consistent adherence to CQC standards for overall.",
+            "Overall staff training records were up to date.",
+            "Overall audit evidence was available on request."
+          ]
+        },
+        {
+          "domain": "safe",
+          "headings": [
+            "Safe assessment",
+            "Summary",
+            "Key findings"
+          ],
+          "paragraphs": [
+            "This section covers safe performance for Global Healthcare Solutions.",
+            "We observed consistent adherence to CQC standards for safe.",
+            "Safe staff training records were up to date.",
+            "Safe audit evidence was available on request."
+          ]
+        },
+        {
+          "domain": "effective",
+          "headings": [
+            "Effective assessment",
+            "Summary",
+            "Key findings"
+          ],
+          "paragraphs": [
+            "This section covers effective performance for Global Healthcare Solutions.",
+            "We observed consistent adherence to CQC standards for effective.",
+            "Effective staff training records were up to date.",
+            "Effective audit evidence was available on request."
+          ]
+        },
+        {
+          "domain": "caring",
+          "headings": [
+            "Caring assessment",
+            "Summary",
+            "Key findings"
+          ],
+          "paragraphs": [
+            "This section covers caring performance for Global Healthcare Solutions.",
+            "We observed consistent adherence to CQC standards for caring.",
+            "Caring staff training records were up to date.",
+            "Caring audit evidence was available on request."
+          ]
+        },
+        {
+          "domain": "responsive",
+          "headings": [
+            "Responsive assessment",
+            "Summary",
+            "Key findings"
+          ],
+          "paragraphs": [
+            "This section covers responsive performance for Global Healthcare Solutions.",
+            "We observed consistent adherence to CQC standards for responsive.",
+            "Responsive staff training records were up to date.",
+            "Responsive audit evidence was available on request."
+          ]
+        },
+        {
+          "domain": "well-led",
+          "headings": [
+            "Well-led assessment",
+            "Summary",
+            "Key findings"
+          ],
+          "paragraphs": [
+            "This section covers well-led performance for Global Healthcare Solutions.",
+            "We observed consistent adherence to CQC standards for well-led.",
+            "Well-led staff training records were up to date.",
+            "Well-led audit evidence was available on request."
+          ]
+        }
+      ],
+      "html_snapshots": {
+        "https://www.cqc.org.uk/location/1-123456789/reports/assessment-2024-12/overall": "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta name=\"cqc:location-id\" content=\"1-123456789\" />\n  <meta name=\"cqc:assessment-id\" content=\"assessment-2024-12\" />\n  <title>Overall inspection report</title>\n</head>\n<body>\n  <nav class=\"contents\">\n    <h2>Contents</h2>\n    <ul>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/overall\">Overall</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/safe\">Safe</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/effective\">Effective</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/caring\">Caring</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/responsive\">Responsive</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/well-led\">Well-led</a></li>\n    </ul>\n  </nav>\n\n  <main>\n    <h1>Overall assessment</h1>\n    <h2>Summary</h2>\n    <p>This section covers overall performance for Global Healthcare Solutions.</p>\n    <h2>Key findings</h2>\n    <p>We observed consistent adherence to CQC standards for overall.</p>\n    <ul>\n      <li>Overall staff training records were up to date.</li>\n      <li>Overall audit evidence was available on request.</li>\n    </ul>\n  </main>\n</body>\n</html>\n",
+        "https://www.cqc.org.uk/location/1-123456789/reports/assessment-2024-12/safe": "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta name=\"cqc:location-id\" content=\"1-123456789\" />\n  <meta name=\"cqc:assessment-id\" content=\"assessment-2024-12\" />\n  <title>Safe inspection report</title>\n</head>\n<body>\n  <nav class=\"contents\">\n    <h2>Contents</h2>\n    <ul>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/overall\">Overall</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/safe\">Safe</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/effective\">Effective</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/caring\">Caring</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/responsive\">Responsive</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/well-led\">Well-led</a></li>\n    </ul>\n  </nav>\n\n  <main>\n    <h1>Safe assessment</h1>\n    <h2>Summary</h2>\n    <p>This section covers safe performance for Global Healthcare Solutions.</p>\n    <h2>Key findings</h2>\n    <p>We observed consistent adherence to CQC standards for safe.</p>\n    <ul>\n      <li>Safe staff training records were up to date.</li>\n      <li>Safe audit evidence was available on request.</li>\n    </ul>\n  </main>\n</body>\n</html>\n",
+        "https://www.cqc.org.uk/location/1-123456789/reports/assessment-2024-12/effective": "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta name=\"cqc:location-id\" content=\"1-123456789\" />\n  <meta name=\"cqc:assessment-id\" content=\"assessment-2024-12\" />\n  <title>Effective inspection report</title>\n</head>\n<body>\n  <nav class=\"contents\">\n    <h2>Contents</h2>\n    <ul>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/overall\">Overall</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/safe\">Safe</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/effective\">Effective</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/caring\">Caring</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/responsive\">Responsive</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/well-led\">Well-led</a></li>\n    </ul>\n  </nav>\n\n  <main>\n    <h1>Effective assessment</h1>\n    <h2>Summary</h2>\n    <p>This section covers effective performance for Global Healthcare Solutions.</p>\n    <h2>Key findings</h2>\n    <p>We observed consistent adherence to CQC standards for effective.</p>\n    <ul>\n      <li>Effective staff training records were up to date.</li>\n      <li>Effective audit evidence was available on request.</li>\n    </ul>\n  </main>\n</body>\n</html>\n",
+        "https://www.cqc.org.uk/location/1-123456789/reports/assessment-2024-12/caring": "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta name=\"cqc:location-id\" content=\"1-123456789\" />\n  <meta name=\"cqc:assessment-id\" content=\"assessment-2024-12\" />\n  <title>Caring inspection report</title>\n</head>\n<body>\n  <nav class=\"contents\">\n    <h2>Contents</h2>\n    <ul>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/overall\">Overall</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/safe\">Safe</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/effective\">Effective</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/caring\">Caring</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/responsive\">Responsive</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/well-led\">Well-led</a></li>\n    </ul>\n  </nav>\n\n  <main>\n    <h1>Caring assessment</h1>\n    <h2>Summary</h2>\n    <p>This section covers caring performance for Global Healthcare Solutions.</p>\n    <h2>Key findings</h2>\n    <p>We observed consistent adherence to CQC standards for caring.</p>\n    <ul>\n      <li>Caring staff training records were up to date.</li>\n      <li>Caring audit evidence was available on request.</li>\n    </ul>\n  </main>\n</body>\n</html>\n",
+        "https://www.cqc.org.uk/location/1-123456789/reports/assessment-2024-12/responsive": "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta name=\"cqc:location-id\" content=\"1-123456789\" />\n  <meta name=\"cqc:assessment-id\" content=\"assessment-2024-12\" />\n  <title>Responsive inspection report</title>\n</head>\n<body>\n  <nav class=\"contents\">\n    <h2>Contents</h2>\n    <ul>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/overall\">Overall</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/safe\">Safe</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/effective\">Effective</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/caring\">Caring</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/responsive\">Responsive</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/well-led\">Well-led</a></li>\n    </ul>\n  </nav>\n\n  <main>\n    <h1>Responsive assessment</h1>\n    <h2>Summary</h2>\n    <p>This section covers responsive performance for Global Healthcare Solutions.</p>\n    <h2>Key findings</h2>\n    <p>We observed consistent adherence to CQC standards for responsive.</p>\n    <ul>\n      <li>Responsive staff training records were up to date.</li>\n      <li>Responsive audit evidence was available on request.</li>\n    </ul>\n  </main>\n</body>\n</html>\n",
+        "https://www.cqc.org.uk/location/1-123456789/reports/assessment-2024-12/well-led": "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta name=\"cqc:location-id\" content=\"1-123456789\" />\n  <meta name=\"cqc:assessment-id\" content=\"assessment-2024-12\" />\n  <title>Well-led inspection report</title>\n</head>\n<body>\n  <nav class=\"contents\">\n    <h2>Contents</h2>\n    <ul>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/overall\">Overall</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/safe\">Safe</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/effective\">Effective</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/caring\">Caring</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/responsive\">Responsive</a></li>\n      <li><a href=\"/location/1-123456789/reports/assessment-2024-12/well-led\">Well-led</a></li>\n    </ul>\n  </nav>\n\n  <main>\n    <h1>Well-led assessment</h1>\n    <h2>Summary</h2>\n    <p>This section covers well-led performance for Global Healthcare Solutions.</p>\n    <h2>Key findings</h2>\n    <p>We observed consistent adherence to CQC standards for well-led.</p>\n    <ul>\n      <li>Well-led staff training records were up to date.</li>\n      <li>Well-led audit evidence was available on request.</li>\n    </ul>\n  </main>\n</body>\n</html>\n"
+      }
+    },
+    "pdfs": [
+      {
+        "type": "full",
+        "download_url": "https://www.cqc.org.uk/location/1-123456789/reports/assessment-2024-12/assessment-report.pdf",
+        "sha256": "2f94cf0d873493780ffd60985e4ccdfd58136a9c9a9104df28aed4f3e20a5d77",
+        "num_pages": 1,
+        "text_excerpt": "Hello CQC Inspection"
+      }
+    ]
+  },
+  "quality": {
+    "parse_confidence": 0.92,
+    "warnings": []
+  }
+}

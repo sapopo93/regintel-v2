@@ -16,17 +16,17 @@ export type AuthRole = 'FOUNDER' | 'PROVIDER';
  * This prevents accidental test auth bypass in production deployments.
  */
 function isTestAuthAllowed(): boolean {
+  // NEVER allow test auth in production, regardless of E2E_TEST_MODE
+  if (process.env.NODE_ENV === 'production') {
+    return false;
+  }
+
   const isNodeEnvTest = process.env.NODE_ENV === 'test';
   const isE2EMode = process.env.E2E_TEST_MODE === 'true';
 
-  // Always allow in explicit test environments
+  // Allow in explicit test environments
   if (isNodeEnvTest || isE2EMode) {
     return true;
-  }
-
-  // If NODE_ENV is production, NEVER allow test auth
-  if (process.env.NODE_ENV === 'production') {
-    return false;
   }
 
   // In development, allow test auth only if Clerk is not fully configured

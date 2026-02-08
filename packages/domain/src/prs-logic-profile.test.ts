@@ -5,6 +5,7 @@ import {
   computeEvaluationHash,
   computeAdjustedSeverityScore,
   verifyProfileIntegrity,
+  validatePRSLogicProfile,
   InteractionMode,
 } from './prs-logic-profile.js';
 import { createProviderContextSnapshot } from './provider-context-snapshot.js';
@@ -491,5 +492,47 @@ describe('logic:edge-cases', () => {
 
     expect(result.adjustedImpact).toBe(0);
     expect(result.composite).toBe(0);
+  });
+});
+
+describe('logic:profile-validation', () => {
+  it('flags missing rule coverage and severity mappings', () => {
+    const profile = createPRSLogicProfile({
+      id: 'profile-invalid',
+      tenantId: 'tenant-a',
+      domain: Domain.CQC,
+      version: 1,
+      effectiveDate: '2024-01-01T00:00:00Z',
+      supersedes: null,
+      severityRules: [
+        {
+          prs: ProviderRegulatoryState.NEW_PROVIDER,
+          multiplier: 1.0,
+          description: 'Only one rule',
+        },
+      ],
+      interactionRules: [
+        {
+          prs: ProviderRegulatoryState.NEW_PROVIDER,
+          maxFollowUpsPerTopic: 1,
+          maxTotalQuestions: 2,
+          allowContradictionHunt: false,
+        },
+      ],
+      severityScoreMappings: [
+        {
+          severity: Severity.HIGH,
+          baseImpactScore: 80,
+          baseLikelihoodScore: 70,
+        },
+      ],
+      defaultMaxFollowUps: 2,
+      defaultMaxQuestions: 5,
+      createdBy: 'system',
+    });
+
+    const validation = validatePRSLogicProfile(profile);
+    expect(validation.ok).toBe(false);
+    expect(validation.errors.length).toBeGreaterThan(0);
   });
 });

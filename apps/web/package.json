@@ -12,7 +12,8 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@clerk/nextjs": "^6.37.0",
+    "@clerk/nextjs": "^6.37.2",
+    "@clerk/themes": "^2.4.51",
     "next": "^14.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"

@@ -61,6 +61,7 @@ export interface EvidenceRecordRecord {
   evidenceType: string;
   fileName: string;
   description?: string;
+  metadata?: Record<string, unknown>;
   uploadedAt: string;
   createdBy: string;
 }
@@ -165,6 +166,12 @@ export class InMemoryStore {
   private evidenceByFacility = new Map<string, string[]>();
   private sessionsByProvider = new Map<string, string[]>();
   private findingsByProvider = new Map<string, string[]>();
+
+  private facilityScopeKey(ctx: TenantContext, facilityId: string): string {
+    return facilityId.startsWith(`${ctx.tenantId}:`)
+      ? facilityId
+      : scopeKey(ctx, facilityId);
+  }
 
   private nextSequence(ctx: TenantContext, key: string): number {
     const tenantCounters = this.counters.get(ctx.tenantId) ?? {};
@@ -518,17 +525,36 @@ export class InMemoryStore {
     return { facility: record, isNew };
   }
 
-  createEvidenceBlob(ctx: TenantContext, input: { contentBase64: string; mimeType: string }): EvidenceBlobRecord {
-    const buffer = Buffer.from(input.contentBase64, 'base64');
-    const hashHex = computeBlobHash(buffer);
-    const blobHash = `sha256:${hashHex}`;
-    const now = new Date().toISOString();
+  createEvidenceBlob(
+    ctx: TenantContext,
+    input:
+      | { contentBase64: string; mimeType: string }
+      | { contentHash: string; contentType: string; sizeBytes: number; uploadedAt?: string }
+  ): EvidenceBlobRecord {
+    let blobHash: string;
+    let mimeType: string;
+    let sizeBytes: number;
+    let uploadedAt: string;
+
+    if ('contentBase64' in input) {
+      const buffer = Buffer.from(input.contentBase64, 'base64');
+      const hashHex = computeBlobHash(buffer);
+      blobHash = `sha256:${hashHex}`;
+      mimeType = input.mimeType;
+      sizeBytes = buffer.byteLength;
+      uploadedAt = new Date().toISOString();
+    } else {
+      blobHash = input.contentHash;
+      mimeType = input.contentType;
+      sizeBytes = input.sizeBytes;
+      uploadedAt = input.uploadedAt ?? new Date().toISOString();
+    }
 
     const record: EvidenceBlobRecord = {
       blobHash,
-      mimeType: input.mimeType,
-      sizeBytes: buffer.byteLength,
-      uploadedAt: now,
+      mimeType,
+      sizeBytes,
+      uploadedAt,
     };
 
     this.evidenceBlobs.write(ctx, blobHash, record);
@@ -547,6 +573,7 @@ export class InMemoryStore {
     evidenceType: string;
     fileName: string;
     description?: string;
+    metadata?: Record<string, unknown>;
   }): EvidenceRecordRecord {
     const blob = this.getEvidenceBlob(ctx, input.blobHash);
     if (!blob) {
@@ -568,20 +595,23 @@ export class InMemoryStore {
       evidenceType: input.evidenceType,
       fileName: input.fileName,
       description: input.description,
+      metadata: input.metadata,
       uploadedAt: now,
       createdBy: ctx.actorId,
     };
 
     this.evidenceRecords.write(ctx, id, record);
-    const evidenceList = this.evidenceByFacility.get(record.facilityId) ?? [];
+    const facilityKey = this.facilityScopeKey(ctx, record.facilityId);
+    const evidenceList = this.evidenceByFacility.get(facilityKey) ?? [];
     evidenceList.push(record.id);
-    this.evidenceByFacility.set(record.facilityId, evidenceList);
+    this.evidenceByFacility.set(facilityKey, evidenceList);
 
     return record;
   }
 
   listEvidenceByFacility(ctx: TenantContext, facilityId: string): EvidenceRecordRecord[] {
-    const ids = this.evidenceByFacility.get(facilityId) ?? [];
+    const facilityKey = this.facilityScopeKey(ctx, facilityId);
+    const ids = this.evidenceByFacility.get(facilityKey) ?? [];
     return ids.map((id) => this.evidenceRecords.readByKey(ctx, id))
       .filter((record): record is EvidenceRecordRecord => Boolean(record));
   }
@@ -595,6 +625,22 @@ export class InMemoryStore {
     return records;
   }
 
+  /**
+   * Find an evidence record by content hash for the given tenant.
+   * Used for blob ownership verification - ensures the blob belongs to this tenant.
+   */
+  getEvidenceRecordByContentHash(ctx: TenantContext, contentHash: string): EvidenceRecordRecord | undefined {
+    // Search all evidence records for one matching the content hash
+    const allKeys = this.evidenceRecords.listKeys(ctx);
+    for (const key of allKeys) {
+      const record = this.evidenceRecords.read(ctx, key);
+      if (record && record.blobHash === contentHash) {
+        return record;
+      }
+    }
+    return undefined;
+  }
+
   createMockSession(ctx: TenantContext, input: {
     provider: ProviderRecord;
     facilityId: string;
@@ -603,6 +649,8 @@ export class InMemoryStore {
     topicCatalogHash: string;
     prsLogicProfilesVersion: string;
     prsLogicProfilesHash: string;
+    maxFollowUps?: number;
+    maxTotalQuestions?: number;
   }): MockSessionRecord {
     const id = `session-${this.nextSequence(ctx, 'session')}`;
     const sessionId = scopeKey(ctx, id);
@@ -625,7 +673,7 @@ export class InMemoryStore {
       topicId: input.topicId,
       status: 'IN_PROGRESS',
       followUpsUsed: 0,
-      maxFollowUps: 4,
+      maxFollowUps: input.maxFollowUps ?? 4,
       createdAt: now,
       topicCatalogVersion: input.topicCatalogVersion,
       topicCatalogHash: input.topicCatalogHash,

@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "paths": {
+      "@regintel/domain/*": ["../domain/src/*"],
+      "@regintel/security/*": ["../security/src/*"],
+      "@regintel/ai-validation/*": ["../ai-validation/src/*"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

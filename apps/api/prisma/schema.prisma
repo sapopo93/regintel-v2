@@ -70,58 +70,200 @@ enum ReportingDomain {
   @@map("reporting_domain")
 }
 
-model ProviderContextSnapshot {
-  id                 String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId           String                  @map("tenant_id") @db.Uuid
-  asOf               DateTime                @map("as_of") @db.Timestamptz
-  regulatoryState    ProviderRegulatoryState @map("regulatory_state")
-  metadata           Json                    @default(dbgenerated("'{}'::jsonb"))
-  enabledDomains     String[]                @map("enabled_domains")
-  activeRegulationIds String[]               @map("active_regulation_ids")
-  activePolicyIds    String[]                @map("active_policy_ids")
-  snapshotHash       String                  @map("snapshot_hash")
-  createdAt          DateTime                @map("created_at") @default(now()) @db.Timestamptz
-  createdBy          String                  @map("created_by")
+enum FacilityInspectionStatus {
+  NEVER_INSPECTED
+  INSPECTED
+  PENDING_FIRST_INSPECTION
 
-  mockSessions       MockInspectionSession[]
-  findings           Finding[]
+  @@map("facility_inspection_status")
+}
+
+enum FacilityDataSource {
+  CQC_API
+  MANUAL
+
+  @@map("facility_data_source")
+}
+
+enum ReportMode {
+  REAL
+  MOCK
+
+  @@map("report_mode")
+}
+
+enum ExportFormat {
+  CSV
+  PDF
+  BLUE_OCEAN
+  BLUE_OCEAN_BOARD
+  BLUE_OCEAN_AUDIT
+
+  @@map("export_format")
+}
+
+enum BackgroundJobType {
+  SCRAPE_REPORT
+  MALWARE_SCAN
+  EVIDENCE_PROCESS
+  AI_EVIDENCE_ANALYSIS
+  AI_POLICY_GENERATION
+  AI_MOCK_INSIGHT
+
+  @@map("background_job_type")
+}
+
+enum BackgroundJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  RETRYING
+
+  @@map("background_job_status")
+}
+
+enum EvidenceScanStatus {
+  PENDING
+  CLEAN
+  INFECTED
+  ERROR
+
+  @@map("evidence_scan_status")
+}
+
+model ProviderContextSnapshot {
+  id                  String                 @id @default(dbgenerated("gen_random_uuid()")) @map("id")
+  tenantId            String                 @map("tenant_id")
+  providerId          String                 @map("provider_id")
+  asOf                DateTime               @map("as_of") @db.Timestamptz
+  regulatoryState     ProviderRegulatoryState @map("regulatory_state")
+  metadata            Json                   @default(dbgenerated("'{}'::jsonb"))
+  enabledDomains      String[]               @map("enabled_domains")
+  activeRegulationIds String[]               @map("active_regulation_ids")
+  activePolicyIds     String[]               @map("active_policy_ids")
+  snapshotHash        String                 @map("snapshot_hash")
+  createdAt           DateTime               @map("created_at") @default(now()) @db.Timestamptz
+  createdBy           String                 @map("created_by")
+
+  mockSessions        MockInspectionSession[]
+  findings            Finding[]
+  provider            Provider               @relation(fields: [providerId], references: [providerId])
 
   @@index([tenantId])
   @@index([tenantId, asOf])
+  @@index([providerId])
   @@unique([tenantId, snapshotHash])
   @@map("provider_context_snapshots")
 }
 
+model Provider {
+  providerId     String     @id @map("provider_id")
+  tenantId       String     @map("tenant_id")
+  providerName   String     @map("provider_name")
+  orgRef         String?    @map("org_ref")
+  asOf           DateTime   @map("as_of") @db.Timestamptz
+  prsState       ProviderRegulatoryState @map("prs_state")
+  registeredBeds Int        @map("registered_beds")
+  serviceTypes   String[]   @map("service_types")
+  createdAt      DateTime   @map("created_at") @default(now()) @db.Timestamptz
+  createdBy      String     @map("created_by")
+
+  facilities              Facility[]
+  evidenceRecords         EvidenceRecord[]
+  mockSessions            MockInspectionSession[]
+  findings                Finding[]
+  exports                 ExportRecord[]
+  providerContextSnapshots ProviderContextSnapshot[]
+  aiInsights              AIInsight[]
+
+  @@index([tenantId])
+  @@map("providers")
+}
+
+model Facility {
+  id                 String                  @id @map("facility_id")
+  tenantId           String                  @map("tenant_id")
+  providerId         String                  @map("provider_id")
+  facilityName       String                  @map("facility_name")
+  addressLine1       String                  @map("address_line1")
+  townCity           String                  @map("town_city")
+  postcode           String                  @map("postcode")
+  address            String                  @map("address")
+  cqcLocationId      String                  @map("cqc_location_id")
+  serviceType        String                  @map("service_type")
+  capacity           Int?
+  facilityHash       String                  @map("facility_hash")
+  createdAt          DateTime                @map("created_at") @default(now()) @db.Timestamptz
+  createdBy          String                  @map("created_by")
+  asOf               DateTime                @map("as_of") @db.Timestamptz
+  dataSource         FacilityDataSource      @map("data_source")
+  cqcSyncedAt        DateTime?               @map("cqc_synced_at") @db.Timestamptz
+  latestRating       String?                 @map("latest_rating")
+  latestRatingDate   String?                 @map("latest_rating_date")
+  inspectionStatus   FacilityInspectionStatus @map("inspection_status")
+  lastReportScrapedAt DateTime?              @map("last_report_scraped_at") @db.Timestamptz
+  lastScrapedReportDate String?              @map("last_scraped_report_date")
+  lastScrapedReportUrl  String?              @map("last_scraped_report_url")
+
+  provider       Provider               @relation(fields: [providerId], references: [providerId])
+  evidenceRecords EvidenceRecord[]
+  mockSessions    MockInspectionSession[]
+  findings        Finding[]
+  exports         ExportRecord[]
+  aiInsights      AIInsight[]
+
+  @@index([tenantId])
+  @@index([providerId])
+  @@unique([providerId, cqcLocationId])
+  @@map("facilities")
+}
+
 model MockInspectionSession {
-  id                  String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId            String                 @map("tenant_id") @db.Uuid
-  domain              Domain
-  contextSnapshotId   String                 @map("context_snapshot_id") @db.Uuid
-  logicProfileId      String                 @map("logic_profile_id")
-  status              MockSessionStatus      @default(IN_PROGRESS)
-  totalQuestionsAsked Int                    @map("total_questions_asked") @default(0)
-  totalFindingsDrafted Int                   @map("total_findings_drafted") @default(0)
-  maxFollowupsPerTopic Int                   @map("max_followups_per_topic")
-  maxTotalQuestions   Int                    @map("max_total_questions")
-  sessionHash         String                 @map("session_hash")
-  startedAt           DateTime               @map("started_at") @default(now()) @db.Timestamptz
-  completedAt         DateTime?              @map("completed_at") @db.Timestamptz
-  createdBy           String                 @map("created_by")
+  id                     String            @id @map("id")
+  tenantId               String            @map("tenant_id")
+  domain                 Domain
+  contextSnapshotId      String            @map("context_snapshot_id")
+  providerId             String            @map("provider_id")
+  facilityId             String            @map("facility_id")
+  topicId                String            @map("topic_id")
+  mode                   ReportMode        @map("mode") @default(MOCK)
+  logicProfileId         String            @map("logic_profile_id")
+  status                 MockSessionStatus @default(IN_PROGRESS)
+  totalQuestionsAsked    Int               @map("total_questions_asked") @default(0)
+  totalFindingsDrafted   Int               @map("total_findings_drafted") @default(0)
+  maxFollowupsPerTopic   Int               @map("max_followups_per_topic")
+  maxTotalQuestions      Int               @map("max_total_questions")
+  followUpsUsed          Int               @map("follow_ups_used") @default(0)
+  maxFollowUps           Int               @map("max_follow_ups") @default(4)
+  topicCatalogVersion    String            @map("topic_catalog_version")
+  topicCatalogHash       String            @map("topic_catalog_hash")
+  prsLogicProfilesVersion String           @map("prs_logic_profiles_version")
+  prsLogicProfilesHash   String            @map("prs_logic_profiles_hash")
+  sessionHash            String            @map("session_hash")
+  startedAt              DateTime          @map("started_at") @default(now()) @db.Timestamptz
+  completedAt            DateTime?         @map("completed_at") @db.Timestamptz
+  createdBy              String            @map("created_by")
 
   contextSnapshot     ProviderContextSnapshot @relation(fields: [contextSnapshotId], references: [id])
   sessionEvents       SessionEvent[]
   draftFindings       DraftFinding[]
+  provider            Provider               @relation(fields: [providerId], references: [providerId])
+  facility            Facility               @relation(fields: [facilityId], references: [id])
+  aiInsights          AIInsight[]
 
   @@index([tenantId])
   @@index([tenantId, status])
   @@index([contextSnapshotId])
+  @@index([providerId])
+  @@index([facilityId])
   @@map("mock_inspection_sessions")
 }
 
 model SessionEvent {
   id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  sessionId        String           @map("session_id") @db.Uuid
-  tenantId         String           @map("tenant_id") @db.Uuid
+  sessionId        String           @map("session_id")
+  tenantId         String           @map("tenant_id")
   eventType        SessionEventType @map("event_type")
   topicId          String?          @map("topic_id")
   question         String?
@@ -138,22 +280,22 @@ model SessionEvent {
 }
 
 model DraftFinding {
-  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  sessionId          String           @map("session_id") @db.Uuid
-  tenantId           String           @map("tenant_id") @db.Uuid
-  topicId            String           @map("topic_id")
-  title              String
-  description        String
-  severity           Severity
-  impactScore        Int              @map("impact_score")
-  likelihoodScore    Int              @map("likelihood_score")
-  compositeRiskScore Int              @map("composite_risk_score")
-  regulationId       String           @map("regulation_id")
-  regulationSectionId String          @map("regulation_section_id")
-  evidenceGaps       String[]         @map("evidence_gaps") @default([])
-  createdAt          DateTime         @map("created_at") @default(now()) @db.Timestamptz
+  id                  String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId           String           @map("session_id")
+  tenantId            String           @map("tenant_id")
+  topicId             String           @map("topic_id")
+  title               String
+  description         String
+  severity            Severity
+  impactScore         Int              @map("impact_score")
+  likelihoodScore     Int              @map("likelihood_score")
+  compositeRiskScore  Int              @map("composite_risk_score")
+  regulationId        String           @map("regulation_id")
+  regulationSectionId String           @map("regulation_section_id")
+  evidenceGaps        String[]         @map("evidence_gaps") @default([])
+  createdAt           DateTime         @map("created_at") @default(now()) @db.Timestamptz
 
-  session            MockInspectionSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session             MockInspectionSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
   @@index([tenantId])
@@ -161,72 +303,222 @@ model DraftFinding {
 }
 
 model Finding {
-  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId           String           @map("tenant_id") @db.Uuid
-  domain             Domain
-  contextSnapshotId  String           @map("context_snapshot_id") @db.Uuid
-  origin             FindingOrigin
-  reportingDomain    ReportingDomain  @map("reporting_domain")
-  regulationId       String           @map("regulation_id")
-  regulationSectionId String          @map("regulation_section_id")
-  title              String
-  description        String
-  severity           Severity
-  impactScore        Int              @map("impact_score")
-  likelihoodScore    Int              @map("likelihood_score")
-  compositeRiskScore Int              @map("composite_risk_score")
-  evidenceIds        String[]         @map("evidence_ids") @default([])
-  identifiedAt       DateTime         @map("identified_at") @db.Timestamptz
-  identifiedBy       String           @map("identified_by")
-  findingHash        String           @map("finding_hash")
+  id                  String           @id @map("id")
+  tenantId            String           @map("tenant_id")
+  domain              Domain
+  contextSnapshotId   String           @map("context_snapshot_id")
+  providerId          String           @map("provider_id")
+  facilityId          String           @map("facility_id")
+  sessionId           String           @map("session_id")
+  topicId             String           @map("topic_id")
+  origin              FindingOrigin
+  reportingDomain     ReportingDomain  @map("reporting_domain")
+  regulationId        String           @map("regulation_id")
+  regulationSectionId String           @map("regulation_section_id")
+  title               String
+  description         String
+  severity            Severity
+  impactScore         Int              @map("impact_score")
+  likelihoodScore     Int              @map("likelihood_score")
+  compositeRiskScore  Int              @map("composite_risk_score")
+  evidenceIds         String[]         @map("evidence_ids") @default([])
+  evidenceRequired    String[]         @map("evidence_required") @default([])
+  evidenceProvided    String[]         @map("evidence_provided") @default([])
+  evidenceMissing     String[]         @map("evidence_missing") @default([])
+  identifiedAt        DateTime         @map("identified_at") @db.Timestamptz
+  identifiedBy        String           @map("identified_by")
+  deterministicHash   String           @map("finding_hash")
 
-  contextSnapshot    ProviderContextSnapshot @relation(fields: [contextSnapshotId], references: [id])
+  contextSnapshot     ProviderContextSnapshot @relation(fields: [contextSnapshotId], references: [id])
+  provider            Provider               @relation(fields: [providerId], references: [providerId])
+  facility            Facility               @relation(fields: [facilityId], references: [id])
 
   @@index([tenantId])
   @@index([tenantId, domain])
   @@index([tenantId, origin])
   @@index([tenantId, reportingDomain])
   @@index([contextSnapshotId])
+  @@index([providerId])
+  @@index([facilityId])
   @@index([tenantId, severity, compositeRiskScore(sort: Desc)])
   @@map("findings")
 }
 
 model EvidenceBlob {
-  contentHash String        @id @map("content_hash")
-  contentType String        @map("content_type")
-  sizeBytes   BigInt        @map("size_bytes") @db.BigInt
-  storagePath String        @map("storage_path")
-  uploadedAt  DateTime      @map("uploaded_at") @default(now()) @db.Timestamptz
+  contentHash String             @id @map("content_hash")
+  contentType String             @map("content_type")
+  sizeBytes   BigInt             @map("size_bytes") @db.BigInt
+  storagePath String             @map("storage_path")
+  uploadedAt  DateTime           @map("uploaded_at") @default(now()) @db.Timestamptz
+  scanStatus  EvidenceScanStatus @map("scan_status") @default(PENDING)
+  scannedAt   DateTime?          @map("scanned_at") @db.Timestamptz
+  scanEngine  String?            @map("scan_engine")
+  scanThreat  String?            @map("scan_threat")
+  scanResult  String?            @map("scan_result")
+  quarantined Boolean            @map("quarantined") @default(false)
 
   records     EvidenceRecord[]
 
   @@index([uploadedAt])
+  @@index([scanStatus])
   @@map("evidence_blobs")
 }
 
 model EvidenceRecord {
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId    String    @map("tenant_id") @db.Uuid
-  contentHash String    @map("content_hash")
-  evidenceType String   @map("evidence_type")
-  title       String
-  description String?
-  collectedAt DateTime  @map("collected_at") @db.Timestamptz
-  metadata    Json      @default(dbgenerated("'{}'::jsonb"))
-  createdAt   DateTime  @map("created_at") @default(now()) @db.Timestamptz
-  createdBy   String    @map("created_by")
+  id                          String   @id @map("id")
+  tenantId                    String   @map("tenant_id")
+  providerId                  String   @map("provider_id")
+  facilityId                  String   @map("facility_id")
+  contentHash                 String   @map("content_hash")
+  evidenceType                String   @map("evidence_type")
+  title                       String   @map("title")
+  fileName                    String   @map("file_name")
+  description                 String?  @map("description")
+  collectedAt                 DateTime @map("collected_at") @db.Timestamptz
+  metadata                    Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt                   DateTime @map("created_at") @default(now()) @db.Timestamptz
+  createdBy                   String   @map("created_by")
+  mimeType                    String   @map("mime_type")
+  sizeBytes                   BigInt   @map("size_bytes") @db.BigInt
+  uploadedAt                  DateTime @map("uploaded_at") @db.Timestamptz
+  extractedText               String?  @map("extracted_text")
+  pageCount                   Int?     @map("page_count")
+  ocrConfidence               Float?   @map("ocr_confidence")
+  processingMetadata          Json?    @map("processing_metadata")
+  aiSummary                   String?  @map("ai_summary")
+  aiSuggestedType             String?  @map("ai_suggested_type")
+  aiSuggestedTypeConfidence   Float?   @map("ai_suggested_type_confidence")
+  aiRelevantRegulations       String[] @map("ai_relevant_regulations") @default([])
+  aiKeyEntities               Json?    @map("ai_key_entities")
+  aiValidationReport          Json?    @map("ai_validation_report")
 
   blob        EvidenceBlob @relation(fields: [contentHash], references: [contentHash])
+  provider    Provider     @relation(fields: [providerId], references: [providerId])
+  facility    Facility     @relation(fields: [facilityId], references: [id])
 
   @@index([tenantId])
+  @@index([providerId])
+  @@index([facilityId])
   @@index([contentHash])
   @@index([tenantId, evidenceType])
   @@map("evidence_records")
 }
 
+model ExportRecord {
+  id               String         @id @map("id")
+  tenantId         String         @map("tenant_id")
+  providerId       String         @map("provider_id")
+  facilityId       String         @map("facility_id")
+  sessionId        String         @map("session_id")
+  format           ExportFormat   @map("format")
+  content          String         @map("content")
+  reportingDomain  ReportingDomain @map("reporting_domain")
+  mode             ReportMode     @map("mode")
+  reportSourceType String         @map("report_source_type")
+  reportSourceId   String         @map("report_source_id")
+  reportSourceAsOf String         @map("report_source_as_of")
+  snapshotId       String         @map("snapshot_id")
+  generatedAt      DateTime       @map("generated_at") @db.Timestamptz
+  expiresAt        DateTime       @map("expires_at") @db.Timestamptz
+
+  provider    Provider  @relation(fields: [providerId], references: [providerId])
+  facility    Facility  @relation(fields: [facilityId], references: [id])
+
+  @@index([tenantId])
+  @@index([providerId])
+  @@index([facilityId])
+  @@index([sessionId])
+  @@map("export_records")
+}
+
+model BackgroundJob {
+  id           String             @id @map("id")
+  tenantId     String             @map("tenant_id")
+  jobType      BackgroundJobType  @map("job_type")
+  status       BackgroundJobStatus @map("status")
+  queueName    String             @map("queue_name")
+  payload      Json               @map("payload")
+  result       Json?              @map("result")
+  error        String?            @map("error")
+  attemptsMade Int                @map("attempts_made") @default(0)
+  maxAttempts  Int                @map("max_attempts") @default(1)
+  createdAt    DateTime           @map("created_at") @default(now()) @db.Timestamptz
+  startedAt    DateTime?          @map("started_at") @db.Timestamptz
+  completedAt  DateTime?          @map("completed_at") @db.Timestamptz
+  updatedAt    DateTime           @map("updated_at") @default(now()) @db.Timestamptz
+
+  @@index([tenantId])
+  @@index([jobType])
+  @@index([status])
+  @@map("background_jobs")
+}
+
+model AIInsight {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @map("id")
+  tenantId         String   @map("tenant_id")
+  sessionId        String   @map("session_id")
+  providerId       String   @map("provider_id")
+  facilityId       String   @map("facility_id")
+  topicId          String   @map("topic_id")
+  insights         Json     @map("insights")
+  suggestedFollowUp String? @map("suggested_follow_up")
+  riskIndicators   Json     @map("risk_indicators")
+  validationReport Json     @map("validation_report")
+  usedFallback     Boolean  @map("used_fallback") @default(false)
+  fallbackReason   String?  @map("fallback_reason")
+  createdAt        DateTime @map("created_at") @default(now()) @db.Timestamptz
+
+  session   MockInspectionSession @relation(fields: [sessionId], references: [id])
+  provider  Provider              @relation(fields: [providerId], references: [providerId])
+  facility  Facility              @relation(fields: [facilityId], references: [id])
+
+  @@index([tenantId])
+  @@index([sessionId])
+  @@index([providerId])
+  @@index([facilityId])
+  @@map("ai_insights")
+}
+
+model Regulation {
+  id            String   @id @map("id")
+  tenantId      String   @map("tenant_id")
+  domain        Domain
+  version       Int
+  effectiveDate DateTime @map("effective_date") @db.Timestamptz
+  supersedes    String?  @map("supersedes")
+  title         String
+  contentHash   String   @map("content_hash")
+  createdAt     DateTime @map("created_at") @default(now()) @db.Timestamptz
+  createdBy     String   @map("created_by")
+
+  sections      RegulationSection[]
+
+  @@index([tenantId])
+  @@index([domain])
+  @@map("regulations")
+}
+
+model RegulationSection {
+  id           String   @id @map("id")
+  tenantId     String   @map("tenant_id")
+  regulationId String   @map("regulation_id")
+  sectionId    String   @map("section_id")
+  title        String
+  content      String
+  normative    Boolean  @map("normative")
+  createdAt    DateTime @map("created_at") @default(now()) @db.Timestamptz
+
+  regulation   Regulation @relation(fields: [regulationId], references: [id])
+
+  @@index([tenantId])
+  @@index([regulationId])
+  @@index([sectionId])
+  @@map("regulation_sections")
+}
+
 model AuditEvent {
-  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId          String   @map("tenant_id") @db.Uuid
+  id                String   @id @map("id")
+  tenantId          String   @map("tenant_id")
   eventType         String   @map("event_type")
   entityType        String   @map("entity_type")
   entityId          String   @map("entity_id")
@@ -241,4 +533,119 @@ model AuditEvent {
   @@index([tenantId, timestamp])
   @@index([tenantId, entityType, entityId])
   @@map("audit_events")
+}
+
+// ============================================================================
+// Phase 1: The Spine - Policy, RegulationPolicyLink, Action, ActionVerification
+// ============================================================================
+
+enum LinkStatus {
+  ACTIVE
+  DEPRECATED
+  SUPERSEDED
+
+  @@map("link_status")
+}
+
+enum ActionStatus {
+  OPEN
+  IN_PROGRESS
+  PENDING_VERIFICATION
+  VERIFIED_CLOSED
+  REJECTED
+
+  @@map("action_status")
+}
+
+model Policy {
+  id            String   @id @map("id")
+  tenantId      String   @map("tenant_id")
+  domain        Domain
+  version       Int
+  effectiveDate DateTime @map("effective_date") @db.Timestamptz
+  supersedes    String?  @map("supersedes")
+  title         String
+  clauses       Json     @default("[]") // Array of PolicyClause objects
+  contentHash   String   @map("content_hash")
+  createdAt     DateTime @map("created_at") @default(now()) @db.Timestamptz
+  createdBy     String   @map("created_by")
+  approvedBy    String?  @map("approved_by")
+  approvedAt    DateTime? @map("approved_at") @db.Timestamptz
+
+  regulationPolicyLinks RegulationPolicyLink[]
+
+  @@index([tenantId])
+  @@index([tenantId, domain])
+  @@unique([tenantId, contentHash])
+  @@map("policies")
+}
+
+model RegulationPolicyLink {
+  id                  String     @id @map("id")
+  tenantId            String     @map("tenant_id")
+  domain              Domain
+  regulationId        String     @map("regulation_id")
+  regulationSectionId String     @map("regulation_section_id")
+  policyId            String     @map("policy_id")
+  policyClauseId      String     @map("policy_clause_id")
+  status              LinkStatus @default(ACTIVE)
+  rationale           String?
+  supersededBy        String?    @map("superseded_by")
+  edgeHash            String     @map("edge_hash")
+  createdAt           DateTime   @map("created_at") @default(now()) @db.Timestamptz
+  createdBy           String     @map("created_by")
+  deprecatedAt        DateTime?  @map("deprecated_at") @db.Timestamptz
+  deprecatedReason    String?    @map("deprecated_reason")
+
+  policy              Policy     @relation(fields: [policyId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([regulationId])
+  @@index([policyId])
+  @@unique([tenantId, edgeHash])
+  @@map("regulation_policy_links")
+}
+
+model Action {
+  id                      String       @id @map("id")
+  tenantId                String       @map("tenant_id")
+  domain                  Domain
+  findingId               String       @map("finding_id")
+  description             String
+  assignedTo              String?      @map("assigned_to")
+  targetCompletionDate    DateTime?    @map("target_completion_date") @db.Timestamptz
+  status                  ActionStatus @default(OPEN)
+  verificationEvidenceIds String[]     @map("verification_evidence_ids") @default([])
+  createdAt               DateTime     @map("created_at") @default(now()) @db.Timestamptz
+  createdBy               String       @map("created_by")
+  completedAt             DateTime?    @map("completed_at") @db.Timestamptz
+  verifiedAt              DateTime?    @map("verified_at") @db.Timestamptz
+  closedAt                DateTime?    @map("closed_at") @db.Timestamptz
+  closedBy                String?      @map("closed_by")
+
+  verifications           ActionVerification[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([findingId])
+  @@index([tenantId, assignedTo])
+  @@map("actions")
+}
+
+model ActionVerification {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @map("id")
+  actionId          String   @map("action_id")
+  tenantId          String   @map("tenant_id")
+  verifiedBy        String   @map("verified_by")
+  verifiedAt        DateTime @map("verified_at") @db.Timestamptz
+  verificationNotes String?  @map("verification_notes")
+  approved          Boolean
+  rejectionReason   String?  @map("rejection_reason")
+
+  action            Action   @relation(fields: [actionId], references: [id])
+
+  @@index([actionId])
+  @@index([tenantId])
+  @@map("action_verifications")
 }

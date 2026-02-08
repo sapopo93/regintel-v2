@@ -104,9 +104,9 @@ Check malware scan status for uploaded blob.
 
 ## Malware Scanning
 
-### Current Implementation (Stub)
+### Current Implementation
 
-The current implementation always returns `CLEAN`. This is a **stub** for development.
+The API stub returns `CLEAN` in development. Production scanning is handled by the worker service using ClamAV. See `docs/CLAMAV.md` for installation, health checks, and EICAR testing.
 
 ### Production Integration
 
@@ -231,7 +231,7 @@ When malware is detected:
 
 ```bash
 curl -X POST http://localhost:3001/v1/admin/quarantine \
-  -H "Authorization: Bearer $FOUNDER_TOKEN" \
+  -H "Authorization: Bearer $CLERK_TEST_TOKEN" \
   -d '{"blobHash": "sha256:infected-hash", "reason": "manual review"}'
 ```
 

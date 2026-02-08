@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "paths": {
+      "@regintel/domain/*": ["../../packages/domain/src/*"],
+      "@regintel/security/*": ["../../packages/security/src/*"],
+      "@regintel/queue/*": ["../../packages/queue/src/*"],
+      "@regintel/ai-validation/*": ["../../packages/ai-validation/src/*"],
+      "@regintel/ai-workers/*": ["../../packages/ai-workers/src/*"],
+      "@regintel/storage": ["../../packages/storage/src"],
+      "@regintel/storage/*": ["../../packages/storage/src/*"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

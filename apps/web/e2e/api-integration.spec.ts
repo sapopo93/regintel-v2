@@ -10,8 +10,8 @@ import { createFacility, createProvider, loginAsFounder } from './helpers';
  * - No client-side business logic
  */
 
-const BASE_URL = 'http://localhost:3000';
-const API_BASE_URL = 'http://localhost:3001';
+const BASE_URL = `http://localhost:${process.env.PORT || '4000'}`;
+const API_BASE_URL = `http://localhost:${process.env.API_PORT || '4001'}`;
 
 let providerId = '';
 let facilityId = '';

@@ -1,12 +1,22 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createApp } from './app';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
-const TEST_TOKEN = 'test-founder-token';
+const TEST_TOKEN = 'test-clerk-token';
 const AUTH_HEADER = { Authorization: `Bearer ${TEST_TOKEN}` };
 
 beforeAll(() => {
-  process.env.FOUNDER_TOKEN = TEST_TOKEN;
+  process.env.E2E_TEST_MODE = 'true';
+  process.env.CLERK_TEST_TOKEN = TEST_TOKEN;
+  process.env.CLERK_TEST_ROLE = 'FOUNDER';
+  process.env.CLERK_TEST_TENANT_ID = 'demo';
+  process.env.CLERK_TEST_USER_ID = 'clerk-test-user';
+  const blobDir = join(tmpdir(), `regintel-test-blobs-${Date.now()}`);
+  mkdirSync(blobDir, { recursive: true });
+  process.env.BLOB_STORAGE_PATH = blobDir;
 });
 
 const app = createApp();
@@ -141,7 +151,7 @@ describe('API contract tests', () => {
     const exportResponse = await request(app)
       .post(`/v1/providers/${provider.providerId}/exports`)
       .set(AUTH_HEADER)
-      .send({ facilityId: facility.id, format: 'BLUE_OCEAN_BOARD' });
+      .send({ facilityId: facility.id, format: 'BLUE_OCEAN_AUDIT' });
 
     expect(exportResponse.status).toBe(200);
     expect(exportResponse.body.reportingDomain).toBe('REGULATORY_HISTORY');
@@ -151,7 +161,7 @@ describe('API contract tests', () => {
       .get(`/v1/exports/${encodeURIComponent(exportId)}.md`)
       .set(AUTH_HEADER);
 
-    expect(exportDownload.text).toContain('BLUE OCEAN — REGULATORY HISTORY');
+    expect(exportDownload.text).toContain('reportingDomain=REGULATORY_HISTORY');
     expect(exportDownload.text).not.toContain('BLUE OCEAN (MOCK)');
     expect(exportDownload.text).not.toContain('Mock finding generated');
     expect(exportDownload.text).toContain('report.pdf');

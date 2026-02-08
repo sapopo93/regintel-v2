@@ -60,6 +60,8 @@ function normalizeEndpoint(endpoint: string): string {
   normalized = normalized.replace(/\$\{sessionId\}/g, ':sessionId');
   normalized = normalized.replace(/\$\{findingId\}/g, ':findingId');
   normalized = normalized.replace(/\$\{topicId\}/g, ':topicId');
+  normalized = normalized.replace(/\$\{jobId\}/g, ':jobId');
+  normalized = normalized.replace(/\$\{blobHash\}/g, ':blobHash');
   normalized = normalized.replace(/\$\{request\.facilityId\}/g, ':facilityId');
   normalized = normalized.replace(/\$\{request\.providerId\}/g, ':providerId');
   normalized = normalized.replace(/\$\{query\}/g, '?facility=:facilityId');

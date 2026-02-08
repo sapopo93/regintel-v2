@@ -1,7 +1,14 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const founderToken = process.env.FOUNDER_TOKEN || 'test-founder-token';
-const providerToken = process.env.PROVIDER_TOKEN || 'test-provider-token';
+// Ensure E2E env vars are available to test files (not just webServer processes).
+// Tests like clerk-sign-in.spec.ts check process.env.E2E_TEST_MODE to decide skipping.
+process.env.E2E_TEST_MODE = 'true';
+process.env.NEXT_PUBLIC_E2E_TEST_MODE = 'true';
+
+const clerkTestToken = process.env.CLERK_TEST_TOKEN || 'test-clerk-token';
+
+const PORT = process.env.PORT || '4000';
+const API_PORT = process.env.API_PORT || '4001';
 
 export default defineConfig({
   testDir: './e2e',
@@ -11,7 +18,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: `http://localhost:${PORT}`,
     trace: 'on-first-retry',
     acceptDownloads: true,
   },
@@ -25,28 +32,31 @@ export default defineConfig({
 
   webServer: [
     {
-      command: 'pnpm dev',
-      url: 'http://localhost:3000',
+      command: `PORT=${PORT} pnpm dev`,
+      url: `http://localhost:${PORT}`,
       reuseExistingServer: !process.env.CI,
       env: {
         ...process.env,
-        NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001',
-        NEXT_PUBLIC_FOUNDER_TOKEN: process.env.NEXT_PUBLIC_FOUNDER_TOKEN || founderToken,
-        NEXT_PUBLIC_PROVIDER_TOKEN: process.env.NEXT_PUBLIC_PROVIDER_TOKEN || providerToken,
-        E2E_TEST_MODE: 'true', // Bypass Clerk middleware for E2E tests
+        NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || `http://localhost:${API_PORT}`,
+        NEXT_PUBLIC_CLERK_TEST_TOKEN: process.env.NEXT_PUBLIC_CLERK_TEST_TOKEN || clerkTestToken,
+        E2E_TEST_MODE: 'true',
+        NEXT_PUBLIC_E2E_TEST_MODE: 'true',
       },
     },
     {
-      command: 'pnpm dev',
-      url: 'http://localhost:3001/health',
+      command: `PORT=${API_PORT} pnpm dev`,
+      url: `http://localhost:${API_PORT}/health`,
       reuseExistingServer: !process.env.CI,
       cwd: '../api',
       env: {
         ...process.env,
-        FOUNDER_TOKEN: founderToken,
-        PROVIDER_TOKEN: providerToken,
-        E2E_TEST_MODE: 'true', // Disable rate limiting for E2E tests
-        BLOB_STORAGE_PATH: '/tmp/regintel-test-blobs', // Use temp dir for tests
+        ALLOWED_ORIGINS: `http://localhost:${PORT},http://localhost:${API_PORT},http://localhost:3000,http://localhost:3001`,
+        CLERK_TEST_TOKEN: clerkTestToken,
+        CLERK_TEST_USER_ID: process.env.CLERK_TEST_USER_ID || 'clerk-test-user',
+        CLERK_TEST_ROLE: process.env.CLERK_TEST_ROLE || 'FOUNDER',
+        CLERK_TEST_TENANT_ID: process.env.CLERK_TEST_TENANT_ID || 'demo',
+        E2E_TEST_MODE: 'true',
+        BLOB_STORAGE_PATH: '/tmp/regintel-test-blobs',
       },
     },
   ],

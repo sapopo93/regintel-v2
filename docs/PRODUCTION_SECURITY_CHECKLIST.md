@@ -69,45 +69,16 @@ This document outlines the security requirements that must be addressed before d
 
 ## 🔴 Critical Blockers (P0 - Must Fix Before Production)
 
-### 1. Replace Demo Authentication with Production Auth System
+### 1. Production Authentication (Clerk)
 
-**Current State:** Hardcoded demo tokens in `apps/api/src/auth.ts`
+**Current State:** Clerk JWT validation in `apps/api/src/auth.ts` with test-token fallback for E2E only.
 
-```typescript
-// ❌ INSECURE: Static tokens, no expiration, no rotation
-const FOUNDER_TOKEN = process.env.FOUNDER_TOKEN || 'demo-founder-token-12345';
-const PROVIDER_TOKEN = process.env.PROVIDER_TOKEN || 'demo-provider-token-12345';
-```
+**Required Changes (if hardening further):**
 
-**Required Changes:**
+#### Option A: Continue with Clerk (Recommended)
 
-#### Option A: JWT-Based Authentication (Recommended)
-
-1. Install dependencies:
-```bash
-cd apps/api
-pnpm add jsonwebtoken bcrypt
-pnpm add -D @types/jsonwebtoken @types/bcrypt
-```
-
-2. Create user management system:
-```typescript
-// apps/api/src/users.ts
-interface User {
-  userId: string;
-  email: string;
-  passwordHash: string;
-  role: 'FOUNDER' | 'PROVIDER';
-  tenantId: string;
-  createdAt: string;
-}
-
-// Store users in TenantIsolatedStore
-```
-
-3. Implement JWT generation:
-```typescript
-// apps/api/src/jwt.ts
+1. Ensure Clerk keys are configured (`CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`).
+2. Disable `CLERK_TEST_TOKEN` in production.
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET;

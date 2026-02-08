@@ -14,7 +14,8 @@
 import { createHash } from 'node:crypto';
 import type { ContentHash, TenantId, Domain } from './types.js';
 import type { TopicCatalog } from './topic-catalog.js';
-import type { PRSLogicProfile } from './prs-logic-profile.js';
+import { PRS_LOGIC_PROFILE_V1 } from './prs-logic-profiles.v1.js';
+import { type PRSLogicProfile, validatePRSLogicProfile } from './prs-logic-profile.js';
 
 /**
  * Frozen registry metadata
@@ -33,7 +34,7 @@ export interface FrozenRegistry<T> {
 export const TOPIC_CATALOG_V1_REGISTRY: FrozenRegistry<TopicCatalog | null> = {
   version: 'v1',
   sha256: '', // Will be computed on first access
-  data: null, // Placeholder - would contain actual catalog in production
+  data: null, // Catalog is populated per-tenant at runtime via session initialization
   frozenAt: '2024-01-01T00:00:00Z',
   frozenBy: 'system',
 };
@@ -41,10 +42,10 @@ export const TOPIC_CATALOG_V1_REGISTRY: FrozenRegistry<TopicCatalog | null> = {
 /**
  * PRS Logic Profiles v1 - Frozen registry
  */
-export const PRS_LOGIC_PROFILES_V1_REGISTRY: FrozenRegistry<PRSLogicProfile | null> = {
+export const PRS_LOGIC_PROFILES_V1_REGISTRY: FrozenRegistry<PRSLogicProfile> = {
   version: 'v1',
-  sha256: '', // Will be computed on first access
-  data: null, // Placeholder - would contain actual profile in production
+  sha256: computeRegistryHash(PRS_LOGIC_PROFILE_V1),
+  data: PRS_LOGIC_PROFILE_V1,
   frozenAt: '2024-01-01T00:00:00Z',
   frozenBy: 'system',
 };
@@ -82,13 +83,28 @@ export function getTopicCatalogV1(): {
  * Gets PRS Logic Profiles v1 with computed hash.
  */
 export function getPRSLogicProfilesV1(): {
-  profile: PRSLogicProfile | null;
+  profile: PRSLogicProfile;
   version: string;
   sha256: ContentHash;
 } {
+  if (!PRS_LOGIC_PROFILES_V1_REGISTRY.data) {
+    throw new Error('PRS logic profile registry is empty');
+  }
+
   // Compute hash if not already set
   if (PRS_LOGIC_PROFILES_V1_REGISTRY.sha256 === '') {
     PRS_LOGIC_PROFILES_V1_REGISTRY.sha256 = computeRegistryHash(PRS_LOGIC_PROFILES_V1_REGISTRY.data);
+  }
+
+  if (!validateRegistryIntegrity(PRS_LOGIC_PROFILES_V1_REGISTRY)) {
+    throw new Error('PRS logic profile registry hash mismatch');
+  }
+
+  const validation = validatePRSLogicProfile(PRS_LOGIC_PROFILES_V1_REGISTRY.data);
+  if (!validation.ok) {
+    throw new Error(
+      `PRS logic profile registry invalid: ${validation.errors.join('; ')}`
+    );
   }
 
   return {

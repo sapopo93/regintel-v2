@@ -3,7 +3,7 @@ import { loginAsFounder } from './helpers';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const BASE_URL = 'http://localhost:3000';
+const BASE_URL = `http://localhost:${process.env.PORT || '4000'}`;
 const REPORT_PATH = process.env.CQC_REPORT_PATH
   || path.resolve(__dirname, 'fixtures', 'St Joseph Nursing Home.pdf');
 

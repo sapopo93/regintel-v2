@@ -428,24 +428,7 @@ export class MockInspectionBackend {
       throw new SnapshotNotFoundError(request.snapshotId);
     }
 
-    // For now, use a placeholder profile if registry is empty
-    // In production, this would load from the frozen registry
-    const logicProfile: PRSLogicProfile = prsLogicProfilesRegistry.profile || {
-      id: 'profile-v1',
-      tenantId,
-      domain: request.domain,
-      version: 1,
-      effectiveDate: '2024-01-01T00:00:00Z',
-      supersedes: null,
-      severityRules: [],
-      interactionRules: [],
-      severityScoreMappings: [],
-      defaultMaxFollowUps: 3,
-      defaultMaxQuestions: 20,
-      profileHash: prsLogicProfilesRegistry.sha256,
-      createdAt: new Date().toISOString(),
-      createdBy: 'system',
-    };
+    const logicProfile: PRSLogicProfile = prsLogicProfilesRegistry.profile;
 
     // Generate session ID
     const sessionId = `session-${Date.now()}-${Math.random().toString(36).substring(7)}`;

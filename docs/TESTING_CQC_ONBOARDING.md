@@ -15,8 +15,8 @@ This guide shows how to test the facility onboarding system with real CQC API ca
    CQC_API_KEY=112c0fbe0e99484da57beb298369dfbe
    ```
 
-3. **Authentication:** You need a valid tenant and provider. Use the demo tokens from `.env`:
-   - `FOUNDER_TOKEN=demo-founder-token-12345`
+3. **Authentication:** Use the Clerk test token from `.env`:
+   - `CLERK_TEST_TOKEN=demo-clerk-test-token`
 
 ## Test Scenarios
 
@@ -27,7 +27,7 @@ This guide shows how to test the facility onboarding system with real CQC API ca
 ```bash
 curl -X POST http://localhost:3001/v1/facilities/onboard \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer demo-founder-token-12345" \
+  -H "Authorization: Bearer demo-clerk-test-token" \
   -H "X-Tenant-Id: tenant-1" \
   -d '{
     "providerId": "tenant-1:provider-1",
@@ -64,7 +64,7 @@ curl -X POST http://localhost:3001/v1/facilities/onboard \
 ```bash
 curl -X POST http://localhost:3001/v1/facilities/onboard-bulk \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer demo-founder-token-12345" \
+  -H "Authorization: Bearer demo-clerk-test-token" \
   -H "X-Tenant-Id: tenant-1" \
   -d '{
     "providerId": "tenant-1:provider-1",

@@ -32,6 +32,23 @@
   background-color: var(--color-slate-700);
 }
 
+.bulkImportButton {
+  padding: var(--space-3) var(--space-6);
+  background-color: transparent;
+  color: var(--color-charcoal);
+  border: 1px solid var(--color-charcoal);
+  border-radius: var(--radius-md);
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  transition: background-color 0.2s;
+  margin-right: var(--space-3);
+}
+
+.bulkImportButton:hover {
+  background-color: var(--color-slate-100);
+}
+
 .facilitiesList {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));

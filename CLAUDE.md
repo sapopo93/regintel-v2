@@ -18,6 +18,7 @@ pnpm gate --strict                # CI mode: SKIP treated as failure
 pnpm validate:versions            # Validate version immutability rules
 pnpm api:dev                      # Start API dev server (localhost:3001)
 pnpm web:dev                      # Start web UI dev server (localhost:3000)
+pnpm worker:dev                   # Start worker service (BullMQ consumers)
 pnpm playwright                   # Run Playwright E2E tests (requires API + Web servers)
 ```
 
@@ -137,7 +138,7 @@ TENANT_ID=demo
 PORT=3001
 
 # Database (required for integration tests and API)
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/regintel_dev
+DATABASE_URL=postgres://localhost:5432/regintel_dev
 
 # CQC API (optional — unauthenticated works with lower rate limits)
 CQC_API_KEY=your-cqc-api-key-here
@@ -245,17 +246,60 @@ Immutable, hash-linked chain: **Regulation → RegulationPolicyLink → Policy �
 
 ```
 packages/
-  security/     - Phase 0: Tenant isolation, audit log, secrets scanning
-  domain/       - Phases 1-11: Core domain models and business logic
+  security/       - Phase 0: Tenant isolation, audit log, secrets scanning
+  domain/         - Phases 1-11: Core domain models and business logic
+  queue/          - BullMQ job queue infrastructure with Redis/in-memory fallback
+  ai-validation/  - AI output validation framework (zero hallucination tolerance)
+  ai-workers/     - Gemini AI integration with containment (sanitization, bounds checking)
+  storage/        - Blob storage abstraction
+  cqc-ingestion/  - CQC API integration and report parsing
 apps/
-  api/          - Phase 8+: Express API server with Prisma ORM
-  web/          - Phase 10+: Next.js 14 UI with Clerk auth
-scripts/        - Build and validation scripts (gate.ts, validate-version-immutability.ts)
-docs/           - Governance documents and phase plans
-.regintel/      - Phase tracking (current_phase.txt)
+  api/            - Phase 8+: Express API server with Prisma ORM
+  web/            - Phase 10+: Next.js 14 UI with Clerk auth
+services/
+  worker/         - Dedicated BullMQ worker service (malware scan, OCR, AI processing)
+scripts/          - Build and validation scripts (gate.ts, validate-version-immutability.ts)
+docs/             - Governance documents and phase plans
+.regintel/        - Phase tracking (current_phase.txt)
 ```
 
 Path aliases: `@regintel/domain` → `packages/domain/src`, `@regintel/security` → `packages/security/src`.
+
+### Background Job System (packages/queue + services/worker)
+
+BullMQ-based job queue with Redis backend and in-memory fallback for development:
+
+**Queue Names:**
+- `scrape-report` - CQC report scraping
+- `malware-scan` - ClamAV virus scanning
+- `evidence-process` - Tesseract OCR + text extraction
+- `ai-evidence-analysis` - Gemini evidence analysis
+- `ai-policy-generation` - Gemini policy generation
+- `ai-mock-insight` - Gemini mock inspection insights
+
+**Worker Service:** `services/worker/src/index.ts` runs all 6 workers. Start with `pnpm worker:dev`.
+
+**Environment Variables:**
+```bash
+REDIS_URL=redis://localhost:6379      # Redis connection
+GEMINI_API_KEY=xxx                    # Gemini API key
+GEMINI_MODEL_ID=gemini-2.0-flash      # Model to use
+AI_CONFIDENCE_THRESHOLD=0.7           # Minimum confidence for AI outputs
+CLAMD_SOCKET=/var/run/clamav/clamd.ctl # ClamAV socket
+```
+
+### AI Validation Framework (packages/ai-validation)
+
+**Critical Design Principle:** "AI generates, Rules validate, Engine decides"
+
+All AI outputs pass through `ValidationEngine` with rules:
+- `noHallucinatedRegulationsRule` - Only allows Reg 9-20 (CQC regulations)
+- `noComplianceAssertionsRule` - AI cannot claim "compliant/non-compliant"
+- `noRatingPredictionsRule` - AI cannot predict CQC ratings
+- `noInspectionGuaranteesRule` - AI cannot guarantee outcomes
+- `confidenceConsistencyRule` - Detects hedging language inconsistency
+
+When validation fails, deterministic fallback templates are used (`template-fallback.ts`).
 
 ### CI Pipeline (`.github/workflows/ci.yml`)
 
@@ -275,7 +319,9 @@ Key endpoint groups:
 - `/v1/facilities/onboard-bulk` — Bulk onboarding (up to 50)
 - `/v1/facilities/:facilityId/sync-latest-report` — Async CQC report scraping
 - `/v1/evidence/blobs` — Content-addressed evidence blob upload/download
+- `/v1/evidence/blobs/:blobHash/scan` — Malware scan status
 - `/v1/background-jobs/:jobId` — Background job status
+- `/v1/providers/:id/mock-sessions/:id/ai-insights` — AI advisory insights (not authoritative)
 - `/api/webhooks/clerk` — Clerk webhook handler
 
 ### Database (apps/api/prisma/schema.prisma)

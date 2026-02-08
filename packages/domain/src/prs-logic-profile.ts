@@ -12,7 +12,7 @@ import {
   type ISOTimestamp,
   type ContentHash,
   ProviderRegulatoryState,
-  type Severity,
+  Severity,
   type Domain,
 } from './types.js';
 import type { ProviderContextSnapshot } from './provider-context-snapshot.js';
@@ -316,4 +316,99 @@ export function verifyProfileIntegrity(profile: PRSLogicProfile): boolean {
   });
 
   return profile.profileHash === expectedHash;
+}
+
+export interface PRSLogicProfileValidationResult {
+  ok: boolean;
+  errors: string[];
+}
+
+/**
+ * Validates a logic profile for completeness and integrity.
+ */
+export function validatePRSLogicProfile(
+  profile: PRSLogicProfile
+): PRSLogicProfileValidationResult {
+  const errors: string[] = [];
+
+  if (!verifyProfileIntegrity(profile)) {
+    errors.push('profileHash mismatch');
+  }
+
+  const prsStates = Object.values(ProviderRegulatoryState);
+  const severities = Object.values(Severity);
+
+  const severityRuleStates = new Set(profile.severityRules.map((rule) => rule.prs));
+  const interactionRuleStates = new Set(profile.interactionRules.map((rule) => rule.prs));
+  const severityMappings = new Set(profile.severityScoreMappings.map((mapping) => mapping.severity));
+
+  if (severityRuleStates.size !== profile.severityRules.length) {
+    errors.push('duplicate severity rules for PRS');
+  }
+  if (interactionRuleStates.size !== profile.interactionRules.length) {
+    errors.push('duplicate interaction rules for PRS');
+  }
+  if (severityMappings.size !== profile.severityScoreMappings.length) {
+    errors.push('duplicate severity score mappings');
+  }
+
+  for (const state of prsStates) {
+    if (!severityRuleStates.has(state)) {
+      errors.push(`missing severity rule for ${state}`);
+    }
+  }
+
+  for (const state of prsStates) {
+    if (!interactionRuleStates.has(state)) {
+      errors.push(`missing interaction rule for ${state}`);
+    }
+  }
+
+  for (const severity of severities) {
+    if (!severityMappings.has(severity)) {
+      errors.push(`missing severity score mapping for ${severity}`);
+    }
+  }
+
+  for (const rule of profile.severityRules) {
+    if (rule.multiplier < 0) {
+      errors.push(`invalid severity multiplier for ${rule.prs}`);
+    }
+  }
+
+  for (const rule of profile.interactionRules) {
+    if (rule.maxFollowUpsPerTopic <= 0) {
+      errors.push(`invalid maxFollowUpsPerTopic for ${rule.prs}`);
+    }
+    if (rule.maxTotalQuestions <= 0) {
+      errors.push(`invalid maxTotalQuestions for ${rule.prs}`);
+    }
+    if (rule.maxTotalQuestions < rule.maxFollowUpsPerTopic) {
+      errors.push(`maxTotalQuestions < maxFollowUpsPerTopic for ${rule.prs}`);
+    }
+  }
+
+  if (profile.defaultMaxFollowUps <= 0) {
+    errors.push('defaultMaxFollowUps must be > 0');
+  }
+  if (profile.defaultMaxQuestions <= 0) {
+    errors.push('defaultMaxQuestions must be > 0');
+  }
+  if (profile.defaultMaxQuestions < profile.defaultMaxFollowUps) {
+    errors.push('defaultMaxQuestions must be >= defaultMaxFollowUps');
+  }
+
+  for (const mapping of profile.severityScoreMappings) {
+    if (mapping.baseImpactScore < 0 || mapping.baseImpactScore > 100) {
+      errors.push(`invalid baseImpactScore for ${mapping.severity}`);
+    }
+    if (mapping.baseLikelihoodScore < 0 || mapping.baseLikelihoodScore > 100) {
+      errors.push(`invalid baseLikelihoodScore for ${mapping.severity}`);
+    }
+  }
+
+  return {
+    ok: errors.length === 0,
+    errors,
+  };
 }

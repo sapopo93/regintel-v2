@@ -31,6 +31,25 @@ import {
 export const BLUE_OCEAN_MOCK_WATERMARK =
   'BLUE OCEAN (MOCK) \u2014 NOT REGULATORY HISTORY';
 
+// --- SMART Action types (Phase 11) ---
+
+export type EffortSize = 'S' | 'M' | 'L';
+
+export interface AcceptanceCriterion {
+  criterion: string;
+  verificationMethod: string;
+}
+
+export interface EffortEstimate {
+  size: EffortSize;
+  rationale: string;
+}
+
+export interface ActionDependency {
+  dependsOnActionId: ActionId;
+  reason: string;
+}
+
 export interface EvidenceIndexEntry {
   evidenceRef: string; // E1, E2, E3...
   evidenceId: EvidenceId;
@@ -70,6 +89,9 @@ export interface BlueOceanActionDetail {
   targetCompletionDate: ISOTimestamp | null;
   status: ActionStatus;
   verificationEvidenceIds: string[];
+  acceptanceCriteria: AcceptanceCriterion[];
+  effortEstimate: EffortEstimate;
+  dependencies: ActionDependency[];
 }
 
 export interface BlueOceanReportSections {
@@ -342,7 +364,70 @@ function computeEvidenceReadiness(actions: Action[]): {
   };
 }
 
-function computeRemediationPlan(actions: Action[]): {
+// --- SMART Action derivation functions (deterministic, no randomness/timestamps) ---
+
+function deriveOwnerRole(action: Action, finding: InspectionFinding | undefined): string {
+  if (!finding) return 'Team Lead';
+  switch (finding.severity) {
+    case Severity.CRITICAL:
+      return 'Registered Manager';
+    case Severity.HIGH:
+      return 'Deputy Manager';
+    case Severity.MEDIUM:
+      return 'Team Lead';
+    case Severity.LOW:
+    case Severity.INFO:
+    default:
+      return 'Team Lead';
+  }
+}
+
+function deriveAcceptanceCriteria(
+  action: Action,
+  finding: InspectionFinding | undefined
+): AcceptanceCriterion[] {
+  const sectionId = finding?.regulationSectionId ?? 'unknown';
+  return [
+    {
+      criterion: `Action "${action.description}" is fully implemented and documented`,
+      verificationMethod: `Review evidence against ${sectionId} requirements`,
+    },
+    {
+      criterion: `No recurrence within 30-day observation window`,
+      verificationMethod: `Audit trail review for ${sectionId} compliance`,
+    },
+  ];
+}
+
+function deriveEffortEstimate(finding: InspectionFinding | undefined): EffortEstimate {
+  if (!finding) return { size: 'S', rationale: 'No linked finding; assumed minimal effort' };
+  switch (finding.severity) {
+    case Severity.CRITICAL:
+      return { size: 'L', rationale: `Critical severity finding requires comprehensive remediation` };
+    case Severity.HIGH:
+      return { size: 'M', rationale: `High severity finding requires moderate remediation effort` };
+    default:
+      return { size: 'S', rationale: `${finding.severity} severity finding; targeted fix expected` };
+  }
+}
+
+function deriveDependencies(action: Action, allActions: Action[]): ActionDependency[] {
+  const deps: ActionDependency[] = [];
+  for (const other of allActions) {
+    if (other.id === action.id) continue;
+    if (other.findingId !== action.findingId) continue;
+    // Within the same finding, earlier actions (by sorted ID) are dependencies
+    if (other.id < action.id) {
+      deps.push({
+        dependsOnActionId: other.id,
+        reason: `Preceding action for finding ${action.findingId}`,
+      });
+    }
+  }
+  return deps.sort((a, b) => (a.dependsOnActionId < b.dependsOnActionId ? -1 : 1));
+}
+
+function computeRemediationPlan(actions: Action[], findings: InspectionFinding[]): {
   openActions: number;
   inProgressActions: number;
   pendingVerificationActions: number;
@@ -359,6 +444,9 @@ function computeRemediationPlan(actions: Action[]): {
     rejectedActions: 0,
   };
 
+  const findingMap = new Map<FindingId, InspectionFinding>(
+    findings.map((f) => [f.id, f])
+  );
   const byFinding = new Map<FindingId, ActionId[]>();
   const actionDetails: BlueOceanActionDetail[] = [];
 
@@ -385,14 +473,19 @@ function computeRemediationPlan(actions: Action[]): {
     existing.push(action.id);
     byFinding.set(action.findingId, existing);
 
+    const finding = findingMap.get(action.findingId);
+
     actionDetails.push({
       actionId: action.id,
       findingId: action.findingId,
       description: action.description,
-      ownerRole: action.assignedTo ?? null,
+      ownerRole: deriveOwnerRole(action, finding),
       targetCompletionDate: action.targetCompletionDate ?? null,
       status: action.status,
       verificationEvidenceIds: [...action.verificationEvidenceIds].sort(),
+      acceptanceCriteria: deriveAcceptanceCriteria(action, finding),
+      effortEstimate: deriveEffortEstimate(finding),
+      dependencies: deriveDependencies(action, actions),
     });
   }
 
@@ -526,7 +619,7 @@ export function generateBlueOceanReport(input: BlueOceanReportInput): BlueOceanR
 
   const evidenceIndex = buildEvidenceIndex(input.evidence ?? []);
   const evidenceReadiness = computeEvidenceReadiness(input.actions);
-  const remediationPlan = computeRemediationPlan(input.actions);
+  const remediationPlan = computeRemediationPlan(input.actions, orderedFindings);
   const riskOutlook = computeRiskOutlook(orderedFindings);
   const topRegulations = computeTopRegulations(orderedFindings);
   const contributingFactors = computeContributingFactors(orderedFindings, input.actions, rootCauseAnalysis);

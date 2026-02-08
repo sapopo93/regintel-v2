@@ -264,7 +264,7 @@ gpg --decrypt backups/regintel_20260129_143000.dump.gpg > backup.dump
 4. **Verify Audit Chain Integrity**
    ```bash
    curl http://localhost:3001/v1/audit/verify-chain \
-     -H "Authorization: Bearer $FOUNDER_TOKEN"
+     -H "Authorization: Bearer $CLERK_TEST_TOKEN"
    ```
 
 ### Scenario: Accidental Data Deletion
@@ -409,4 +409,3 @@ pg_restore --dbname=$DB_URL --no-owner backup.dump
 - **PostgreSQL Docs:** https://www.postgresql.org/docs/current/backup.html
 - **pg_dump Reference:** https://www.postgresql.org/docs/current/app-pgdump.html
 - **RegIntel Issues:** https://github.com/yourusername/regintel-v2/issues
-

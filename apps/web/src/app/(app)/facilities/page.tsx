@@ -54,11 +54,16 @@ export default function FacilitiesPage() {
     router.push(`/facilities/new?provider=${providerId}`);
   };
 
+  const handleBulkImport = () => {
+    router.push(`/facilities/bulk-import?provider=${providerId}`);
+  };
+
   const handleViewFacility = (facilityId: string) => {
     router.push(`/overview?provider=${providerId}&facility=${facilityId}` as any);
   };
 
   // Always render Sidebar for navigation, even during loading/error states
+  // Use static placeholder values during loading to avoid hydration mismatch
   const sidebarProps = data
     ? {
         providerName: data.provider?.providerName || 'Provider',
@@ -68,7 +73,7 @@ export default function FacilitiesPage() {
       }
     : {
         providerName: 'Loading...',
-        snapshotDate: new Date().toISOString(),
+        snapshotDate: '', // Static placeholder to avoid hydration mismatch
         topicCatalogVersion: 'v1',
         prsLogicVersion: 'v1',
       };
@@ -115,6 +120,13 @@ export default function FacilitiesPage() {
             />
 
             <div className={styles.actions}>
+              <button
+                className={styles.bulkImportButton}
+                onClick={handleBulkImport}
+                data-testid="bulk-import-button"
+              >
+                Bulk Import
+              </button>
               <button
                 className={styles.addButton}
                 onClick={handleAddFacility}
