@@ -22,7 +22,7 @@ import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { MetadataBar } from '@/components/constitutional/MetadataBar';
-import { apiClient } from '@/lib/api/client';
+import { apiClient, getValidatedApiBaseUrl } from '@/lib/api/client';
 import type { FacilityDetailResponse, EvidenceListResponse, ScanStatus } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
 import styles from './page.module.css';
@@ -145,8 +145,7 @@ export default function FacilityDetailPage() {
 
   const handleDownloadEvidence = async (blobHash: string, fileName: string) => {
     try {
-      // Use environment variable - logged warning in API client if misconfigured
-      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
+      const baseUrl = getValidatedApiBaseUrl();
       const response = await fetch(`${baseUrl}/v1/evidence/blobs/${blobHash}`, {
         credentials: 'include',
       });

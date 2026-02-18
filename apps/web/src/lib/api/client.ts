@@ -495,16 +495,15 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
  * In production (or when not in E2E mode), using localhost is a configuration error.
  * We log an error but don't throw to avoid breaking the app at runtime.
  */
-function getValidatedApiBaseUrl(): string {
+export function getValidatedApiBaseUrl(): string {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
   const isE2EMode = process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true';
 
   if (!baseUrl) {
-    if (!isE2EMode && typeof window !== 'undefined') {
-      console.error(
-        '[API CLIENT ERROR] NEXT_PUBLIC_API_BASE_URL is not set. ' +
-        'API requests will default to localhost:3001. ' +
-        'This is incorrect for production deployments.'
+    if (process.env.NODE_ENV === 'production' && !isE2EMode) {
+      throw new Error(
+        '[API CLIENT] NEXT_PUBLIC_API_BASE_URL is not set. ' +
+        'This variable is required in production.'
       );
     }
     return 'http://localhost:3001';
