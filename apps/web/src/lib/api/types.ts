@@ -377,6 +377,11 @@ export interface OnboardFacilityResponse extends ConstitutionalMetadata {
 }
 
 /**
+ * Scan status for evidence blobs
+ */
+export type ScanStatus = 'PENDING' | 'CLEAN' | 'INFECTED';
+
+/**
  * Upload evidence request
  */
 export interface CreateEvidenceBlobRequest {
@@ -391,6 +396,11 @@ export interface CreateEvidenceBlobResponse extends ConstitutionalMetadata {
   uploadedAt: string;
 }
 
+export interface CreateEvidenceBlobResponseWithScan extends CreateEvidenceBlobResponse {
+  scanStatus: ScanStatus;
+  scanJobId: string;
+}
+
 export interface CreateFacilityEvidenceRequest {
   facilityId: string;
   blobHash: string;
@@ -401,4 +411,73 @@ export interface CreateFacilityEvidenceRequest {
 
 export interface CreateFacilityEvidenceResponse extends ConstitutionalMetadata {
   record: EvidenceRecord;
+}
+
+/**
+ * Malware scan response
+ */
+export interface MalwareScanResponse extends ConstitutionalMetadata {
+  contentHash: string;
+  status: ScanStatus;
+  scannedAt: string;
+  threats: string[];
+  scanJobId: string;
+}
+
+/**
+ * Background job response
+ */
+export interface BackgroundJobResponse extends ConstitutionalMetadata {
+  jobId: string;
+  state: 'waiting' | 'active' | 'completed' | 'failed';
+  result?: unknown;
+  error?: string;
+  createdAt: string;
+  processedAt?: string;
+}
+
+/**
+ * AI insights response
+ */
+export interface AIInsightsResponse extends ConstitutionalMetadata {
+  sessionId: string;
+  insights: unknown;
+  jobId?: string;
+  status: 'ready' | 'processing' | 'failed';
+}
+
+/**
+ * Sync latest CQC report response
+ */
+export interface SyncReportResponse extends ConstitutionalMetadata {
+  jobId: string;
+  status: string;
+  message: string;
+}
+
+/**
+ * Bulk onboard request
+ */
+export interface BulkOnboardRequest {
+  providerId: string;
+  cqcLocationIds: string[];
+  autoSyncReports?: boolean;
+}
+
+/**
+ * Bulk onboard response
+ */
+export interface BulkOnboardResponse extends ConstitutionalMetadata {
+  summary: {
+    total: number;
+    succeeded: number;
+    failed: number;
+  };
+  results: Array<{
+    cqcLocationId: string;
+    success: boolean;
+    facility?: Facility;
+    error?: string;
+  }>;
+  backgroundJobsQueued: number;
 }

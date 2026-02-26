@@ -500,35 +500,18 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
 }
 
 /**
- * SECURITY HARDENING: Validate API base URL configuration
+ * Get API base URL.
  *
- * In production (or when not in E2E mode), using localhost is a configuration error.
- * We log an error but don't throw to avoid breaking the app at runtime.
+ * When NEXT_PUBLIC_API_BASE_URL is set, uses that directly.
+ * When not set, defaults to empty string (same-origin) — API calls go through
+ * the Next.js rewrite proxy (/v1/* → API server), avoiding CORS entirely.
  */
 export function getValidatedApiBaseUrl(): string {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-  const isE2EMode = process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true';
 
   if (!baseUrl) {
-    if (process.env.NODE_ENV === 'production' && !isE2EMode) {
-      throw new Error(
-        '[API CLIENT] NEXT_PUBLIC_API_BASE_URL is not set. ' +
-        'This variable is required in production.'
-      );
-    }
-    return 'http://localhost:3001';
-  }
-
-  // Warn if using localhost in what appears to be production
-  if (baseUrl.includes('localhost') && !isE2EMode && typeof window !== 'undefined') {
-    // Check if we're likely in production (not localhost hostname)
-    if (!window.location.hostname.includes('localhost')) {
-      console.error(
-        '[API CLIENT ERROR] NEXT_PUBLIC_API_BASE_URL contains localhost but ' +
-        'app is not running on localhost. This is a configuration error. ' +
-        `Current API URL: ${baseUrl}, App hostname: ${window.location.hostname}`
-      );
-    }
+    // Same-origin: API calls go to /v1/... and Next.js proxies them to the API server
+    return '';
   }
 
   return baseUrl;

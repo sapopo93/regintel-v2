@@ -1,5 +1,6 @@
 'use client';
 
+import type { Route } from 'next';
 import Link from 'next/link';
 
 export default function LandingPage() {
@@ -11,11 +12,11 @@ export default function LandingPage() {
           <span className="text-emerald-400">Reg</span>Intel
         </div>
         <nav className="space-x-6">
-          <Link href="/sign-in" className="hover:text-emerald-400 transition">
+          <Link href={"/sign-in" as Route} className="hover:text-emerald-400 transition">
             Sign In
           </Link>
           <Link
-            href="/sign-up"
+            href={"/sign-up" as Route}
             className="bg-emerald-500 hover:bg-emerald-600 px-4 py-2 rounded-lg transition"
           >
             Get Started
@@ -36,7 +37,7 @@ export default function LandingPage() {
         </p>
         <div className="flex gap-4 justify-center">
           <Link
-            href="/sign-up"
+            href={"/sign-up" as Route}
             className="bg-emerald-500 hover:bg-emerald-600 px-8 py-4 rounded-lg text-lg font-semibold transition"
           >
             Start Free Trial
@@ -138,7 +139,7 @@ export default function LandingPage() {
                 <li>✓ Inspection readiness reports</li>
               </ul>
               <Link
-                href="/sign-up"
+                href={"/sign-up" as Route}
                 className="block text-center bg-emerald-500 hover:bg-emerald-600 py-3 rounded-lg transition"
               >
                 Start Free Trial
@@ -157,7 +158,7 @@ export default function LandingPage() {
                 <li>✓ Team access</li>
               </ul>
               <Link
-                href="/sign-up"
+                href={"/sign-up" as Route}
                 className="block text-center bg-emerald-500 hover:bg-emerald-600 py-3 rounded-lg transition"
               >
                 Start Free Trial
@@ -177,7 +178,7 @@ export default function LandingPage() {
             Start your free trial. No credit card required.
           </p>
           <Link
-            href="/sign-up"
+            href={"/sign-up" as Route}
             className="bg-emerald-500 hover:bg-emerald-600 px-8 py-4 rounded-lg text-lg font-semibold transition inline-block"
           >
             Get Started Free

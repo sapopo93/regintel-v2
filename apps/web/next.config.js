@@ -57,6 +57,16 @@ const nextConfig = {
   experimental: {
     typedRoutes: true,
   },
+  // Proxy API calls through Next.js to avoid CORS issues in production.
+  // Browser calls /v1/... (same-origin), Next.js forwards to the API server.
+  async rewrites() {
+    return [
+      {
+        source: '/v1/:path*',
+        destination: `${apiBaseUrl}/v1/:path*`,
+      },
+    ];
+  },
   // Security headers - CSP disabled in development to prevent Clerk CAPTCHA issues
   async headers() {
     // Skip CSP in development - Clerk's Turnstile CAPTCHA has strict requirements
