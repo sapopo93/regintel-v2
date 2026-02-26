@@ -102,7 +102,7 @@ const SERVICE_TYPES = new Set([
   'hospice',
 ]);
 
-const CQC_LOCATION_ID_PATTERN = /^1-[0-9]{9,11}$/;
+const CQC_LOCATION_ID_PATTERN = /^1-[0-9]{7,13}$/;
 
 function isValidCqcLocationId(id: string): boolean {
   return CQC_LOCATION_ID_PATTERN.test(id.trim());
@@ -137,7 +137,7 @@ const zBlobHash = z
 const zCqcLocationId = z
   .string()
   .trim()
-  .regex(CQC_LOCATION_ID_PATTERN, 'Invalid CQC Location ID format (1-123456789 or 1-1234567890)');
+  .regex(CQC_LOCATION_ID_PATTERN, 'Invalid CQC Location ID format (e.g., 1-123456789)');
 
 const zServiceType = z
   .string()
@@ -554,6 +554,40 @@ export function createApp(): express.Express {
   app.use(express.json({ limit: '10mb' }));
 
   app.use('/v1', authMiddleware);
+
+  /**
+   * GET /v1/cqc/locations/:locationId
+   *
+   * Lightweight CQC API lookup — fetches location data without creating a facility.
+   * Used by the "Fetch from CQC" button to auto-populate the onboarding form.
+   */
+  app.get('/v1/cqc/locations/:locationId', async (req, res) => {
+    const parsed = validateRequest(req, res, {
+      params: z.object({ locationId: zCqcLocationId }).strip(),
+    });
+    if (!parsed) return;
+    const { locationId } = parsed.params as { locationId: string };
+
+    try {
+      const result = await fetchCqcLocation(locationId, {
+        apiKey: process.env.CQC_API_KEY,
+      });
+
+      if (result.success) {
+        sendWithMetadata(res, {
+          found: true,
+          data: result.data,
+        });
+      } else {
+        sendWithMetadata(res, {
+          found: false,
+          error: result.error,
+        });
+      }
+    } catch (error) {
+      sendError(res, 500, 'Failed to fetch CQC data');
+    }
+  });
 
   app.get('/v1/providers', async (req, res) => {
     const ctx = getContext(req);

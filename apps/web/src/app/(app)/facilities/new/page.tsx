@@ -22,7 +22,7 @@ import { apiClient, ApiError } from '@/lib/api/client';
 import type { OnboardFacilityRequest } from '@/lib/api/types';
 import styles from './page.module.css';
 
-const CQC_LOCATION_ID_PATTERN = /^1-[0-9]{9,11}$/;
+const CQC_LOCATION_ID_PATTERN = /^1-[0-9]{7,13}$/;
 
 export default function NewFacilityPage() {
   const searchParams = useSearchParams();
@@ -45,44 +45,47 @@ export default function NewFacilityPage() {
   const handleFetchFromCqc = async () => {
     setError(null);
 
-    if (!providerId) {
-      setError('Provider ID is required');
-      return;
-    }
-
     if (!cqcLocationId.trim()) {
       setError('CQC Location ID is required');
       return;
     }
 
     if (!CQC_LOCATION_ID_PATTERN.test(cqcLocationId.trim())) {
-      setError('CQC Location ID must match format: 1-XXXXXXXXX (9-11 digits after the dash)');
+      setError('CQC Location ID must match format: 1-XXXXXXXXX (digits after the dash)');
       return;
     }
 
     setFetching(true);
 
     try {
-      const request: OnboardFacilityRequest = {
-        providerId,
-        cqcLocationId: cqcLocationId.trim(),
-      };
+      const response = await apiClient.fetchCqcLocation(cqcLocationId.trim());
 
-      const response = await apiClient.onboardFacility(request);
-
-      // Auto-populate fields from CQC data
-      if (response.cqcData) {
-        setFacilityName(response.facility.facilityName);
-        setAddressLine1(response.facility.addressLine1);
-        setTownCity(response.facility.townCity);
-        setPostcode(response.facility.postcode);
-        setServiceType(response.facility.serviceType);
-        setCapacity(response.facility.capacity?.toString() || '');
+      if (response.found && response.data) {
+        const cqc = response.data;
+        setFacilityName(cqc.name || '');
+        setAddressLine1(cqc.postalAddressLine1 || '');
+        setTownCity(cqc.postalAddressTownCity || '');
+        setPostcode(cqc.postalCode || '');
+        // Normalize CQC service type
+        const cqcType = (cqc.type || '').toLowerCase();
+        if (cqcType.includes('nursing') && !cqcType.includes('without nursing')) {
+          setServiceType('nursing');
+        } else if (cqcType.includes('domiciliary') || cqcType.includes('home care')) {
+          setServiceType('domiciliary');
+        } else if (cqcType.includes('supported living')) {
+          setServiceType('supported_living');
+        } else if (cqcType.includes('hospice')) {
+          setServiceType('hospice');
+        } else {
+          setServiceType('residential');
+        }
+        setCapacity(cqc.numberOfBeds?.toString() || '');
         setFetchAttempted(true);
-        setDataSource(response.dataSource);
+        setDataSource('CQC_API');
         setError(null);
       } else {
-        setError('Facility not found in CQC API. Please enter details manually.');
+        const errorMsg = response.error?.message || 'Location not found in CQC database';
+        setError(`CQC lookup: ${errorMsg}. Please enter details manually.`);
         setDataSource('MANUAL');
         setFetchAttempted(true);
       }

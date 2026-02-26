@@ -353,6 +353,19 @@ export interface CqcLocationData {
 }
 
 /**
+ * CQC location lookup response (lightweight, no facility creation)
+ */
+export interface CqcLocationLookupResponse extends ConstitutionalMetadata {
+  found: boolean;
+  data?: CqcLocationData;
+  error?: {
+    code: string;
+    message: string;
+    statusCode?: number;
+  };
+}
+
+/**
  * Onboard facility response (includes CQC data)
  */
 export interface OnboardFacilityResponse extends ConstitutionalMetadata {

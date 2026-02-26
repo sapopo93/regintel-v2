@@ -34,11 +34,11 @@ export type CqcApiResult =
 
 /**
  * Validates CQC Location ID format.
- * Valid formats: 1-123456789 or 1-1234567890 (9 to 11 digits after the dash)
+ * Valid formats: 1-XXXXXXXXX (7 to 13 digits after the dash)
  */
 export function isValidCqcLocationId(id: string): boolean {
   const normalized = id.trim();
-  return /^1-[0-9]{9,11}$/.test(normalized);
+  return /^1-[0-9]{7,13}$/.test(normalized);
 }
 
 /**

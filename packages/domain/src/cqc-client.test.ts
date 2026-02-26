@@ -30,8 +30,8 @@ describe('CQC Client', () => {
     it('should reject invalid formats', () => {
       expect(isValidCqcLocationId('123456789')).toBe(false); // Missing prefix
       expect(isValidCqcLocationId('2-123456789')).toBe(false); // Wrong prefix
-      expect(isValidCqcLocationId('1-12345678')).toBe(false); // Too short (8 digits)
-      expect(isValidCqcLocationId('1-123456789012')).toBe(false); // Too long (12 digits)
+      expect(isValidCqcLocationId('1-123456')).toBe(false); // Too short (6 digits)
+      expect(isValidCqcLocationId('1-12345678901234')).toBe(false); // Too long (14 digits)
       expect(isValidCqcLocationId('1-ABCDEFGHI')).toBe(false); // Non-numeric
       expect(isValidCqcLocationId('1_123456789')).toBe(false); // Wrong separator
       expect(isValidCqcLocationId('')).toBe(false); // Empty

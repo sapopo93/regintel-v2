@@ -26,6 +26,7 @@ import type {
   CreateFacilityRequest,
   OnboardFacilityRequest,
   OnboardFacilityResponse,
+  CqcLocationLookupResponse,
   CreateProviderRequest,
   ProviderDetailResponse,
   CreateEvidenceBlobRequest,
@@ -360,6 +361,15 @@ export class ApiClient {
       ? `/v1/providers/${providerId}/facilities`
       : '/v1/facilities';
     return this.fetch<FacilitiesListResponse>(path);
+  }
+
+  /**
+   * Lookup CQC location data (no facility creation — just fetches CQC data)
+   */
+  async fetchCqcLocation(locationId: string): Promise<CqcLocationLookupResponse> {
+    return this.fetch<CqcLocationLookupResponse>(
+      `/v1/cqc/locations/${encodeURIComponent(locationId)}`
+    );
   }
 
   /**

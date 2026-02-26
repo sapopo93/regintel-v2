@@ -182,7 +182,8 @@ Source of truth for UI routes and API endpoints. Update this file when navigatio
     "/v1/evidence/blobs/${blobHash}/scan",
     "/v1/providers/:providerId/mock-sessions/:sessionId/ai-insights",
     "/v1/facilities/:facilityId/sync-latest-report",
-    "/v1/facilities/onboard-bulk"
+    "/v1/facilities/onboard-bulk",
+    "/v1/cqc/locations/${encodeURIComponent(locationId)}"
   ]
 }
 ```
