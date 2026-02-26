@@ -91,7 +91,7 @@ describe('integration:mock-separation', () => {
     expect(regulatoryFindings).toHaveLength(0);
   });
 
-  it('OFFICIAL_INSPECTOR findings use REGULATORY_HISTORY reporting domain', () => {
+  it('ACTUAL_INSPECTION findings use REGULATORY_HISTORY reporting domain', () => {
     // Simulate CQC inspector creating a finding
     const finding = store.addFinding(ctx, {
       providerId,
@@ -99,7 +99,7 @@ describe('integration:mock-separation', () => {
       sessionId: 'cqc-inspection-001',
       regulationSectionId: 'Reg 12(2)(a)',
       topicId: 'safe-care-treatment',
-      origin: 'OFFICIAL_INSPECTOR',
+      origin: 'ACTUAL_INSPECTION',
       reportingDomain: 'REGULATORY_HISTORY',
       severity: 'CRITICAL',
       impactScore: 95,
@@ -112,7 +112,7 @@ describe('integration:mock-separation', () => {
       evidenceMissing: ['Policy', 'Audit'],
     });
 
-    expect(finding.origin).toBe('OFFICIAL_INSPECTOR');
+    expect(finding.origin).toBe('ACTUAL_INSPECTION');
     expect(finding.reportingDomain).toBe('REGULATORY_HISTORY');
 
     // Verify finding appears in regulatory history
@@ -162,7 +162,7 @@ describe('integration:mock-separation', () => {
       sessionId: 'cqc-inspection-001',
       regulationSectionId: 'Reg 18(1)',
       topicId: 'staffing',
-      origin: 'OFFICIAL_INSPECTOR',
+      origin: 'ACTUAL_INSPECTION',
       reportingDomain: 'REGULATORY_HISTORY',
       severity: 'HIGH',
       impactScore: 80,
@@ -185,6 +185,6 @@ describe('integration:mock-separation', () => {
     expect(regulatoryFindings).toHaveLength(1);
 
     expect(mockFindings[0].origin).toBe('SYSTEM_MOCK');
-    expect(regulatoryFindings[0].origin).toBe('OFFICIAL_INSPECTOR');
+    expect(regulatoryFindings[0].origin).toBe('ACTUAL_INSPECTION');
   });
 });

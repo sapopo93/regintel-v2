@@ -202,6 +202,53 @@ function parseReportFromHtml(html: string, locationId: string): CqcInspectionRep
  * @param options - Optional fetch configuration
  * @returns Base64-encoded PDF content or error
  */
+/**
+ * Compares website report date to API report date.
+ * Returns true if the website report is newer than the API version.
+ */
+export function isWebsiteReportNewer(
+  websiteReportDate: string | undefined,
+  apiReportDate: string | undefined
+): boolean {
+  if (!websiteReportDate) return false;
+  if (!apiReportDate) return true;
+
+  // Parse dates for comparison — try ISO first, then informal date strings
+  const webDate = new Date(websiteReportDate);
+  const apiDate = new Date(apiReportDate);
+
+  if (isNaN(webDate.getTime()) || isNaN(apiDate.getTime())) {
+    // If dates can't be parsed, treat website as newer (safer to re-scrape)
+    return true;
+  }
+
+  return webDate > apiDate;
+}
+
+/**
+ * Builds a summary object from a scraped CQC report and optional API data.
+ */
+export function buildCqcReportSummary(
+  report: CqcInspectionReport,
+  apiData?: { currentRatings?: { overall?: { reportDate?: string; rating?: string } } } | null
+): {
+  rating: string;
+  reportDate: string;
+  reportUrl: string;
+  pdfUrl?: string;
+  apiRating?: string;
+  apiReportDate?: string;
+} {
+  return {
+    rating: report.rating || apiData?.currentRatings?.overall?.rating || '',
+    reportDate: report.reportDate || apiData?.currentRatings?.overall?.reportDate || '',
+    reportUrl: report.reportUrl,
+    pdfUrl: report.pdfUrl,
+    apiRating: apiData?.currentRatings?.overall?.rating,
+    apiReportDate: apiData?.currentRatings?.overall?.reportDate,
+  };
+}
+
 export async function downloadPdfReport(
   pdfUrl: string,
   options: {

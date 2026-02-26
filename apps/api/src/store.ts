@@ -580,6 +580,17 @@ export class InMemoryStore {
     return record;
   }
 
+  getEvidenceRecordByContentHash(ctx: TenantContext, blobHash: string): EvidenceRecordRecord | undefined {
+    const allKeys = this.evidenceRecords.listKeys(ctx);
+    for (const key of allKeys) {
+      const record = this.evidenceRecords.read(ctx, key);
+      if (record && record.blobHash === blobHash) {
+        return record;
+      }
+    }
+    return undefined;
+  }
+
   listEvidenceByFacility(ctx: TenantContext, facilityId: string): EvidenceRecordRecord[] {
     const ids = this.evidenceByFacility.get(facilityId) ?? [];
     return ids.map((id) => this.evidenceRecords.readByKey(ctx, id))

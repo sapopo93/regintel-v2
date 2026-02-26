@@ -287,7 +287,7 @@ function validateRequest(
 
 function sendWithMetadata(
   res: express.Response,
-  payload: Record<string, unknown>,
+  payload: Record<string, unknown> | object,
   metadataOverrides?: Partial<ReportContext>
 ): void {
   res.json({ ...buildConstitutionalMetadata(metadataOverrides), ...payload });
@@ -315,7 +315,6 @@ function mapEvidenceRecord(record: EvidenceRecordRecord) {
     evidenceType: record.evidenceType,
     fileName: record.fileName,
     description: record.description,
-    metadata: record.metadata,
     uploadedAt: record.uploadedAt,
   };
 }
@@ -754,8 +753,6 @@ export function createApp(): express.Express {
       topicCatalogHash: metadata.topicCatalogHash,
       prsLogicProfilesVersion: metadata.prsLogicVersion,
       prsLogicProfilesHash: metadata.prsLogicHash,
-      maxFollowUps: topic.maxFollowUps,
-      maxTotalQuestions: DEFAULT_MAX_TOTAL_QUESTIONS,
     });
 
     await store.appendAuditEvent(ctx, providerId, 'MOCK_SESSION_STARTED', {
@@ -913,17 +910,13 @@ export function createApp(): express.Express {
         return;
       }
 
-      if (job.state === 'completed' && job.returnvalue) {
-        const result = job.returnvalue as AIInsightJobResult;
-        const usedFallback = result.validationReport?.usedFallback ?? false;
+      if (job.state === 'completed' && job.result) {
+        const result = job.result as AIInsightJobResult;
 
         sendWithMetadata(res, {
           sessionId,
           insights: result.insights,
-          suggestedFollowUp: result.suggestedFollowUp,
-          riskIndicators: result.riskIndicators,
-          isFallback: usedFallback,
-          fallbackReason: usedFallback ? 'Validation fallback' : undefined,
+          recommendations: result.recommendations,
           status: 'COMPLETED',
           jobId,
         });
@@ -933,12 +926,10 @@ export function createApp(): express.Express {
       sendWithMetadata(res, {
         sessionId,
         insights: [],
-        suggestedFollowUp: undefined,
-        riskIndicators: [],
-        isFallback: false,
+        recommendations: [],
         status: mapQueueStateToStatus(job.state),
         jobId,
-        error: job.failedReason,
+        error: job.error,
       });
     } catch (error) {
       console.error('[AI_INSIGHTS] Failed:', error);
@@ -1039,11 +1030,8 @@ export function createApp(): express.Express {
 
       // Create blob record in store
       await store.createEvidenceBlob(ctx, {
-        contentHash: blobMetadata.contentHash,
-        contentType: blobMetadata.contentType,
-        sizeBytes: blobMetadata.sizeBytes,
-        uploadedAt: blobMetadata.uploadedAt,
-        storagePath: blobMetadata.storagePath,
+        contentBase64,
+        mimeType,
       });
 
       // Enqueue malware scan
@@ -1062,19 +1050,9 @@ export function createApp(): express.Express {
           scanJob.id,
           async (data: MalwareScanJobData): Promise<MalwareScanJobResult> => {
             const result = await scanBlob(data.blobHash);
-            const status =
-              result.status === 'INFECTED'
-                ? 'INFECTED'
-                : result.status === 'CLEAN'
-                  ? 'CLEAN'
-                  : 'ERROR';
             return {
-              blobHash: data.blobHash,
-              status,
-              threat: result.threat,
-              scanEngine: result.scanEngine || 'stub-scanner-v1',
-              scannedAt: result.scannedAt,
-              quarantined: status === 'INFECTED',
+              clean: result.status === 'CLEAN',
+              threats: result.threat ? [result.threat] : undefined,
             };
           }
         );
@@ -1164,37 +1142,29 @@ export function createApp(): express.Express {
         return;
       }
 
-      if (job.state === 'completed' && job.returnvalue) {
-        const result = job.returnvalue as MalwareScanJobResult;
-        const status =
-          result.status === 'INFECTED'
-            ? 'INFECTED'
-            : result.status === 'CLEAN'
-              ? 'CLEAN'
-              : 'PENDING';
+      if (job.state === 'completed' && job.result) {
+        const result = job.result as MalwareScanJobResult;
+        const scanStatus = result.clean ? 'CLEAN' : 'INFECTED';
 
         sendWithMetadata(res, {
           contentHash: blobHash,
-          status,
-          scannedAt: result.scannedAt,
-          threat: result.threat,
-          scanEngine: result.scanEngine,
+          status: scanStatus,
+          scannedAt: job.processedAt ? job.processedAt.toISOString() : new Date().toISOString(),
+          threats: result.threats,
           scanJobId: jobId,
-          error: result.status === 'ERROR' ? 'Scan failed' : undefined,
         });
         return;
       }
 
-      const status = 'PENDING';
-      const scannedAt = job.finishedOn
-        ? new Date(job.finishedOn).toISOString()
-        : new Date(job.timestamp ?? Date.now()).toISOString();
+      const scannedAt = job.processedAt
+        ? job.processedAt.toISOString()
+        : job.createdAt.toISOString();
       sendWithMetadata(res, {
         contentHash: blobHash,
-        status,
+        status: 'PENDING',
         scannedAt,
         scanJobId: jobId,
-        error: job.failedReason,
+        error: job.error,
       });
     } catch (error) {
       console.error('[BLOB_SCAN] Failed:', error);
@@ -1709,7 +1679,7 @@ export function createApp(): express.Express {
         regulationSectionId: finding.regulationSectionId,
         title: finding.title,
         description: finding.description,
-        severity: finding.severity,
+        severity: finding.severity as Severity,
         impactScore: finding.impactScore,
         likelihoodScore: finding.likelihoodScore,
         draftedAt: finding.createdAt,
@@ -1986,11 +1956,9 @@ export function createApp(): express.Express {
         if (autoSyncReports) {
           const job = await scrapeReportQueue.add({
             tenantId: ctx.tenantId,
-            actorId: ctx.actorId,
             facilityId: facility.id,
-            cqcLocationId: facility.cqcLocationId,
-            providerId,
-          });
+            locationId: facility.cqcLocationId,
+          } as ScrapeReportJobData);
 
           if (await scrapeReportQueue.isInMemory()) {
             await processInMemoryJob(
@@ -2058,11 +2026,9 @@ export function createApp(): express.Express {
 
     const job = await scrapeReportQueue.add({
       tenantId: ctx.tenantId,
-      actorId: ctx.actorId,
       facilityId,
-      cqcLocationId: facility.cqcLocationId,
-      providerId: facility.providerId,
-    });
+      locationId: facility.cqcLocationId,
+    } as ScrapeReportJobData);
 
     if (await scrapeReportQueue.isInMemory()) {
       await processInMemoryJob(
@@ -2190,8 +2156,8 @@ export function createApp(): express.Express {
       }
 
       const status = mapQueueStateToStatus(job.state);
-      const createdAt = job.timestamp ? new Date(job.timestamp).toISOString() : undefined;
-      const completedAt = job.finishedOn ? new Date(job.finishedOn).toISOString() : undefined;
+      const createdAt = job.createdAt.toISOString();
+      const completedAt = job.processedAt ? job.processedAt.toISOString() : undefined;
 
       sendWithMetadata(res, {
         job: {
@@ -2201,9 +2167,8 @@ export function createApp(): express.Express {
           state: job.state,
           createdAt,
           completedAt,
-          error: job.failedReason,
-          attemptsMade: job.attemptsMade,
-          result: job.returnvalue,
+          error: job.error,
+          result: job.result,
         },
       });
     } catch (error) {
@@ -2216,10 +2181,12 @@ export function createApp(): express.Express {
    * Report scraping processor (used for in-memory fallback).
    */
   async function handleScrapeReportJob(
-    job: ScrapeReportJobData,
+    job: ScrapeReportJobData & { cqcLocationId?: string; providerId?: string },
     ctx: TenantContext
   ): Promise<ScrapeReportJobResult> {
-    const { cqcLocationId, facilityId, providerId } = job;
+    const cqcLocationId = job.cqcLocationId || job.locationId;
+    const { facilityId } = job;
+    const providerId = job.providerId || '';
 
     try {
       const apiResult = await fetchCqcLocation(cqcLocationId, {
@@ -2234,8 +2201,6 @@ export function createApp(): express.Express {
       if (!scrapeResult.success) {
         return {
           success: false,
-          hasReport: false,
-          apiReportDate,
           error: scrapeResult.error.message,
         };
       }
@@ -2247,8 +2212,6 @@ export function createApp(): express.Express {
       if (!facility) {
         return {
           success: false,
-          hasReport: false,
-          apiReportDate,
           error: 'Facility not found',
         };
       }
@@ -2264,12 +2227,7 @@ export function createApp(): express.Express {
 
         return {
           success: true,
-          hasReport: false,
-          apiReportDate,
-          websiteReportDate,
-          reportDate: report.reportDate,
-          reportUrl: report.reportUrl,
-          pdfUrl: report.pdfUrl,
+          reportDate: report.reportDate || undefined,
         };
       }
 
@@ -2281,11 +2239,6 @@ export function createApp(): express.Express {
       const summary = buildCqcReportSummary(report, apiData);
 
       if (!shouldDownloadReport) {
-        const skipReason = !websiteReportDate
-          ? 'WEBSITE_DATE_UNAVAILABLE'
-          : apiReportDate
-            ? 'API_REPORT_UP_TO_DATE'
-            : 'API_REPORT_DATE_MISSING';
         await store.upsertFacility(ctx, {
           ...facility,
           latestRating: summary.rating || facility.latestRating,
@@ -2298,77 +2251,32 @@ export function createApp(): express.Express {
 
         return {
           success: true,
-          hasReport: true,
-          skipped: true,
-          reason: skipReason,
-          apiReportDate,
-          websiteReportDate,
-          rating: summary.rating,
-          reportDate: summary.reportDate,
-          reportUrl: report.reportUrl,
-          pdfUrl: report.pdfUrl,
-          summary,
+          reportDate: summary.reportDate || undefined,
         };
       }
 
       // Download PDF if available
-      let evidenceRecordId: string | undefined;
       if (report.pdfUrl) {
         const pdfResult = await downloadPdfReport(report.pdfUrl);
         if (pdfResult.success) {
-          const pdfBuffer = Buffer.from(pdfResult.contentBase64, 'base64');
-          const blobMetadata = await blobStorage.upload(pdfBuffer, 'application/pdf');
+          const contentBase64 = pdfResult.contentBase64;
           await store.createEvidenceBlob(ctx, {
-            contentHash: blobMetadata.contentHash,
-            contentType: blobMetadata.contentType,
-            sizeBytes: blobMetadata.sizeBytes,
-            uploadedAt: blobMetadata.uploadedAt,
-            storagePath: blobMetadata.storagePath,
+            contentBase64,
+            mimeType: 'application/pdf',
           });
 
-          const evidenceRecord = await store.createEvidenceRecord(ctx, {
+          const pdfBuffer = Buffer.from(contentBase64, 'base64');
+          const blobMetadata = await blobStorage.upload(pdfBuffer, 'application/pdf');
+
+          await store.createEvidenceRecord(ctx, {
             facilityId,
             providerId,
             blobHash: blobMetadata.contentHash,
             evidenceType: EvidenceType.CQC_REPORT,
             fileName: `CQC-Report-${report.reportDate || 'latest'}.pdf`,
             description: `CQC inspection report (${summary.rating || report.rating})`,
-            metadata: {
-              cqcReportSummary: summary,
-              apiReportDate,
-              websiteReportDate,
-            },
           });
-
-          evidenceRecordId = evidenceRecord.id;
         }
-      } else if (report.htmlContent) {
-        // Fallback: Save HTML report if PDF is not available
-        const htmlBuffer = Buffer.from(report.htmlContent, 'utf-8');
-        const blobMetadata = await blobStorage.upload(htmlBuffer, 'text/html');
-        await store.createEvidenceBlob(ctx, {
-          contentHash: blobMetadata.contentHash,
-          contentType: blobMetadata.contentType,
-          sizeBytes: blobMetadata.sizeBytes,
-          uploadedAt: blobMetadata.uploadedAt,
-          storagePath: blobMetadata.storagePath,
-        });
-
-        const evidenceRecord = await store.createEvidenceRecord(ctx, {
-          facilityId,
-          providerId,
-          blobHash: blobMetadata.contentHash,
-          evidenceType: EvidenceType.CQC_REPORT,
-          fileName: `CQC-Report-${report.reportDate || 'latest'}.html`,
-          description: `CQC inspection report (HTML) - ${summary.rating || report.rating}`,
-          metadata: {
-            cqcReportSummary: summary,
-            apiReportDate,
-            websiteReportDate,
-          },
-        });
-
-        evidenceRecordId = evidenceRecord.id;
       }
 
       // Update facility with scraped data
@@ -2387,27 +2295,16 @@ export function createApp(): express.Express {
         cqcLocationId,
         rating: report.rating,
         reportDate: report.reportDate,
-        evidenceRecordId,
         hasReport: report.hasReport,
-        summary,
       });
 
       return {
         success: true,
-        hasReport: report.hasReport,
-        rating: summary.rating,
-        reportDate: summary.reportDate,
-        reportUrl: report.reportUrl,
-        pdfUrl: report.pdfUrl,
-        evidenceRecordId,
-        apiReportDate,
-        websiteReportDate,
-        summary,
+        reportDate: summary.reportDate || undefined,
       };
     } catch (error) {
       return {
         success: false,
-        hasReport: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
@@ -2430,7 +2327,7 @@ export function createApp(): express.Express {
       };
 
       if (result && typeof (result as any).then === 'function') {
-        (result as Promise<any>).then(handleResult).catch((error: unknown) => {
+        (result as unknown as Promise<any>).then(handleResult).catch((error: unknown) => {
           console.warn('[SEED] Demo provider seed skipped:', error instanceof Error ? error.message : error);
         });
       } else {

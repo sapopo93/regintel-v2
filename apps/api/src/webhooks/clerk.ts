@@ -7,7 +7,9 @@
 
 import type { Request, Response } from 'express';
 import { Webhook } from 'svix';
-import { store } from '../store';
+import { InMemoryStore } from '../store';
+
+const store = new InMemoryStore();
 
 const webhookSecret = process.env.CLERK_WEBHOOK_SECRET || '';
 

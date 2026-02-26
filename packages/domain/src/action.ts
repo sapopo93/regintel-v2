@@ -176,8 +176,8 @@ export function verifyAction(
   const updatedAction: Action = {
     ...action,
     status: verification.approved ? ActionStatus.VERIFIED_CLOSED : ActionStatus.REJECTED,
-    closedAt: verification.approved ? new Date().toISOString() : undefined,
-    closedBy: verification.approved ? verification.verifiedBy : undefined,
+    completedAt: verification.approved ? new Date().toISOString() : action.completedAt,
+    verifiedAt: verification.approved ? new Date().toISOString() : action.verifiedAt,
   };
 
   return {
@@ -242,8 +242,8 @@ export function validateActionState(action: Action): { valid: boolean; errors: s
       break;
 
     case ActionStatus.VERIFIED_CLOSED:
-      if (!action.closedAt || !action.closedBy) {
-        errors.push('VERIFIED_CLOSED actions must have closedAt and closedBy');
+      if (!action.verifiedAt) {
+        errors.push('VERIFIED_CLOSED actions must have verifiedAt');
       }
       break;
 

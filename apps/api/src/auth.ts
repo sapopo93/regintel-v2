@@ -92,7 +92,9 @@ async function resolveClerkAuth(token: string): Promise<AuthContext | null> {
     const user = await clerkClient.users.getUser(decoded.sub);
 
     // Extract tenant from organization (or fallback to user ID)
-    const orgMembership = user.organizationMemberships?.[0];
+    const userRecord = user as unknown as Record<string, unknown>;
+    const orgMemberships = userRecord.organizationMemberships as Array<{ organization: { id: string } }> | undefined;
+    const orgMembership = orgMemberships?.[0];
     const tenantId = orgMembership?.organization.id || user.id;
 
     // Get role from user public metadata (default to PROVIDER)
