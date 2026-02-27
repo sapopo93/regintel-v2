@@ -22,7 +22,15 @@ const isPublicRoute = createRouteMatcher([
 ]);
 
 // In E2E test mode, bypass all auth
-function testMiddleware(_request: NextRequest) {
+function testMiddleware(request: NextRequest) {
+  // Warn in server logs if E2E bypass is active on a non-localhost origin
+  const host = request.headers.get('host') || '';
+  if (!host.includes('localhost') && !host.includes('127.0.0.1')) {
+    console.warn(
+      `[SECURITY WARNING] E2E_TEST_MODE=true but request is from non-localhost host: ${host}. ` +
+      'Authentication is BYPASSED. Set E2E_TEST_MODE=false in production.'
+    );
+  }
   return NextResponse.next();
 }
 

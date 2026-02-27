@@ -547,7 +547,28 @@ export function createApp(): express.Express {
   }
 
   app.get('/health', (_req, res) => {
-    res.status(200).json({ status: 'ok' });
+    const isE2EMode = process.env.E2E_TEST_MODE === 'true';
+    const hasCqcKey = !!process.env.CQC_API_KEY;
+    const hasClerkKey = !!process.env.CLERK_SECRET_KEY;
+    const hasTestToken = !!process.env.CLERK_TEST_TOKEN;
+    const storeType = process.env.USE_DB_STORE !== 'false' ? 'prisma' : 'memory';
+
+    const warnings: string[] = [];
+    if (isE2EMode) warnings.push('auth_bypassed');
+    if (hasTestToken) warnings.push('demo_tokens_active');
+    if (!hasCqcKey) warnings.push('no_cqc_api_key');
+    if (storeType === 'memory') warnings.push('in_memory_store');
+
+    res.status(200).json({
+      status: 'ok',
+      config: {
+        auth: isE2EMode ? 'bypassed' : hasClerkKey ? 'clerk' : 'legacy_tokens',
+        store: storeType,
+        cqcApi: hasCqcKey ? 'configured' : 'missing',
+        nodeEnv: process.env.NODE_ENV || 'not_set',
+      },
+      warnings: warnings.length > 0 ? warnings : undefined,
+    });
   });
 
   // Clerk webhook (MUST be before express.json() and authMiddleware)
