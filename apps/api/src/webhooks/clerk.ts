@@ -9,8 +9,6 @@ import type { Request, Response } from 'express';
 import { Webhook } from 'svix';
 import { InMemoryStore } from '../store';
 
-const store = new InMemoryStore();
-
 const webhookSecret = process.env.CLERK_WEBHOOK_SECRET || '';
 
 interface ClerkWebhookEvent {
@@ -37,7 +35,8 @@ interface ClerkWebhookEvent {
  */
 export async function handleClerkWebhook(
   req: Request,
-  res: Response
+  res: Response,
+  store: InMemoryStore
 ): Promise<void> {
   // Verify webhook signature
   const payload = JSON.stringify(req.body);

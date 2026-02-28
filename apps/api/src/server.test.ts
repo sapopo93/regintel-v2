@@ -9,7 +9,7 @@ beforeAll(() => {
   process.env.FOUNDER_TOKEN = TEST_TOKEN;
 });
 
-const app = createApp();
+const { app } = createApp();
 
 async function createProvider(providerName = 'Acme Care') {
   const response = await request(app)

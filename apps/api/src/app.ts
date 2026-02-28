@@ -481,7 +481,7 @@ function buildDomainSession(session: {
   };
 }
 
-export function createApp(): express.Express {
+export function createApp(): { app: express.Express; store: InMemoryStore } {
   const app = express();
 
   // CORS configuration: production domains always allowed, plus env overrides
@@ -573,7 +573,7 @@ export function createApp(): express.Express {
 
   // Clerk webhook (MUST be before express.json() and authMiddleware)
   // Webhooks need raw body for signature verification
-  app.post('/webhooks/clerk', express.json(), handleClerkWebhook);
+  app.post('/webhooks/clerk', express.json(), (req, res) => handleClerkWebhook(req, res, store));
 
   // Apply JSON parsing to all other routes
   app.use(express.json({ limit: '10mb' }));
@@ -2397,5 +2397,5 @@ export function createApp(): express.Express {
     }
   }
 
-  return app;
+  return { app, store };
 }

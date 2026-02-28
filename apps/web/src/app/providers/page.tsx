@@ -31,6 +31,10 @@ export default function ProvidersPage() {
       .then((response) => {
         validateConstitutionalRequirements(response, { strict: true });
         setData(response);
+        // If the org already has a provider, skip the setup screen and go straight to their dashboard
+        if (response.providers.length === 1) {
+          router.replace(`/facilities?provider=${response.providers[0].providerId}`);
+        }
       })
       .catch((err) => {
         // Check if it's an auth error (401/403)

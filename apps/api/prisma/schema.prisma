@@ -70,6 +70,52 @@ enum ReportingDomain {
   @@map("reporting_domain")
 }
 
+model Provider {
+  id            String   @id                     // scopeKey format: "tenantId:provider-N"
+  tenantId      String   @map("tenant_id")
+  providerName  String   @map("provider_name")
+  orgRef        String?  @map("org_ref")
+  asOf          String
+  prsState      String   @map("prs_state")       @default("STABLE")
+  registeredBeds Int     @map("registered_beds") @default(0)
+  serviceTypes  String[] @map("service_types")
+  createdAt     String   @map("created_at")
+  createdBy     String   @map("created_by")
+
+  @@index([tenantId])
+  @@map("providers")
+}
+
+model Facility {
+  id                    String  @id
+  tenantId              String  @map("tenant_id")
+  providerId            String  @map("provider_id")
+  facilityName          String  @map("facility_name")
+  addressLine1          String  @map("address_line1")
+  townCity              String  @map("town_city")
+  postcode              String
+  address               String
+  cqcLocationId         String  @map("cqc_location_id")
+  serviceType           String  @map("service_type")
+  capacity              Int?
+  facilityHash          String  @map("facility_hash")
+  dataSource            String  @map("data_source")           @default("MANUAL")
+  cqcSyncedAt           String? @map("cqc_synced_at")
+  latestRating          String? @map("latest_rating")
+  latestRatingDate      String? @map("latest_rating_date")
+  inspectionStatus      String  @map("inspection_status")    @default("NEVER_INSPECTED")
+  lastReportScrapedAt   String? @map("last_report_scraped_at")
+  lastScrapedReportDate String? @map("last_scraped_report_date")
+  lastScrapedReportUrl  String? @map("last_scraped_report_url")
+  createdAt             String  @map("created_at")
+  createdBy             String  @map("created_by")
+  asOf                  String
+
+  @@index([tenantId])
+  @@index([providerId])
+  @@map("facilities")
+}
+
 model ProviderContextSnapshot {
   id                 String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId           String                  @map("tenant_id") @db.Uuid

@@ -55,8 +55,19 @@ function validateStartupConfig() {
 }
 
 validateStartupConfig();
-const app = createApp();
+const { app, store } = createApp();
 
-app.listen(PORT, () => {
-  console.log(`\nRegIntel API server running on http://localhost:${PORT}\n`);
+async function start() {
+  // Wait for PrismaStore to hydrate providers/facilities from DB before accepting traffic
+  if ('waitForReady' in store && typeof (store as any).waitForReady === 'function') {
+    await (store as any).waitForReady();
+  }
+  app.listen(PORT, () => {
+    console.log(`\nRegIntel API server running on http://localhost:${PORT}\n`);
+  });
+}
+
+start().catch((err) => {
+  console.error('[STARTUP] Fatal error during startup:', err);
+  process.exit(1);
 });
