@@ -6,7 +6,11 @@ const TEST_TOKEN = 'test-founder-token';
 const AUTH_HEADER = { Authorization: `Bearer ${TEST_TOKEN}` };
 
 beforeAll(() => {
-  process.env.FOUNDER_TOKEN = TEST_TOKEN;
+  process.env.CLERK_TEST_TOKEN = TEST_TOKEN;
+  process.env.CLERK_TEST_TENANT_ID = 'test-tenant';
+  process.env.CLERK_TEST_ROLE = 'FOUNDER';
+  process.env.CLERK_TEST_USER_ID = 'test-user';
+  process.env.E2E_TEST_MODE = 'true';
 });
 
 const app = createApp();

@@ -31,8 +31,8 @@ export default defineConfig({
       env: {
         ...process.env,
         NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001',
-        NEXT_PUBLIC_FOUNDER_TOKEN: process.env.NEXT_PUBLIC_FOUNDER_TOKEN || founderToken,
-        NEXT_PUBLIC_PROVIDER_TOKEN: process.env.NEXT_PUBLIC_PROVIDER_TOKEN || providerToken,
+        NEXT_PUBLIC_E2E_TEST_MODE: 'true',
+        NEXT_PUBLIC_CLERK_TEST_TOKEN: process.env.NEXT_PUBLIC_CLERK_TEST_TOKEN || founderToken,
         E2E_TEST_MODE: 'true', // Bypass Clerk middleware for E2E tests
       },
     },
@@ -43,9 +43,13 @@ export default defineConfig({
       cwd: '../api',
       env: {
         ...process.env,
+        CLERK_TEST_TOKEN: founderToken,
+        CLERK_TEST_TENANT_ID: 'demo',
+        CLERK_TEST_ROLE: 'FOUNDER',
+        CLERK_TEST_USER_ID: 'e2e-test-user',
         FOUNDER_TOKEN: founderToken,
         PROVIDER_TOKEN: providerToken,
-        E2E_TEST_MODE: 'true', // Disable rate limiting for E2E tests
+        E2E_TEST_MODE: 'true',
         BLOB_STORAGE_PATH: '/tmp/regintel-test-blobs', // Use temp dir for tests
       },
     },
