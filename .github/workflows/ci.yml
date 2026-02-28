@@ -166,13 +166,18 @@ jobs:
         run: pnpm --dir apps/web install --frozen-lockfile
 
       - name: Install Playwright browsers
-        run: pnpm --dir apps/web playwright install --with-deps
+        run: cd apps/web && pnpm exec playwright install --with-deps
 
       - name: Run Playwright tests
-        run: pnpm playwright test
+        run: cd apps/web && pnpm exec playwright test
         env:
+          CLERK_TEST_TOKEN: test-founder-token
+          CLERK_TEST_TENANT_ID: demo
+          CLERK_TEST_ROLE: FOUNDER
+          CLERK_TEST_USER_ID: e2e-test-user
+          E2E_TEST_MODE: 'true'
+          NEXT_PUBLIC_E2E_TEST_MODE: 'true'
+          NEXT_PUBLIC_CLERK_TEST_TOKEN: test-founder-token
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:3001
           FOUNDER_TOKEN: test-founder-token
           PROVIDER_TOKEN: test-provider-token
-          NEXT_PUBLIC_API_BASE_URL: http://localhost:3001
-          NEXT_PUBLIC_FOUNDER_TOKEN: test-founder-token
-          NEXT_PUBLIC_PROVIDER_TOKEN: test-provider-token

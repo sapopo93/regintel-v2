@@ -189,10 +189,6 @@ phases:
           - "exports are deterministically ordered"
           - "exports NEVER include regulatory history findings"
           - "every page/row includes Topic Catalog + PRS Logic Profile versions + hashes"
-      - id: ui_status_from_api
-        command: "cd apps/web && pnpm test:e2e"
-        asserts:
-          - "Sidebar status displays provider.prsState from API"
     blocks_next_phase_on_failure: true
 
   phase10_ui:
@@ -240,18 +236,6 @@ phases:
           - "only counts and facts shown"
           - "severity uses text labels not colors"
           - "watermark text is fact-based"
-      - id: ui_menu_all_live
-        command: "cd apps/web && pnpm test:e2e"
-        asserts:
-          - "Overview menu calls /v1/providers/:id/overview"
-          - "Topics menu calls /v1/providers/:id/topics"
-          - "Mock Inspection menu calls /v1/providers/:id/mock-sessions"
-          - "Findings menu calls /v1/providers/:id/findings"
-          - "Evidence menu calls /v1/providers/:id/evidence"
-          - "Exports menu calls /v1/providers/:id/exports"
-          - "Audit Trail menu calls /v1/providers/:id/audit-trail"
-          - "All pages display constitutional metadata"
-          - "Sidebar status displays provider.prsState from API"
     blocks_next_phase_on_failure: true
 
   phase11_blue_ocean:
