@@ -8,27 +8,16 @@
 'use client';
 
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { useClerk } from '@clerk/nextjs';
 import { VersionBadge } from '../constitutional/VersionBadge';
 import { SIDEBAR_NAVIGATION } from '@/lib/constants';
 import styles from './Sidebar.module.css';
 
 const isE2EMode = process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true';
 
-/** Isolated so useClerk() is only called when ClerkProvider is mounted */
-function SignOutButton() {
-  const { signOut } = useClerk();
-  return (
-    <button
-      className={styles.signOutButton}
-      onClick={() => signOut({ redirectUrl: '/sign-in' })}
-      data-testid="sidebar-sign-out"
-    >
-      Sign Out
-    </button>
-  );
-}
+/** Lazy-loaded so Clerk client code is not bundled into the shared app layout chunk */
+const SignOutButton = dynamic(() => import('./SignOutButton'), { ssr: false });
 
 interface SidebarProps {
   providerName: string;
