@@ -37,8 +37,7 @@ export default function FacilitiesPage() {
 
   useEffect(() => {
     if (!providerId) {
-      setError('Provider ID is required');
-      setLoading(false);
+      router.replace('/providers');
       return;
     }
     apiClient.getFacilities(providerId || undefined)

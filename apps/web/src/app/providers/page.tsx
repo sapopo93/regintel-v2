@@ -31,10 +31,6 @@ export default function ProvidersPage() {
       .then((response) => {
         validateConstitutionalRequirements(response, { strict: true });
         setData(response);
-        // If the org already has a provider, skip the setup screen and go straight to their dashboard
-        if (response.providers.length === 1) {
-          router.replace(`/facilities?provider=${response.providers[0].providerId}`);
-        }
       })
       .catch((err) => {
         // Check if it's an auth error (401/403)
@@ -131,7 +127,7 @@ export default function ProvidersPage() {
           <div>
             <p className={styles.kicker}>Onboarding</p>
             <h1 className={styles.title}>Providers</h1>
-            <p className={styles.subtitle}>Create a provider and register facilities.</p>
+            <p className={styles.subtitle}>Create a provider and register locations.</p>
           </div>
         </div>
 
@@ -193,7 +189,7 @@ export default function ProvidersPage() {
                     onClick={() => handleOpenProvider(provider)}
                     data-testid={`provider-open-${provider.providerId}`}
                   >
-                    Manage Facilities
+                    Manage Locations
                   </button>
                 </div>
               ))}
