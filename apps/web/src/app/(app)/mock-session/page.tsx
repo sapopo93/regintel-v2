@@ -116,8 +116,8 @@ export default function MockSessionsPage() {
 
         <main className={styles.main}>
           <PageHeader
-            title="Mock Inspection Sessions"
-            subtitle="All simulation sessions"
+            title="Practice Inspections"
+            subtitle="All practice sessions"
             topicCatalogVersion={data.topicCatalogVersion}
             topicCatalogHash={data.topicCatalogHash}
             prsLogicVersion={data.prsLogicVersion}
@@ -135,7 +135,7 @@ export default function MockSessionsPage() {
             summary={(
               <div className={styles.sessionsList}>
                 {data.sessions.length === 0 ? (
-                  <div className={styles.empty}>No mock sessions found</div>
+                  <div className={styles.empty}>No practice sessions found</div>
                 ) : (
                   data.sessions.map((session) => (
                     <Link
@@ -164,10 +164,10 @@ export default function MockSessionsPage() {
             )}
             evidence={(
               <div className={styles.snapshotPanel}>
-                <h2 className={styles.sectionTitle}>Start a Mock Session</h2>
+                <h2 className={styles.sectionTitle}>Start a Practice Inspection</h2>
                 <div className={styles.formRow}>
                   <label className={styles.label}>
-                    Topic
+                    Inspection Area
                     <select
                       value={selectedTopic}
                       onChange={(event) => setSelectedTopic(event.target.value)}

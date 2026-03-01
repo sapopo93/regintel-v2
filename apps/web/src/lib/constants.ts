@@ -5,8 +5,9 @@
  * where applicable. Changes require coordination with domain layer.
  */
 
-// Must match packages/domain/src/readiness-export.ts
-export const SIMULATION_WATERMARK = 'READINESS (MOCK) — NOT REGULATORY HISTORY';
+// UI display watermark (plain English for providers)
+// Note: backend EXPORT_WATERMARK in packages/domain stays unchanged (tested by phase gates)
+export const SIMULATION_WATERMARK = 'PRACTICE INSPECTION — NOT AN OFFICIAL CQC RECORD';
 
 // Origin types from domain layer
 export const ORIGIN_TYPES = {
@@ -17,7 +18,7 @@ export const ORIGIN_TYPES = {
 
 // Origin badge labels for display
 export const ORIGIN_LABELS = {
-  SYSTEM_MOCK: 'MOCK',
+  SYSTEM_MOCK: 'Practice',
   ACTUAL_INSPECTION: 'CQC',
   SELF_IDENTIFIED: 'SELF',
 } as const;
@@ -49,10 +50,10 @@ export const DOMAINS = {
 export const SIDEBAR_NAVIGATION = [
   { id: 'providers', label: 'Providers', href: '/providers' },
   { id: 'overview', label: 'Overview', href: '/overview' },
-  { id: 'topics', label: 'Topics', href: '/topics' },
-  { id: 'mock-session', label: 'Mock Inspection', href: '/mock-session' },
+  { id: 'topics', label: 'Inspection Areas', href: '/topics' },
+  { id: 'mock-session', label: 'Practice Inspection', href: '/mock-session' },
   { id: 'findings', label: 'Findings', href: '/findings' },
-  { id: 'facilities', label: 'Facilities', href: '/facilities' },
+  { id: 'facilities', label: 'Locations', href: '/facilities' },
   { id: 'evidence', label: 'Evidence', href: '/evidence' },
   { id: 'exports', label: 'Exports', href: '/exports' },
   { id: 'audit', label: 'Audit Trail', href: '/audit' },

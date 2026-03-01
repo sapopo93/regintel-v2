@@ -148,8 +148,8 @@ describe('ui:mock-safety', () => {
       };
 
       const watermark = getSimulationWatermark(mockSessionProps);
-      expect(watermark).toBe('SIMULATION — NOT REGULATORY HISTORY');
-      expect(watermark).toContain('NOT REGULATORY HISTORY');
+      expect(watermark).toBe(SIMULATION_WATERMARK);
+      expect(watermark).toContain('NOT AN OFFICIAL CQC RECORD');
     });
 
     it('mock findings show origin=SYSTEM_MOCK badge', () => {
@@ -160,7 +160,7 @@ describe('ui:mock-safety', () => {
       };
 
       const badge = getOriginBadge(mockFinding);
-      expect(badge.text).toBe('MOCK');
+      expect(badge.text).toBe('Practice');
       expect(badge.variant).toBe('simulation');
     });
 
@@ -404,8 +404,8 @@ describe('ui:no-interpretation', () => {
 
     it('watermark text is fact-based', () => {
       // Watermark states facts, not interpretations
-      expect(SIMULATION_WATERMARK).toContain('MOCK');
-      expect(SIMULATION_WATERMARK).toContain('NOT REGULATORY HISTORY');
+      expect(SIMULATION_WATERMARK).toContain('PRACTICE');
+      expect(SIMULATION_WATERMARK).toContain('NOT AN OFFICIAL CQC RECORD');
 
       // No interpretive language like "safe", "risky", "good", "bad"
       expect(SIMULATION_WATERMARK).not.toMatch(/safe|risky|good|bad|warning/i);

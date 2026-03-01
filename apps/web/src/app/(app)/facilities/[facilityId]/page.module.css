@@ -164,3 +164,82 @@
 .empty {
   color: #6b7280;
 }
+
+.syncBanner {
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border: 1px solid #d1e9ff;
+  background: #eff8ff;
+  color: #1264a3;
+  border-left: 4px solid #1264a3;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.syncSection {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e6e8ec;
+}
+
+.syncButton {
+  border: 1px solid #1b1a17;
+  background: transparent;
+  color: #1b1a17;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.syncButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.syncMessage {
+  font-size: 13px;
+  color: #5a6470;
+}
+
+.scanStatusBanner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  background: #f4f6f8;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.scanStatusLabel {
+  color: #5a6470;
+}
+
+.scanStatusValue {
+  font-weight: 600;
+}
+
+.scanStatusHint {
+  color: #5a6470;
+}
+
+.evidenceCardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.downloadButton {
+  border: 1px solid #d9dde3;
+  background: transparent;
+  color: #1b1a17;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}

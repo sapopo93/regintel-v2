@@ -11,6 +11,7 @@ import {
   REPORTING_DOMAINS,
   DISCLOSURE_LAYERS,
   LAYER_ACTIONS,
+  SIMULATION_WATERMARK,
   type DisclosureLayer,
 } from './constants';
 
@@ -164,7 +165,7 @@ export function getSimulationWatermark(props: {
     props.origin === ORIGIN_TYPES.SYSTEM_MOCK ||
     props.reportingDomain === REPORTING_DOMAINS.MOCK_SIMULATION
   ) {
-    return 'SIMULATION — NOT REGULATORY HISTORY';
+    return SIMULATION_WATERMARK;
   }
 
   return null;

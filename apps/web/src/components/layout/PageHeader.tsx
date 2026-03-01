@@ -35,7 +35,7 @@ export function PageHeader({
       </div>
       {showIngestionBanner && (
         <div className={styles.ingestionBanner} data-testid="ingestion-status-banner">
-          <strong>Ingestion incomplete.</strong>
+          <strong>CQC data still loading.</strong>
           <span>
             Source {metadata.reportSource.type}:{metadata.reportSource.id} · Snapshot {metadata.snapshotId}.
             Mock fallback disabled.

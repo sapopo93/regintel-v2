@@ -52,7 +52,7 @@ test.describe('Mock Safety', () => {
       await page.waitForSelector('h1');
 
       const content = await page.content();
-      expect(content).toContain('READINESS (MOCK) — NOT REGULATORY HISTORY');
+      expect(content).toContain('PRACTICE INSPECTION — NOT AN OFFICIAL CQC RECORD');
 
       const frame = page.locator('[class*="frame"]').first();
       await expect(frame).toBeVisible();
@@ -122,8 +122,8 @@ test.describe('Mock Safety', () => {
 
     // Check for watermark text
     const content = await page.content();
-    expect(content).toMatch(/READINESS.*MOCK|watermark/i);
-    expect(content).toMatch(/NOT REGULATORY HISTORY/i);
+    expect(content).toMatch(/PRACTICE INSPECTION|watermark/i);
+    expect(content).toMatch(/NOT AN OFFICIAL CQC RECORD/i);
   });
 
   test('mock session pages have simulation context', async ({ page }) => {

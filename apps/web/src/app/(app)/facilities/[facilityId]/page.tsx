@@ -19,6 +19,7 @@ export const dynamic = "force-dynamic";
 
 import { useEffect, useState, FormEvent } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
+
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { MetadataBar } from '@/components/constitutional/MetadataBar';
@@ -34,6 +35,7 @@ export default function FacilityDetailPage() {
   // Decode URL-encoded params (colons in tenant:resource IDs get encoded as %3A)
   const facilityId = decodeURIComponent(params.facilityId as string);
   const providerId = searchParams.get('provider') ? decodeURIComponent(searchParams.get('provider')!) : null;
+  const cqcSyncing = searchParams.get('cqcSyncing') === 'true';
 
   const [facilityData, setFacilityData] = useState<FacilityDetailResponse | null>(null);
   const [evidenceData, setEvidenceData] = useState<EvidenceListResponse | null>(null);
@@ -172,7 +174,7 @@ export default function FacilityDetailPage() {
   if (loading) {
     return (
       <div className={styles.layout}>
-        <div className={styles.loading}>Loading facility...</div>
+        <div className={styles.loading}>Loading location...</div>
       </div>
     );
   }
@@ -180,7 +182,7 @@ export default function FacilityDetailPage() {
   if (error || !facilityData || !evidenceData) {
     return (
       <div className={styles.layout}>
-        <div className={styles.error}>Error: {error || 'Failed to load facility'}</div>
+        <div className={styles.error}>Error: {error || 'Failed to load location'}</div>
       </div>
     );
   }
@@ -228,8 +230,14 @@ export default function FacilityDetailPage() {
         />
 
         <section className={styles.section}>
+          {cqcSyncing && (
+            <div className={styles.syncBanner} data-testid="cqc-sync-banner">
+              Fetching latest CQC inspection report... this may take 30–60 seconds.
+            </div>
+          )}
+
           <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>Facility Details</h2>
+            <h2 className={styles.sectionTitle}>Location Details</h2>
             {providerId && (
               <button
                 className={styles.overviewButton}

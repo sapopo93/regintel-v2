@@ -107,7 +107,7 @@ test.describe('Menu Navigation', () => {
     const sessionsCall = apiCalls.find(url => url.includes(`/v1/providers/${providerId}/mock-sessions`));
     expect(sessionsCall).toBeTruthy();
 
-    await expect(page.locator('h1')).toContainText('Mock Inspection Sessions');
+    await expect(page.locator('h1')).toContainText('Practice Inspections');
   });
 
   test('Findings menu item calls /v1/providers/:id/findings', async ({ page }) => {

@@ -107,7 +107,7 @@ export default function MockSessionDetailPage() {
         <main className={styles.main}>
           <PageHeader
             title={`Session ${data.sessionId}`}
-            subtitle="Mock inspection session detail"
+            subtitle="Practice inspection session detail"
             topicCatalogVersion={data.topicCatalogVersion}
             topicCatalogHash={data.topicCatalogHash}
             prsLogicVersion={data.prsLogicVersion}
@@ -152,7 +152,7 @@ export default function MockSessionDetailPage() {
             )}
             evidence={(
               <div className={styles.section}>
-                <h2 className={styles.sectionTitle}>Provider Snapshot</h2>
+                <h2 className={styles.sectionTitle}>Provider Details</h2>
                 <dl className={styles.definitionList}>
                   <dt>Provider ID</dt>
                   <dd>{data.providerSnapshot.providerId}</dd>
@@ -160,10 +160,10 @@ export default function MockSessionDetailPage() {
                   <dt>Provider Name</dt>
                   <dd>{data.providerSnapshot.providerName}</dd>
 
-                  <dt>As Of</dt>
+                  <dt>Recorded on</dt>
                   <dd>{data.providerSnapshot.asOf}</dd>
 
-                  <dt>PRS State</dt>
+                  <dt>Regulatory Status</dt>
                   <dd>{data.providerSnapshot.prsState}</dd>
 
                   <dt>Registered Beds</dt>

@@ -16,6 +16,15 @@ interface MetadataBarProps extends ConstitutionalMetadata {
   compact?: boolean;
 }
 
+const INGESTION_LABELS: Record<string, string> = {
+  INGESTION_INCOMPLETE: 'Loading CQC data...',
+  READY: 'CQC data loaded',
+};
+
+const MODE_LABELS: Record<string, string> = {
+  MOCK: 'Practice',
+};
+
 export function MetadataBar({
   topicCatalogVersion,
   topicCatalogHash,
@@ -29,6 +38,8 @@ export function MetadataBar({
   ingestionStatus,
   compact = false,
 }: MetadataBarProps) {
+  const ingestionLabel = INGESTION_LABELS[ingestionStatus] ?? ingestionStatus;
+  const modeLabel = MODE_LABELS[mode] ?? mode;
   if (compact) {
     // Extract first 6 chars of hash for compact display
     const tcHashPrefix = topicCatalogHash.replace('sha256:', '').substring(0, 6);
@@ -37,7 +48,7 @@ export function MetadataBar({
     return (
       <div className={styles.containerCompact}>
         <DomainBadge domain={domain} />
-        <span className={styles.frozenLabel}>• Inspection Snapshot (Frozen)</span>
+        <span className={styles.frozenLabel}>• Compliance Record (Locked)</span>
         <TimestampDisplay timestamp={snapshotTimestamp} label="As-of" dateOnly />
         <span className={styles.separator}>|</span>
         <span className={styles.version} title={`Topic Catalog: ${topicCatalogHash}\nPRS Logic: ${prsLogicHash}`}>
@@ -63,9 +74,9 @@ export function MetadataBar({
       </div>
       <div className={styles.row}>
         <span className={styles.metaLabel}>Mode</span>
-        <span className={styles.metaValue}>{mode}</span>
-        <span className={styles.metaLabel}>Ingestion</span>
-        <span className={styles.metaValue}>{ingestionStatus}</span>
+        <span className={styles.metaValue}>{modeLabel}</span>
+        <span className={styles.metaLabel}>Data Status</span>
+        <span className={styles.metaValue}>{ingestionLabel}</span>
       </div>
       <div className={styles.row}>
         <span className={styles.metaLabel}>Snapshot ID</span>

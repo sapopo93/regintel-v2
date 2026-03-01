@@ -79,14 +79,14 @@ export default function FacilitiesPage() {
 
       <main className={styles.main}>
         {loading ? (
-          <div className={styles.loading}>Loading facilities...</div>
+          <div className={styles.loading}>Loading locations...</div>
         ) : error || !data ? (
-          <div className={styles.error}>Error: {error || 'Failed to load facilities'}</div>
+          <div className={styles.error}>Error: {error || 'Failed to load locations'}</div>
         ) : (
           <>
             <PageHeader
-              title="Facilities"
-              subtitle={`${data.totalCount} facilities registered`}
+              title="Locations"
+              subtitle={`${data.totalCount} locations registered`}
               topicCatalogVersion={data.topicCatalogVersion}
               topicCatalogHash={data.topicCatalogHash}
               prsLogicVersion={data.prsLogicVersion}
@@ -120,14 +120,14 @@ export default function FacilitiesPage() {
                 onClick={handleAddFacility}
                 data-testid="add-facility-button"
               >
-                Add Facility
+                Register a Location
               </button>
             </div>
 
             {data.facilities.length === 0 ? (
               <div className={styles.empty}>
-                <p>No facilities registered yet.</p>
-                <p>Click "Add Facility" to register your first facility.</p>
+                <p>No locations registered yet.</p>
+                <p>Click "Register a Location" to register your first location.</p>
               </div>
             ) : (
               <div className={styles.facilitiesList}>
