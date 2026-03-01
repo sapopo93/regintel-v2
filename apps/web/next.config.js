@@ -7,9 +7,13 @@ const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:300
 
 // Clerk CSP domains (per https://clerk.com/docs/guides/secure/best-practices/csp-headers)
 // These domains are required for Clerk authentication to function properly
+// Set CLERK_DOMAIN env var if using a Clerk custom domain (e.g. clerk.regintelia.co.uk)
+const clerkCustomDomain = process.env.CLERK_DOMAIN ? [`https://${process.env.CLERK_DOMAIN}`] : [];
+
 const clerkDomains = {
   // Script sources - Clerk JS SDK and Cloudflare Turnstile CAPTCHA
   scriptSrc: [
+    ...clerkCustomDomain,
     'https://*.clerk.accounts.dev',  // Dev Clerk JS
     'https://*.clerk.com',           // Production Clerk JS
     'https://challenges.cloudflare.com', // Turnstile CAPTCHA
@@ -17,6 +21,7 @@ const clerkDomains = {
   ],
   // Connect sources - Clerk API calls and telemetry
   connectSrc: [
+    ...clerkCustomDomain,
     'https://*.clerk.accounts.dev',  // Dev Clerk API (FAPI)
     'https://*.clerk.com',           // Production Clerk API
     'https://clerk-telemetry.com',   // Clerk telemetry
@@ -25,6 +30,7 @@ const clerkDomains = {
   ],
   // Frame sources - Clerk UI iframes and Turnstile
   frameSrc: [
+    ...clerkCustomDomain,
     'https://*.clerk.accounts.dev',  // Dev Clerk iframes
     'https://*.clerk.com',           // Production Clerk iframes
     'https://challenges.cloudflare.com', // Turnstile CAPTCHA iframe
