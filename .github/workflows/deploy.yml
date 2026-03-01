@@ -1,0 +1,32 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy Web
+    runs-on: ubuntu-latest
+    # Add "needs: [tests, phase-gates]" in ci.yml if you want CI to gate deployment
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          # DEPLOY_HOST: server IP or hostname (e.g. regintelia.co.uk or 1.2.3.4)
+          host: ${{ secrets.DEPLOY_HOST }}
+          # DEPLOY_USER: SSH username on the server (e.g. ubuntu or deploy)
+          username: ${{ secrets.DEPLOY_USER }}
+          # DEPLOY_SSH_KEY: private key contents (~/.ssh/id_rsa on the server)
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            # DEPLOY_PATH: absolute path to the repo on the server
+            # e.g. /home/ubuntu/regintel-v2
+            cd ${{ secrets.DEPLOY_PATH }}
+            git pull origin main
+            pnpm install --frozen-lockfile
+            pnpm --dir apps/web build
+            # Restart processes — pm2 reload is zero-downtime; falls through if pm2 not found
+            pm2 reload regintel-web 2>/dev/null || true
+            pm2 reload regintel-api 2>/dev/null || true

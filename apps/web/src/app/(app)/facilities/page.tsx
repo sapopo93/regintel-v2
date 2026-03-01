@@ -36,10 +36,6 @@ export default function FacilitiesPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!providerId) {
-      router.replace('/providers');
-      return;
-    }
     apiClient.getFacilities(providerId || undefined)
       .then((response) => {
         validateConstitutionalRequirements(response, { strict: true });
@@ -50,7 +46,8 @@ export default function FacilitiesPage() {
   }, [providerId]);
 
   const handleAddFacility = () => {
-    router.push(`/facilities/new?provider=${providerId}`);
+    const query = providerId ? `?provider=${providerId}` : '';
+    router.push(`/facilities/new${query}`);
   };
 
   const handleViewFacility = (facilityId: string) => {

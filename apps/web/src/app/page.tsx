@@ -6,7 +6,7 @@ import LandingPage from '@/components/marketing/LandingPage';
  * Root page - shows landing page or redirects authenticated users
  *
  * - E2E test mode: redirect to /providers
- * - Signed in: redirect to /providers (user selects/creates a provider first)
+ * - Signed in: redirect to /overview with default provider/facility pre-selected
  * - Not signed in: show landing page
  */
 export default async function HomePage() {
@@ -20,8 +20,10 @@ export default async function HomePage() {
   const { userId } = await auth();
 
   if (userId) {
-    // User is signed in - go to provider selection (providers page carries ?provider= into /facilities)
-    redirect('/providers');
+    // User is signed in - go directly to overview with default provider/facility
+    const pid = encodeURIComponent(`${userId}:provider-1`);
+    const fid = encodeURIComponent(`${userId}:facility-1`);
+    redirect(`/overview?provider=${pid}&facility=${fid}`);
   }
 
   // User is not signed in - show landing page
