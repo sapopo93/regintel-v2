@@ -9,9 +9,10 @@
 
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { VersionBadge } from '../constitutional/VersionBadge';
 import { SIDEBAR_NAVIGATION } from '@/lib/constants';
+import { useProviderContext } from '@/lib/hooks/useProviderContext';
 import styles from './Sidebar.module.css';
 
 const PRS_LABELS: Record<string, string> = {
@@ -63,9 +64,7 @@ export function Sidebar({
   totalTopics,
 }: SidebarProps) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const providerId = searchParams.get('provider');
-  const facilityId = searchParams.get('facility');
+  const { providerId, facilityId } = useProviderContext();
   const rawStatus = status?.trim() || '';
   const statusLabel = rawStatus ? (PRS_LABELS[rawStatus] ?? rawStatus) : 'STATUS UNAVAILABLE';
   const formattedDate = formatSnapshotDate(snapshotDate);

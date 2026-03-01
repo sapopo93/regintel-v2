@@ -20,6 +20,7 @@ export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useProviderContext } from '@/lib/hooks/useProviderContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DisclosurePanel } from '@/components/disclosure/DisclosurePanel';
@@ -32,9 +33,8 @@ import { validateConstitutionalRequirements } from '@/lib/validators';
 import styles from './page.module.css';
 
 export default function OverviewPage() {
-  const searchParams = useSearchParams();
-  const providerId = searchParams.get('provider');
-  const facilityId = searchParams.get('facility');
+  useSearchParams(); // keep for Next.js dynamic rendering
+  const { providerId, facilityId } = useProviderContext();
 
   const [data, setData] = useState<ProviderOverviewResponse | null>(null);
   const [loading, setLoading] = useState(true);
