@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js",
+    "start": "tsx src/server.ts",
     "test": "vitest run",
     "test:integration": "vitest run src/*.integration.test.ts",
     "db:generate": "prisma generate",
