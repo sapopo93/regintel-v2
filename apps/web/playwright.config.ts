@@ -5,6 +5,7 @@ const providerToken = process.env.PROVIDER_TOKEN || 'test-provider-token';
 
 export default defineConfig({
   testDir: './e2e',
+  globalSetup: './e2e/global-setup.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -41,6 +42,7 @@ export default defineConfig({
       url: 'http://localhost:3001/health',
       reuseExistingServer: !process.env.CI,
       cwd: '../api',
+      timeout: 15_000,
       env: {
         ...process.env,
         FOUNDER_TOKEN: founderToken,

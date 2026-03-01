@@ -39,152 +39,159 @@ test.describe('Progressive Disclosure', () => {
   test('finding detail starts with Summary visible', async ({ page }) => {
     await page.goto(`${BASE_URL}/findings?provider=${providerId}&facility=${facilityId}`);
 
-    await page.waitForTimeout(1000);
+    await page.waitForResponse(
+      r => r.url().includes('/v1/providers/') && r.url().includes('/findings'),
+      { timeout: 10000 }
+    );
 
-    // Click first finding
     const firstFinding = page.locator('[class*="findingCard"]').first();
+    await expect(firstFinding).toBeVisible({ timeout: 10000 });
+    await firstFinding.click();
 
-    if (await firstFinding.isVisible()) {
-      await firstFinding.click();
+    await page.waitForSelector('[class*="disclosurePanel"], [class*="summary"]', { timeout: 5000 });
 
-      await page.waitForTimeout(500);
-
-      // Summary section should be visible
-      const summarySection = page.locator('text=/Summary/i').first();
-      await expect(summarySection).toBeVisible();
-    }
+    // Summary section should be visible
+    const summarySection = page.locator('text=/Summary/i').first();
+    await expect(summarySection).toBeVisible();
   });
 
   test('Evidence layer is initially hidden', async ({ page }) => {
     await page.goto(`${BASE_URL}/findings?provider=${providerId}&facility=${facilityId}`);
 
-    await page.waitForTimeout(1000);
+    await page.waitForResponse(
+      r => r.url().includes('/v1/providers/') && r.url().includes('/findings'),
+      { timeout: 10000 }
+    );
 
     const firstFinding = page.locator('[class*="findingCard"]').first();
+    await expect(firstFinding).toBeVisible({ timeout: 10000 });
+    await firstFinding.click();
 
-    if (await firstFinding.isVisible()) {
-      await firstFinding.click();
+    await page.waitForSelector('[class*="disclosurePanel"], [class*="summary"]', { timeout: 5000 });
 
-      await page.waitForTimeout(500);
+    // Evidence details should be hidden initially
+    const evidenceDetails = page.locator('[class*="evidenceDetails"]').first();
+    const isVisible = await evidenceDetails.isVisible().catch(() => false);
 
-      // Evidence details should be hidden initially
-      const evidenceDetails = page.locator('[class*="evidenceDetails"]').first();
-      const isVisible = await evidenceDetails.isVisible().catch(() => false);
-
-      expect(isVisible).toBe(false);
-    }
+    expect(isVisible).toBe(false);
   });
 
   test('Trace layer is initially hidden', async ({ page }) => {
     await page.goto(`${BASE_URL}/findings?provider=${providerId}&facility=${facilityId}`);
 
-    await page.waitForTimeout(1000);
+    await page.waitForResponse(
+      r => r.url().includes('/v1/providers/') && r.url().includes('/findings'),
+      { timeout: 10000 }
+    );
 
     const firstFinding = page.locator('[class*="findingCard"]').first();
+    await expect(firstFinding).toBeVisible({ timeout: 10000 });
+    await firstFinding.click();
 
-    if (await firstFinding.isVisible()) {
-      await firstFinding.click();
+    await page.waitForSelector('[class*="disclosurePanel"], [class*="summary"]', { timeout: 5000 });
 
-      await page.waitForTimeout(500);
+    // Trace content should not be visible initially
+    const traceSection = page.locator('text=/WHY THIS FINDING EXISTS/i').first();
+    const isVisible = await traceSection.isVisible().catch(() => false);
 
-      // Trace content should not be visible initially
-      const traceSection = page.locator('text=/WHY THIS FINDING EXISTS/i').first();
-      const isVisible = await traceSection.isVisible().catch(() => false);
-
-      expect(isVisible).toBe(false);
-    }
+    expect(isVisible).toBe(false);
   });
 
   test('clicking Show Evidence reveals Evidence layer', async ({ page }) => {
     await page.goto(`${BASE_URL}/findings?provider=${providerId}&facility=${facilityId}`);
 
-    await page.waitForTimeout(1000);
+    await page.waitForResponse(
+      r => r.url().includes('/v1/providers/') && r.url().includes('/findings'),
+      { timeout: 10000 }
+    );
 
     const firstFinding = page.locator('[class*="findingCard"]').first();
+    await expect(firstFinding).toBeVisible({ timeout: 10000 });
+    await firstFinding.click();
 
-    if (await firstFinding.isVisible()) {
-      await firstFinding.click();
+    await page.waitForSelector('[class*="disclosurePanel"], [class*="summary"]', { timeout: 5000 });
 
-      await page.waitForTimeout(500);
+    // Look for Show Evidence button
+    const showEvidenceBtn = page.locator('button:has-text("Show Evidence")').first();
 
-      // Look for Show Evidence button
-      const showEvidenceBtn = page.locator('button:has-text("Show Evidence")').first();
+    if (await showEvidenceBtn.isVisible()) {
+      await showEvidenceBtn.click();
 
-      if (await showEvidenceBtn.isVisible()) {
-        await showEvidenceBtn.click();
+      await page.waitForSelector('[class*="evidenceDetails"]', { timeout: 5000 });
 
-        await page.waitForTimeout(300);
-
-        // Evidence details should now be visible
-        const evidenceDetails = page.locator('[class*="evidenceDetails"]').first();
-        await expect(evidenceDetails).toBeVisible();
-      }
+      // Evidence details should now be visible
+      const evidenceDetails = page.locator('[class*="evidenceDetails"]').first();
+      await expect(evidenceDetails).toBeVisible();
     }
   });
 
   test('Trace button only appears after Evidence is shown', async ({ page }) => {
     await page.goto(`${BASE_URL}/findings?provider=${providerId}&facility=${facilityId}`);
 
-    await page.waitForTimeout(1000);
+    await page.waitForResponse(
+      r => r.url().includes('/v1/providers/') && r.url().includes('/findings'),
+      { timeout: 10000 }
+    );
 
     const firstFinding = page.locator('[class*="findingCard"]').first();
+    await expect(firstFinding).toBeVisible({ timeout: 10000 });
+    await firstFinding.click();
 
-    if (await firstFinding.isVisible()) {
-      await firstFinding.click();
+    await page.waitForSelector('[class*="disclosurePanel"], [class*="summary"]', { timeout: 5000 });
 
-      await page.waitForTimeout(500);
+    // Initially, Show Trace button should not exist
+    const showTraceBtn = page.locator('button:has-text("Show Trace")');
+    const initialCount = await showTraceBtn.count();
 
-      // Initially, Show Trace button should not exist
-      const showTraceBtn = page.locator('button:has-text("Show Trace")');
-      const initialCount = await showTraceBtn.count();
+    expect(initialCount).toBe(0);
 
-      expect(initialCount).toBe(0);
+    // Show evidence first
+    const showEvidenceBtn = page.locator('button:has-text("Show Evidence")').first();
 
-      // Show evidence first
-      const showEvidenceBtn = page.locator('button:has-text("Show Evidence")').first();
+    if (await showEvidenceBtn.isVisible()) {
+      await showEvidenceBtn.click();
 
-      if (await showEvidenceBtn.isVisible()) {
-        await showEvidenceBtn.click();
+      await page.waitForSelector('[class*="evidenceDetails"]', { timeout: 5000 });
 
-        await page.waitForTimeout(300);
-
-        // Now Show Trace button should appear
-        const traceButtonCount = await showTraceBtn.count();
-        expect(traceButtonCount).toBeGreaterThan(0);
-      }
+      // Now Show Trace button should appear
+      const traceButtonCount = await showTraceBtn.count();
+      expect(traceButtonCount).toBeGreaterThan(0);
     }
   });
 
   test('Trace shows deterministic hash', async ({ page }) => {
     await page.goto(`${BASE_URL}/findings?provider=${providerId}&facility=${facilityId}`);
 
-    await page.waitForTimeout(1000);
+    await page.waitForResponse(
+      r => r.url().includes('/v1/providers/') && r.url().includes('/findings'),
+      { timeout: 10000 }
+    );
 
     const firstFinding = page.locator('[class*="findingCard"]').first();
+    await expect(firstFinding).toBeVisible({ timeout: 10000 });
+    await firstFinding.click();
 
-    if (await firstFinding.isVisible()) {
-      await firstFinding.click();
+    await page.waitForSelector('[class*="disclosurePanel"], [class*="summary"]', { timeout: 5000 });
 
-      await page.waitForTimeout(500);
+    // Show evidence
+    const showEvidenceBtn = page.locator('button:has-text("Show Evidence")').first();
 
-      // Show evidence
-      const showEvidenceBtn = page.locator('button:has-text("Show Evidence")').first();
+    if (await showEvidenceBtn.isVisible()) {
+      await showEvidenceBtn.click();
 
-      if (await showEvidenceBtn.isVisible()) {
-        await showEvidenceBtn.click();
-        await page.waitForTimeout(300);
+      await page.waitForSelector('[class*="evidenceDetails"]', { timeout: 5000 });
 
-        // Show trace
-        const showTraceBtn = page.locator('button:has-text("Show Trace")').first();
+      // Show trace
+      const showTraceBtn = page.locator('button:has-text("Show Trace")').first();
 
-        if (await showTraceBtn.isVisible()) {
-          await showTraceBtn.click();
-          await page.waitForTimeout(300);
+      if (await showTraceBtn.isVisible()) {
+        await showTraceBtn.click();
 
-          // Check for hash in trace section
-          const content = await page.content();
-          expect(content).toMatch(/sha256:|Deterministic Hash/i);
-        }
+        await page.waitForSelector('text=/sha256:|Deterministic Hash/i', { timeout: 5000 });
+
+        // Check for hash in trace section
+        const content = await page.content();
+        expect(content).toMatch(/sha256:|Deterministic Hash/i);
       }
     }
   });
