@@ -13,9 +13,10 @@ import type { NextRequest } from 'next/server';
 
 const isE2EMode = process.env.E2E_TEST_MODE === 'true';
 
-// Public routes must be explicitly defined to avoid auth loops on /sign-in and /sign-up
+// Public routes — Clerk skips auth enforcement (and may skip token verification)
+// NOTE: '/' is intentionally excluded so that auth() in page.tsx returns the userId
+// for signed-in users. The root page handles unauthenticated users itself (shows landing page).
 const isPublicRoute = createRouteMatcher([
-  '/',
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/api/webhooks(.*)',
@@ -38,6 +39,11 @@ function testMiddleware(request: NextRequest) {
 export default isE2EMode
   ? testMiddleware
   : clerkMiddleware(async (auth, request) => {
+      // Root path: accessible to unauthenticated users (shows landing page),
+      // but NOT listed as public so Clerk still sets up auth context.
+      // This allows auth() in page.tsx to return the userId and redirect signed-in users.
+      if (request.nextUrl.pathname === '/') return;
+
       if (!isPublicRoute(request)) {
         await auth.protect();
       }

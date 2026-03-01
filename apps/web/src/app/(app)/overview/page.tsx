@@ -41,12 +41,15 @@ export default function OverviewPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Params may be null on first render before hydration — wait silently rather than
+    // showing an error that will flash away once the real URL params are available.
     if (!providerId || !facilityId) {
-      setError('Provider and facility are required');
       setLoading(false);
       return;
     }
 
+    setLoading(true);
+    setError(null);
     apiClient.getProviderOverview(providerId, facilityId)
       .then((response) => {
         validateConstitutionalRequirements(response, { strict: true });
@@ -56,7 +59,7 @@ export default function OverviewPage() {
       .finally(() => setLoading(false));
   }, [providerId, facilityId]);
 
-  if (loading) {
+  if (loading || (!data && !error)) {
     return (
       <div className={styles.layout}>
         <div className={styles.loading}>Loading...</div>
