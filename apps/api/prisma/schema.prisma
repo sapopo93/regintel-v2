@@ -75,7 +75,7 @@ model Provider {
   tenantId      String   @map("tenant_id")
   providerName  String   @map("provider_name")
   orgRef        String?  @map("org_ref")
-  asOf          String
+  asOf          String   @map("as_of")
   prsState      String   @map("prs_state")       @default("STABLE")
   registeredBeds Int     @map("registered_beds") @default(0)
   serviceTypes  String[] @map("service_types")
@@ -109,7 +109,7 @@ model Facility {
   lastScrapedReportUrl  String? @map("last_scraped_report_url")
   createdAt             String  @map("created_at")
   createdBy             String  @map("created_by")
-  asOf                  String
+  asOf                  String  @map("as_of")
 
   @@index([tenantId])
   @@index([providerId])
