@@ -36,10 +36,7 @@ export function PageHeader({
       {showIngestionBanner && (
         <div className={styles.ingestionBanner} data-testid="ingestion-status-banner">
           <strong>CQC data still loading.</strong>
-          <span>
-            Source {metadata.reportSource.type}:{metadata.reportSource.id} · Snapshot {metadata.snapshotId}.
-            Mock fallback disabled.
-          </span>
+          <span>CQC inspection data not yet available. Retrieve the latest published report to continue.</span>
         </div>
       )}
       <MetadataBar {...metadata} compact />

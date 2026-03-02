@@ -122,7 +122,7 @@ export default function EvidencePage() {
                         <dd>{record.evidenceRecordId}</dd>
 
                         <dt>Blob Hash</dt>
-                        <dd className={styles.hash}>{record.blobHash}</dd>
+                        <dd className={styles.hash}>{record.blobHash.substring(0, 24)}…</dd>
 
                         <dt>MIME Type</dt>
                         <dd>{record.mimeType}</dd>

@@ -19,6 +19,7 @@ import { SimulationFrame } from '@/components/mock/SimulationFrame';
 import { apiClient } from '@/lib/api/client';
 import type { MockInspectionSession, ConstitutionalMetadata, ProviderOverviewResponse } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
+import { toCqcPrsStatus } from '@/lib/cqcLanguage';
 import styles from './page.module.css';
 
 export default function MockSessionDetailPage() {
@@ -164,7 +165,7 @@ export default function MockSessionDetailPage() {
                   <dd>{data.providerSnapshot.asOf}</dd>
 
                   <dt>Regulatory Status</dt>
-                  <dd>{data.providerSnapshot.prsState}</dd>
+                  <dd>{toCqcPrsStatus(data.providerSnapshot.prsState)}</dd>
 
                   <dt>Registered Beds</dt>
                   <dd>{data.providerSnapshot.registeredBeds}</dd>

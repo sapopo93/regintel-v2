@@ -30,6 +30,7 @@ import { SimulationModeBadge } from '@/components/mock/SimulationModeBadge';
 import { apiClient } from '@/lib/api/client';
 import type { ProviderOverviewResponse } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
+import { toCqcPrsStatus } from '@/lib/cqcLanguage';
 import styles from './page.module.css';
 
 export default function OverviewPage() {
@@ -120,8 +121,8 @@ export default function OverviewPage() {
                   </div>
                   <div className={styles.cardProvenance}>
                     {isRealMode
-                      ? `Source: ${data.reportSource.type}:${data.reportSource.id}`
-                      : `Calculated from Topic Catalog ${data.topicCatalogVersion} requirements`}
+                      ? `CQC report source on record`
+                      : `Calculated from Inspection Framework ${data.topicCatalogVersion} requirements`}
                   </div>
                 </div>
 
@@ -157,8 +158,8 @@ export default function OverviewPage() {
                   </div>
                   <div className={styles.cardProvenance}>
                     {isRealMode
-                      ? `Regulatory history (${data.reportingDomain})`
-                      : `Generated via PRS Logic ${data.prsLogicVersion} (mock domain)`}
+                      ? `Regulatory history`
+                      : `Generated via Assessment Rules ${data.prsLogicVersion} (practice mode)`}
                   </div>
                 </div>
               </div>
@@ -173,8 +174,8 @@ export default function OverviewPage() {
                   <dt>Facility ID</dt>
                   <dd>{data.facility?.id || 'Unknown'}</dd>
 
-                  <dt>PRS State</dt>
-                  <dd>{data.provider.prsState}</dd>
+                  <dt>Regulatory Status</dt>
+                  <dd>{toCqcPrsStatus(data.provider.prsState)}</dd>
 
                   <dt>Registered Beds</dt>
                   <dd>{data.provider.registeredBeds}</dd>

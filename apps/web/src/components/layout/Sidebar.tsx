@@ -13,19 +13,8 @@ import { usePathname } from 'next/navigation';
 import { VersionBadge } from '../constitutional/VersionBadge';
 import { SIDEBAR_NAVIGATION } from '@/lib/constants';
 import { useProviderContext } from '@/lib/hooks/useProviderContext';
+import { toCqcPrsStatus } from '@/lib/cqcLanguage';
 import styles from './Sidebar.module.css';
-
-const PRS_LABELS: Record<string, string> = {
-  NEW_PROVIDER: 'New provider',
-  ESTABLISHED: 'No active enforcement',
-  SPECIAL_MEASURES: 'Special Measures',
-  ENFORCEMENT_ACTION: 'Enforcement action',
-  RATING_INADEQUATE: 'Rated: Inadequate',
-  RATING_REQUIRES_IMPROVEMENT: 'Rated: Requires Improvement',
-  REOPENED_SERVICE: 'Reopened service',
-  MERGED_SERVICE: 'Merged service',
-  STABLE: 'Standard regulation',
-};
 
 function formatSnapshotDate(dateStr: string): string {
   try {
@@ -66,7 +55,7 @@ export function Sidebar({
   const pathname = usePathname();
   const { providerId, facilityId } = useProviderContext();
   const rawStatus = status?.trim() || '';
-  const statusLabel = rawStatus ? (PRS_LABELS[rawStatus] ?? rawStatus) : 'STATUS UNAVAILABLE';
+  const statusLabel = toCqcPrsStatus(rawStatus || undefined);
   const formattedDate = formatSnapshotDate(snapshotDate);
 
   return (
