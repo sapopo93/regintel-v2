@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
  * Findings List Page
  *
  * Displays all inspection findings for a provider.
- * Mock findings have visual separation (SYSTEM_MOCK badge).
+ * Practice findings have visual separation.
  */
 
 import { useEffect, useState } from 'react';
@@ -19,6 +19,7 @@ import { MetadataBar } from '@/components/constitutional/MetadataBar';
 import { SimulationFrame } from '@/components/mock/SimulationFrame';
 import { apiClient } from '@/lib/api/client';
 import type { FindingsListResponse, ProviderOverviewResponse } from '@/lib/api/types';
+import { ORIGIN_LABELS } from '@/lib/constants';
 import { validateConstitutionalRequirements, validateFindingForDisplay } from '@/lib/validators';
 import styles from './page.module.css';
 
@@ -88,7 +89,7 @@ export default function FindingsPage() {
             subtitle={
               data.mode === 'REAL'
                 ? 'Regulatory findings (ingestion pending)'
-                : 'All findings from mock sessions'
+                : 'All findings from practice inspections'
             }
             topicCatalogVersion={data.topicCatalogVersion}
             topicCatalogHash={data.topicCatalogHash}
@@ -119,7 +120,7 @@ export default function FindingsPage() {
                         <h3 className={styles.findingTitle}>{finding.title}</h3>
                         <div className={styles.badges}>
                           {finding.origin === 'SYSTEM_MOCK' && (
-                            <div className={styles.originBadge}>SYSTEM_MOCK</div>
+                            <div className={styles.originBadge}>{ORIGIN_LABELS.SYSTEM_MOCK}</div>
                           )}
                           <div className={styles.severityBadge}>{finding.severity}</div>
                         </div>

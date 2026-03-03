@@ -68,14 +68,14 @@ export default function MockSessionsPage() {
 
     setCreating(true);
     setError(null);
-    setCreateStatus('Creating mock session...');
+    setCreateStatus('Starting practice inspection...');
     setCreatedSessionId(null);
 
     try {
       const created = await apiClient.createMockSession(providerId, selectedTopic, facilityId);
       const refreshed = await apiClient.getMockSessions(providerId, facilityId);
       setData(refreshed);
-      setCreateStatus(`Session created: ${created.sessionId}`);
+      setCreateStatus('Practice inspection started.');
       setCreatedSessionId(created.sessionId);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to start session');
@@ -144,13 +144,13 @@ export default function MockSessionsPage() {
                       className={styles.sessionCard}
                     >
                       <div className={styles.sessionHeader}>
-                        <h3 className={styles.sessionTitle}>Session {session.sessionId}</h3>
+                        <h3 className={styles.sessionTitle}>Practice inspection</h3>
                         <div className={`${styles.statusBadge} ${styles[session.status.toLowerCase()]}`}>
                           {session.status}
                         </div>
                       </div>
                       <div className={styles.sessionMeta}>
-                        <span>Topic: {session.topicId}</span>
+                        <span>Inspection area selected</span>
                         <span>Follow-ups: {session.followUpsUsed}/{session.maxFollowUps}</span>
                       </div>
                       <div className={styles.sessionDate}>

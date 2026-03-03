@@ -66,6 +66,12 @@ export default function EvidencePage() {
     );
   }
 
+  const formatBytes = (size: number) => {
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   return (
     <SimulationFrame reportingDomain={data.reportingDomain}>
       <div className={styles.layout}>
@@ -118,20 +124,14 @@ export default function EvidencePage() {
                       </div>
 
                       <dl className={styles.evidenceMeta}>
-                        <dt>Evidence ID</dt>
-                        <dd>{record.evidenceRecordId}</dd>
-
-                        <dt>Blob Hash</dt>
-                        <dd className={styles.hash}>{record.blobHash}</dd>
-
-                        <dt>MIME Type</dt>
+                        <dt>File Type</dt>
                         <dd>{record.mimeType}</dd>
 
                         <dt>Uploaded At</dt>
                         <dd>{new Date(record.uploadedAt).toLocaleString()}</dd>
 
-                        <dt>Size</dt>
-                        <dd>{record.sizeBytes} bytes</dd>
+                        <dt>File Size</dt>
+                        <dd>{formatBytes(record.sizeBytes)}</dd>
                       </dl>
                     </div>
                   ))

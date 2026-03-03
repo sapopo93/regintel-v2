@@ -21,6 +21,18 @@ import type { MockInspectionSession, ConstitutionalMetadata, ProviderOverviewRes
 import { validateConstitutionalRequirements } from '@/lib/validators';
 import styles from './page.module.css';
 
+const PRS_LABELS: Record<string, string> = {
+  NEW_PROVIDER: 'New provider',
+  ESTABLISHED: 'No active enforcement',
+  SPECIAL_MEASURES: 'Special Measures',
+  ENFORCEMENT_ACTION: 'Enforcement action',
+  RATING_INADEQUATE: 'Rated: Inadequate',
+  RATING_REQUIRES_IMPROVEMENT: 'Rated: Requires Improvement',
+  REOPENED_SERVICE: 'Reopened service',
+  MERGED_SERVICE: 'Merged service',
+  STABLE: 'Standard regulation',
+};
+
 export default function MockSessionDetailPage() {
   const searchParams = useSearchParams();
   const params = useParams();
@@ -106,7 +118,7 @@ export default function MockSessionDetailPage() {
 
         <main className={styles.main}>
           <PageHeader
-            title={`Session ${data.sessionId}`}
+            title="Practice inspection session"
             subtitle="Practice inspection session detail"
             topicCatalogVersion={data.topicCatalogVersion}
             topicCatalogHash={data.topicCatalogHash}
@@ -126,10 +138,7 @@ export default function MockSessionDetailPage() {
               <div className={styles.section}>
                 <h2 className={styles.sectionTitle}>Session Information</h2>
                 <dl className={styles.definitionList}>
-                  <dt>Session ID</dt>
-                  <dd>{data.sessionId}</dd>
-
-                  <dt>Topic ID</dt>
+                  <dt>Inspection Area</dt>
                   <dd>{data.topicId}</dd>
 
                   <dt>Status</dt>
@@ -154,17 +163,14 @@ export default function MockSessionDetailPage() {
               <div className={styles.section}>
                 <h2 className={styles.sectionTitle}>Provider Details</h2>
                 <dl className={styles.definitionList}>
-                  <dt>Provider ID</dt>
-                  <dd>{data.providerSnapshot.providerId}</dd>
-
                   <dt>Provider Name</dt>
                   <dd>{data.providerSnapshot.providerName}</dd>
 
                   <dt>Recorded on</dt>
-                  <dd>{data.providerSnapshot.asOf}</dd>
+                  <dd>{new Date(data.providerSnapshot.asOf).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</dd>
 
                   <dt>Regulatory Status</dt>
-                  <dd>{data.providerSnapshot.prsState}</dd>
+                  <dd>{PRS_LABELS[data.providerSnapshot.prsState] ?? data.providerSnapshot.prsState}</dd>
 
                   <dt>Registered Beds</dt>
                   <dd>{data.providerSnapshot.registeredBeds}</dd>

@@ -12,9 +12,20 @@ import type {
 import { validateConstitutionalRequirements } from '@/lib/validators';
 import styles from './page.module.css';
 
-export default function ProvidersPage() {
+const isE2EMode = process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true';
+
+interface ProvidersPageInnerProps {
+  isLoaded: boolean;
+  isSignedIn: boolean;
+  enableSignInRedirect: boolean;
+}
+
+function ProvidersPageInner({
+  isLoaded,
+  isSignedIn,
+  enableSignInRedirect,
+}: ProvidersPageInnerProps) {
   const router = useRouter();
-  const { isLoaded, isSignedIn } = useAuth();
 
   const [data, setData] = useState<ProvidersListResponse | null>(null);
   const [providerName, setProviderName] = useState('');
@@ -63,8 +74,16 @@ export default function ProvidersPage() {
   }
 
   // If not signed in, redirect to sign-in (using Clerk component, not window.location)
-  if (!isSignedIn || authError) {
+  if (enableSignInRedirect && (!isSignedIn || authError)) {
     return <RedirectToSignIn />;
+  }
+
+  if (!enableSignInRedirect && authError) {
+    return (
+      <div className={styles.layout}>
+        <div className={styles.error}>Error: Authentication required</div>
+      </div>
+    );
   }
 
   const handleSubmit = async (event: FormEvent) => {
@@ -178,7 +197,6 @@ export default function ProvidersPage() {
                 <div key={provider.providerId} className={styles.card}>
                   <div>
                     <h3 className={styles.cardTitle}>{provider.providerName}</h3>
-                    <p className={styles.cardMeta}>Provider ID: {provider.providerId}</p>
                     {provider.orgRef && (
                       <p className={styles.cardMeta}>Org ref: {provider.orgRef}</p>
                     )}
@@ -199,4 +217,29 @@ export default function ProvidersPage() {
       </main>
     </div>
   );
+}
+
+function ProvidersPageWithClerkAuth() {
+  const { isLoaded, isSignedIn } = useAuth();
+  return (
+    <ProvidersPageInner
+      isLoaded={isLoaded}
+      isSignedIn={isSignedIn}
+      enableSignInRedirect
+    />
+  );
+}
+
+export default function ProvidersPage() {
+  if (isE2EMode) {
+    return (
+      <ProvidersPageInner
+        isLoaded
+        isSignedIn
+        enableSignInRedirect={false}
+      />
+    );
+  }
+
+  return <ProvidersPageWithClerkAuth />;
 }

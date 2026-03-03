@@ -219,7 +219,7 @@ export default function ExportsPage() {
                     {exportError}
                     {!isRealMode && (exportError.includes('No completed session') || exportError.includes('Conflict')) && (
                       <div style={{ marginTop: '8px', fontSize: '0.9em' }}>
-                        💡 Tip: Complete a mock inspection session first. Navigate to "Mock Session" from the sidebar.
+                        Tip: Complete a practice inspection first. Use "Practice Inspection" in the sidebar.
                       </div>
                     )}
                     {isRealMode && exportError.includes('Regulatory exports') && (
@@ -249,10 +249,10 @@ export default function ExportsPage() {
               <div className={styles.section}>
                 <h2 className={styles.sectionTitle}>Export Contents</h2>
                 <ul className={styles.contentList}>
-                  <li>Session metadata (ID, provider, versions, hashes)</li>
-                  <li>Topic Catalog version and hash</li>
-                  <li>PRS Logic Profile version and hash</li>
-                  <li>{isRealMode ? 'Regulatory findings (if available)' : 'All findings from mock sessions'}</li>
+                  <li>Session details (provider, location, and inspection date)</li>
+                  <li>Relevant CQC quality statement references</li>
+                  <li>Risk profile summary used for scoring</li>
+                  <li>{isRealMode ? 'Regulatory findings (if available)' : 'All findings from practice inspections'}</li>
                   <li>Evidence coverage statistics</li>
                   <li>Watermark on every page/row (if enabled)</li>
                 </ul>
@@ -265,7 +265,7 @@ export default function ExportsPage() {
                   ) : (
                     <>
                       <strong>Note:</strong> Exports NEVER include regulatory history findings.
-                      All exported findings have origin=SYSTEM_MOCK.
+                      All exported findings are marked as practice inspection findings.
                     </>
                   )}
                 </div>

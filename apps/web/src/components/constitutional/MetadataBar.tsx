@@ -1,59 +1,36 @@
 /**
  * MetadataBar Component
  *
- * Displays constitutional metadata (version, hash, time, domain) at top of views.
- * Every view must include this to satisfy UI constitutional requirements.
+ * Displays plain-language CQC record context for users.
  */
 
-import { HashDisplay } from './HashDisplay';
-import { VersionBadge } from './VersionBadge';
 import { TimestampDisplay } from './TimestampDisplay';
 import { DomainBadge } from './DomainBadge';
 import type { ConstitutionalMetadata } from '@/lib/api/types';
+import { toCqcIngestionStatus, toCqcMode } from '@/lib/cqcLanguage';
 import styles from './MetadataBar.module.css';
 
 interface MetadataBarProps extends ConstitutionalMetadata {
   compact?: boolean;
 }
 
-const INGESTION_LABELS: Record<string, string> = {
-  INGESTION_INCOMPLETE: 'Loading CQC data...',
-  READY: 'CQC data loaded',
-};
-
-const MODE_LABELS: Record<string, string> = {
-  MOCK: 'Practice',
-};
-
 export function MetadataBar({
-  topicCatalogVersion,
-  topicCatalogHash,
-  prsLogicVersion,
-  prsLogicHash,
   snapshotTimestamp,
   domain,
   mode,
-  reportSource,
-  snapshotId,
   ingestionStatus,
   compact = false,
 }: MetadataBarProps) {
-  const ingestionLabel = INGESTION_LABELS[ingestionStatus] ?? ingestionStatus;
-  const modeLabel = MODE_LABELS[mode] ?? mode;
+  const ingestionLabel = toCqcIngestionStatus(ingestionStatus);
+  const modeLabel = toCqcMode(mode);
   if (compact) {
-    // Extract first 6 chars of hash for compact display
-    const tcHashPrefix = topicCatalogHash.replace('sha256:', '').substring(0, 6);
-    const prsHashPrefix = prsLogicHash.replace('sha256:', '').substring(0, 6);
-
     return (
       <div className={styles.containerCompact}>
         <DomainBadge domain={domain} />
-        <span className={styles.frozenLabel}>• Compliance Record (Locked)</span>
+        <span className={styles.frozenLabel}>• Inspection Summary</span>
         <TimestampDisplay timestamp={snapshotTimestamp} label="As-of" dateOnly />
         <span className={styles.separator}>|</span>
-        <span className={styles.version} title={`Topic Catalog: ${topicCatalogHash}\nPRS Logic: ${prsLogicHash}`}>
-          TC {topicCatalogVersion} ({tcHashPrefix}…) · PRS {prsLogicVersion} ({prsHashPrefix}…)
-        </span>
+        <span className={styles.version}>{ingestionLabel}</span>
       </div>
     );
   }
@@ -62,29 +39,13 @@ export function MetadataBar({
     <div className={styles.container}>
       <div className={styles.row}>
         <DomainBadge domain={domain} />
-        <TimestampDisplay timestamp={snapshotTimestamp} label="Snapshot" />
+        <TimestampDisplay timestamp={snapshotTimestamp} label="Inspection Record" />
       </div>
       <div className={styles.row}>
-        <VersionBadge label="Topic Catalog" version={topicCatalogVersion} />
-        <HashDisplay hash={topicCatalogHash} />
-      </div>
-      <div className={styles.row}>
-        <VersionBadge label="PRS Logic" version={prsLogicVersion} />
-        <HashDisplay hash={prsLogicHash} />
-      </div>
-      <div className={styles.row}>
-        <span className={styles.metaLabel}>Mode</span>
+        <span className={styles.metaLabel}>Data Type</span>
         <span className={styles.metaValue}>{modeLabel}</span>
-        <span className={styles.metaLabel}>Data Status</span>
+        <span className={styles.metaLabel}>CQC Report Status</span>
         <span className={styles.metaValue}>{ingestionLabel}</span>
-      </div>
-      <div className={styles.row}>
-        <span className={styles.metaLabel}>Snapshot ID</span>
-        <span className={styles.metaValueMono}>{snapshotId}</span>
-      </div>
-      <div className={styles.row}>
-        <span className={styles.metaLabel}>Report Source</span>
-        <span className={styles.metaValueMono}>{reportSource.type}:{reportSource.id}</span>
       </div>
     </div>
   );

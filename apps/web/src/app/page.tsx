@@ -11,7 +11,9 @@ import LandingPage from '@/components/marketing/LandingPage';
  * - Not signed in: show landing page
  */
 export default async function HomePage() {
-  const isE2EMode = process.env.E2E_TEST_MODE === 'true';
+  const isE2EMode =
+    process.env.E2E_TEST_MODE === 'true' &&
+    process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true';
 
   if (isE2EMode) {
     redirect('/providers');

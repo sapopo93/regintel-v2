@@ -120,8 +120,8 @@ export default function OverviewPage() {
                   </div>
                   <div className={styles.cardProvenance}>
                     {isRealMode
-                      ? `Source: ${data.reportSource.type}:${data.reportSource.id}`
-                      : `Calculated from Topic Catalog ${data.topicCatalogVersion} requirements`}
+                      ? 'Based on linked CQC report data'
+                      : 'Calculated from CQC quality statement requirements'}
                   </div>
                 </div>
 
@@ -134,7 +134,7 @@ export default function OverviewPage() {
                     {isRealMode ? 'Regulatory topic mapping pending ingestion' : 'Mock inspection topics addressed'}
                   </div>
                   <div className={styles.cardProvenance}>
-                    {isRealMode ? 'Awaiting regulatory ingestion' : 'Based on mock inspection sessions'}
+                    {isRealMode ? 'Awaiting regulatory ingestion' : 'Based on practice inspections'}
                   </div>
                 </div>
 
@@ -157,8 +157,8 @@ export default function OverviewPage() {
                   </div>
                   <div className={styles.cardProvenance}>
                     {isRealMode
-                      ? `Regulatory history (${data.reportingDomain})`
-                      : `Generated via PRS Logic ${data.prsLogicVersion} (mock domain)`}
+                      ? 'Taken from regulatory inspection history'
+                      : 'Generated from risk profile rules for practice mode'}
                   </div>
                 </div>
               </div>
@@ -167,12 +167,6 @@ export default function OverviewPage() {
               <div className={styles.providerInfo}>
                 <h2 className={styles.sectionTitle}>Provider Details</h2>
                 <dl className={styles.definitionList}>
-                  <dt>Provider ID</dt>
-                  <dd>{data.provider.providerId}</dd>
-
-                  <dt>Facility ID</dt>
-                  <dd>{data.facility?.id || 'Unknown'}</dd>
-
                   <dt>PRS State</dt>
                   <dd>{data.provider.prsState}</dd>
 

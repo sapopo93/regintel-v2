@@ -104,14 +104,11 @@ export default function TopicDetailPage() {
               <div className={styles.section}>
                 <h2 className={styles.sectionTitle}>Topic Information</h2>
                 <dl className={styles.definitionList}>
-                  <dt>Topic ID</dt>
-                  <dd>{data.id}</dd>
-
                   <dt>Regulation Section</dt>
                   <dd>{data.regulationSectionId}</dd>
 
-                  <dt>Question Mode</dt>
-                  <dd>{data.questionMode}</dd>
+                  <dt>Review Approach</dt>
+                  <dd>{data.questionMode.replaceAll('_', ' ')}</dd>
 
                   <dt>Max Follow-ups</dt>
                   <dd>{data.maxFollowUps}</dd>

@@ -66,6 +66,18 @@ export default function AuditPage() {
     );
   }
 
+  const toActivityLabel = (eventType: string) => {
+    const map: Record<string, string> = {
+      MOCK_SESSION_STARTED: 'Practice inspection started',
+      MOCK_SESSION_ANSWERED: 'Practice inspection answer saved',
+      MOCK_SESSION_COMPLETED: 'Practice inspection completed',
+      FINDING_CREATED: 'Finding created',
+      EVIDENCE_UPLOADED: 'Evidence uploaded',
+      EXPORT_GENERATED: 'Export generated',
+    };
+    return map[eventType] ?? eventType.replaceAll('_', ' ').toLowerCase();
+  };
+
   return (
     <SimulationFrame reportingDomain={data.reportingDomain}>
       <div className={styles.layout}>
@@ -99,10 +111,9 @@ export default function AuditPage() {
           <DisclosurePanel
             summary={(
               <div className={styles.integrity}>
-                <h2 className={styles.integrityTitle}>Hash Chain Integrity</h2>
+                <h2 className={styles.integrityTitle}>Activity Integrity</h2>
                 <p className={styles.integrityDescription}>
-                  All audit events are linked via cryptographic hashes. Each event includes the hash of the previous event,
-                  forming an immutable chain. Any tampering with historical events will break the chain and be detected.
+                  This timeline records key provider actions in order so teams can review what happened and when.
                 </p>
               </div>
             )}
@@ -115,38 +126,18 @@ export default function AuditPage() {
                     <div key={event.eventId} className={styles.auditCard}>
                       <div className={styles.auditHeader}>
                         <span className={styles.eventNumber}>#{index + 1}</span>
-                        <span className={styles.eventType}>{event.eventType}</span>
+                        <span className={styles.eventType}>{toActivityLabel(event.eventType)}</span>
                         <span className={styles.timestamp}>
                           {new Date(event.timestamp).toLocaleString()}
                         </span>
                       </div>
 
                       <dl className={styles.auditMeta}>
-                        <dt>Event ID</dt>
-                        <dd>{event.eventId}</dd>
-
-                        <dt>User ID</dt>
+                        <dt>Recorded By</dt>
                         <dd>{event.userId}</dd>
-
-                        <dt>Payload Hash</dt>
-                        <dd className={styles.hash}>{event.payloadHash}</dd>
-
-                        {event.previousEventHash && (
-                          <>
-                            <dt>Previous Event Hash</dt>
-                            <dd className={styles.hash}>{event.previousEventHash}</dd>
-                          </>
-                        )}
-
-                        <dt>Event Hash</dt>
-                        <dd className={styles.hash}>{event.eventHash}</dd>
                       </dl>
 
-                      {event.previousEventHash && (
-                        <div className={styles.chainIndicator}>
-                          ← Chained to previous event
-                        </div>
-                      )}
+                      {event.previousEventHash && <div className={styles.chainIndicator}>Linked to previous activity</div>}
                     </div>
                   ))
                 )}

@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
  * - Evidence list
  */
 
-import { useEffect, useState, FormEvent } from 'react';
+import { useEffect, useRef, useState, FormEvent } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 
 import { Sidebar } from '@/components/layout/Sidebar';
@@ -56,6 +56,17 @@ export default function FacilityDetailPage() {
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    if (providerId && facilityId) {
+      try {
+        sessionStorage.setItem(
+          'regintel:provider_context',
+          JSON.stringify({ providerId, facilityId })
+        );
+      } catch { /* ignore */ }
+    }
+  }, [providerId, facilityId]);
+
+  useEffect(() => {
     Promise.all([
       apiClient.getFacility(facilityId),
       apiClient.getFacilityEvidence(facilityId),
@@ -69,6 +80,38 @@ export default function FacilityDetailPage() {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [facilityId]);
+
+  // Poll evidence list when arriving from onboarding with cqcSyncing=true.
+  // The API enqueues the scrape job synchronously but it can take 30-60s.
+  // Stop when a CQC_REPORT record appears or after 90s.
+  const cqcPollingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!cqcSyncing) return;
+
+    const startTime = Date.now();
+    const TIMEOUT_MS = 90_000;
+    const POLL_INTERVAL_MS = 5_000;
+
+    const poll = async () => {
+      if (Date.now() - startTime > TIMEOUT_MS) return;
+      try {
+        const evidence = await apiClient.getFacilityEvidence(facilityId);
+        const hasCqcReport = evidence.evidence.some((e) => e.evidenceType === 'CQC_REPORT');
+        if (hasCqcReport) {
+          setEvidenceData(evidence);
+          const base = `/facilities/${encodeURIComponent(facilityId)}`;
+          router.replace(providerId ? `${base}?provider=${encodeURIComponent(providerId)}` : base);
+          return;
+        }
+      } catch { /* ignore polling errors */ }
+      cqcPollingRef.current = setTimeout(poll, POLL_INTERVAL_MS);
+    };
+
+    cqcPollingRef.current = setTimeout(poll, POLL_INTERVAL_MS);
+    return () => {
+      if (cqcPollingRef.current) clearTimeout(cqcPollingRef.current);
+    };
+  }, [cqcSyncing, facilityId, providerId, router]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
@@ -137,7 +180,7 @@ export default function FacilityDetailPage() {
 
     try {
       const response = await apiClient.syncLatestReport(facilityId);
-      setSyncMessage(`${response.message} Job ID: ${response.jobId}`);
+      setSyncMessage(response.message);
     } catch (err: unknown) {
       setSyncMessage(err instanceof Error ? err.message : 'Failed to sync report');
     } finally {
@@ -250,14 +293,6 @@ export default function FacilityDetailPage() {
           </div>
           <div className={styles.detailsGrid}>
             <div className={styles.detailItem}>
-              <span className={styles.detailLabel}>Provider ID:</span>
-              <span className={styles.detailValueMono}>{facility.providerId}</span>
-            </div>
-            <div className={styles.detailItem}>
-              <span className={styles.detailLabel}>Facility ID:</span>
-              <span className={styles.detailValueMono}>{facility.id}</span>
-            </div>
-            <div className={styles.detailItem}>
               <span className={styles.detailLabel}>Address:</span>
               <span className={styles.detailValue}>
                 {facility.addressLine1}, {facility.townCity}, {facility.postcode}
@@ -277,10 +312,6 @@ export default function FacilityDetailPage() {
                 <span className={styles.detailValue}>{facility.capacity}</span>
               </div>
             )}
-            <div className={styles.detailItem}>
-              <span className={styles.detailLabel}>Facility Hash:</span>
-              <span className={styles.detailValueMono}>{facility.facilityHash}</span>
-            </div>
             <div className={styles.detailItem}>
               <span className={styles.detailLabel}>As Of:</span>
               <span className={styles.detailValue}>{facility.asOf}</span>
@@ -422,7 +453,6 @@ export default function FacilityDetailPage() {
                     </span>
                     <span className={styles.evidenceDetail}>Evidence: {record.evidenceType}</span>
                   </div>
-                  <div className={styles.evidenceHash}>Hash: {record.blobHash.substring(0, 16)}...</div>
                 </div>
               ))
             )}

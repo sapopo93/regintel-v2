@@ -15,8 +15,11 @@ export const metadata: Metadata = {
   description: 'Evidence-based compliance for UK CQC-registered care providers',
 };
 
-// Check if E2E test mode is enabled (server-side)
-const isE2EMode = process.env.E2E_TEST_MODE === 'true';
+// E2E bypass mode must be enabled on BOTH server and client env flags.
+// This prevents skipping ClerkProvider when only the server flag is set.
+const isE2EMode =
+  process.env.E2E_TEST_MODE === 'true' &&
+  process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true';
 
 export default function RootLayout({
   children,
