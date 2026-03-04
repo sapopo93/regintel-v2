@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
  */
 
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DisclosurePanel } from '@/components/disclosure/DisclosurePanel';
@@ -28,6 +28,7 @@ export default function EvidencePage() {
   const [data, setData] = useState<EvidenceListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     if (!providerId || !facilityId) {
@@ -82,6 +83,14 @@ export default function EvidencePage() {
           <PageHeader
             title="Uploaded Documents"
             subtitle={`${data.totalCount} documents uploaded`}
+            actions={(
+              <button
+                onClick={() => router.push(`/facilities/${facilityId}?provider=${providerId}`)}
+                style={{ padding: '8px 16px', background: '#1a1a2e', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}
+              >
+                Upload a Document
+              </button>
+            )}
             topicCatalogVersion={data.topicCatalogVersion}
             topicCatalogHash={data.topicCatalogHash}
             prsLogicVersion={data.prsLogicVersion}
@@ -100,7 +109,7 @@ export default function EvidencePage() {
               <div className={styles.summaryPanel}>
                 <h2 className={styles.sectionTitle}>Documents Overview</h2>
                 <p className={styles.summaryText}>
-                  {data.totalCount} documents have been uploaded for this location.
+                  {data.totalCount === 0 ? 'No documents have been uploaded yet. Upload your policies, training records and CQC reports to improve your compliance score.' : `${data.totalCount} document${data.totalCount === 1 ? '' : 's'} uploaded for this location.`}
                 </p>
               </div>
             )}
@@ -117,12 +126,6 @@ export default function EvidencePage() {
                       </div>
 
                       <dl className={styles.evidenceMeta}>
-                        <dt>Document Reference</dt>
-                        <dd>{record.evidenceRecordId}</dd>
-
-                        <dt>File Verification Code</dt>
-                        <dd className={styles.hash}>{record.blobHash}</dd>
-
                         <dt>File Type</dt>
                         <dd>{record.mimeType}</dd>
 
