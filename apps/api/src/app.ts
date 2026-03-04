@@ -47,12 +47,13 @@ import { buildConstitutionalMetadata, type ReportContext } from './metadata';
 import { authMiddleware } from './auth';
 import {
   InMemoryStore,
+  PrismaStore,
+  store as prismaStore,
   type TenantContext,
   type EvidenceRecordRecord,
   type MockSessionRecord,
   type FindingRecord,
 } from './store';
-import { PrismaStore } from './db-store';
 import { handleClerkWebhook } from './webhooks/clerk';
 import { blobStorage } from './blob-storage';
 import { scanBlob } from './malware-scanner';
@@ -60,7 +61,7 @@ import { scanBlob } from './malware-scanner';
 const useDbStore =
   process.env.USE_DB_STORE === 'true' ||
   (process.env.NODE_ENV !== 'test' && process.env.USE_DB_STORE !== 'false');
-const store = useDbStore ? new PrismaStore() : new InMemoryStore();
+const store = useDbStore ? prismaStore : new InMemoryStore();
 
 // Queue adapters (BullMQ with in-memory fallback)
 const scrapeReportQueue = getQueueAdapter(QUEUE_NAMES.SCRAPE_REPORT);

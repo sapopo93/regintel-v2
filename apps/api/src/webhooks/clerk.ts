@@ -64,7 +64,7 @@ export async function handleClerkWebhook(
     // Log auth events to audit chain
     switch (event.type) {
       case 'user.created':
-        store.appendAuditEvent(ctx, tenantId, 'USER_CREATED', {
+        await store.appendAuditEvent(ctx, tenantId, 'USER_CREATED', {
           userId: event.data.id,
           email: event.data.email_addresses?.[0]?.email_address,
           firstName: event.data.first_name,
@@ -74,7 +74,7 @@ export async function handleClerkWebhook(
         break;
 
       case 'user.updated':
-        store.appendAuditEvent(ctx, tenantId, 'USER_UPDATED', {
+        await store.appendAuditEvent(ctx, tenantId, 'USER_UPDATED', {
           userId: event.data.id,
           email: event.data.email_addresses?.[0]?.email_address,
           timestamp: new Date(event.data.updated_at).toISOString(),
@@ -82,14 +82,14 @@ export async function handleClerkWebhook(
         break;
 
       case 'user.deleted':
-        store.appendAuditEvent(ctx, tenantId, 'USER_DELETED', {
+        await store.appendAuditEvent(ctx, tenantId, 'USER_DELETED', {
           userId: event.data.id,
           timestamp: new Date(event.data.updated_at).toISOString(),
         });
         break;
 
       case 'session.created':
-        store.appendAuditEvent(ctx, tenantId, 'SESSION_STARTED', {
+        await store.appendAuditEvent(ctx, tenantId, 'SESSION_STARTED', {
           userId: event.data.user_id,
           sessionId: event.data.id,
           timestamp: new Date(event.data.created_at).toISOString(),
@@ -97,7 +97,7 @@ export async function handleClerkWebhook(
         break;
 
       case 'session.ended':
-        store.appendAuditEvent(ctx, tenantId, 'SESSION_ENDED', {
+        await store.appendAuditEvent(ctx, tenantId, 'SESSION_ENDED', {
           userId: event.data.user_id,
           sessionId: event.data.id,
           status: event.data.status,
@@ -106,7 +106,7 @@ export async function handleClerkWebhook(
         break;
 
       case 'session.removed':
-        store.appendAuditEvent(ctx, tenantId, 'SESSION_REMOVED', {
+        await store.appendAuditEvent(ctx, tenantId, 'SESSION_REMOVED', {
           userId: event.data.user_id,
           sessionId: event.data.id,
           timestamp: new Date(event.data.updated_at).toISOString(),
@@ -114,7 +114,7 @@ export async function handleClerkWebhook(
         break;
 
       case 'session.revoked':
-        store.appendAuditEvent(ctx, tenantId, 'SESSION_REVOKED', {
+        await store.appendAuditEvent(ctx, tenantId, 'SESSION_REVOKED', {
           userId: event.data.user_id,
           sessionId: event.data.id,
           timestamp: new Date(event.data.updated_at).toISOString(),
