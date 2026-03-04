@@ -5,7 +5,6 @@
  * Used at the top of every page.
  */
 
-import { MetadataBar } from '../constitutional/MetadataBar';
 import type { ConstitutionalMetadata } from '@/lib/api/types';
 import styles from './PageHeader.module.css';
 
@@ -35,14 +34,12 @@ export function PageHeader({
       </div>
       {showIngestionBanner && (
         <div className={styles.ingestionBanner} data-testid="ingestion-status-banner">
-          <strong>Ingestion incomplete.</strong>
+          <strong>CQC data import in progress.</strong>
           <span>
-            Source {metadata.reportSource.type}:{metadata.reportSource.id} · Snapshot {metadata.snapshotId}.
-            Mock fallback disabled.
+            Your CQC inspection data is being imported. Some information may not yet be available.
           </span>
         </div>
       )}
-      <MetadataBar {...metadata} compact />
     </header>
   );
 }

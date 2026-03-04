@@ -114,11 +114,22 @@ async function resolveClerkAuth(token: string): Promise<AuthContext | null> {
 
 function resolveTestAuth(token: string, req: Request): AuthContext | null {
   const testToken = process.env.CLERK_TEST_TOKEN;
-  if (!testToken || token !== testToken) {
+  const founderToken = process.env.FOUNDER_TOKEN;
+  const providerToken = process.env.PROVIDER_TOKEN;
+
+  let role: AuthRole | null = null;
+  if (testToken && token === testToken) {
+    role = (process.env.CLERK_TEST_ROLE as AuthRole) || 'FOUNDER';
+  } else if (founderToken && token === founderToken) {
+    role = 'FOUNDER';
+  } else if (providerToken && token === providerToken) {
+    role = 'PROVIDER';
+  }
+
+  if (!role) {
     return null;
   }
 
-  const role = (process.env.CLERK_TEST_ROLE as AuthRole) || 'FOUNDER';
   const requestedTenant = req.header('x-tenant-id')?.trim();
   const tenantId = requestedTenant || process.env.CLERK_TEST_TENANT_ID || 'test-tenant';
   const userId = process.env.CLERK_TEST_USER_ID || 'clerk-test-user';

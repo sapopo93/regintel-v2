@@ -47,15 +47,15 @@ export const DOMAINS = {
 
 // Sidebar navigation items
 export const SIDEBAR_NAVIGATION = [
-  { id: 'providers', label: 'Providers', href: '/providers' },
-  { id: 'overview', label: 'Overview', href: '/overview' },
-  { id: 'topics', label: 'Topics', href: '/topics' },
-  { id: 'mock-session', label: 'Mock Inspection', href: '/mock-session' },
-  { id: 'findings', label: 'Findings', href: '/findings' },
-  { id: 'facilities', label: 'Facilities', href: '/facilities' },
-  { id: 'evidence', label: 'Evidence', href: '/evidence' },
-  { id: 'exports', label: 'Exports', href: '/exports' },
-  { id: 'audit', label: 'Audit Trail', href: '/audit' },
+  { id: 'providers', label: 'My Providers', href: '/providers' },
+  { id: 'facilities', label: 'Locations', href: '/facilities' },
+  { id: 'overview', label: 'Dashboard', href: '/overview' },
+  { id: 'topics', label: 'Compliance Areas', href: '/topics' },
+  { id: 'mock-session', label: 'Practice Inspection', href: '/mock-session' },
+  { id: 'findings', label: 'Action Items', href: '/findings' },
+  { id: 'evidence', label: 'Documents', href: '/evidence' },
+  { id: 'exports', label: 'Reports', href: '/exports' },
+  { id: 'audit', label: 'Activity Log', href: '/audit' },
 ] as const;
 
 // Severity levels (display only - no computation in UI)

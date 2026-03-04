@@ -13,7 +13,6 @@ import { useSearchParams } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DisclosurePanel } from '@/components/disclosure/DisclosurePanel';
-import { MetadataBar } from '@/components/constitutional/MetadataBar';
 import { SimulationFrame } from '@/components/mock/SimulationFrame';
 import { apiClient } from '@/lib/api/client';
 import type { AuditTrailResponse, ProviderOverviewResponse } from '@/lib/api/types';
@@ -66,6 +65,17 @@ export default function AuditPage() {
     );
   }
 
+  const formatEventType = (type: string) => {
+    const map: Record<string, string> = {
+      'MOCK_SESSION_STARTED': 'Practice Inspection Started',
+      'MOCK_SESSION_COMPLETED': 'Practice Inspection Completed',
+      'EVIDENCE_UPLOADED': 'Document Uploaded',
+      'FINDING_CREATED': 'Action Item Created',
+      'EXPORT_GENERATED': 'Report Downloaded',
+    };
+    return map[type] ?? type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  };
+
   return (
     <SimulationFrame reportingDomain={data.reportingDomain}>
       <div className={styles.layout}>
@@ -81,8 +91,8 @@ export default function AuditPage() {
 
         <main className={styles.main}>
           <PageHeader
-            title="Audit Trail"
-            subtitle={`${data.totalCount} audit events`}
+            title="Activity Log"
+            subtitle={`${data.totalCount} recorded activities`}
             topicCatalogVersion={data.topicCatalogVersion}
             topicCatalogHash={data.topicCatalogHash}
             prsLogicVersion={data.prsLogicVersion}
@@ -99,52 +109,38 @@ export default function AuditPage() {
           <DisclosurePanel
             summary={(
               <div className={styles.integrity}>
-                <h2 className={styles.integrityTitle}>Hash Chain Integrity</h2>
+                <h2 className={styles.integrityTitle}>Tamper-Proof Record</h2>
                 <p className={styles.integrityDescription}>
-                  All audit events are linked via cryptographic hashes. Each event includes the hash of the previous event,
-                  forming an immutable chain. Any tampering with historical events will break the chain and be detected.
+                  Every action in this system is permanently recorded and cannot be altered. Each entry is linked to the one before it, so any attempt to change historical records would be immediately detected.
                 </p>
               </div>
             )}
             evidence={(
               <div className={styles.auditList}>
                 {data.events.length === 0 ? (
-                  <div className={styles.empty}>No audit events found</div>
+                  <div className={styles.empty}>No activity recorded yet</div>
                 ) : (
                   data.events.map((event, index) => (
                     <div key={event.eventId} className={styles.auditCard}>
                       <div className={styles.auditHeader}>
                         <span className={styles.eventNumber}>#{index + 1}</span>
-                        <span className={styles.eventType}>{event.eventType}</span>
+                        <span className={styles.eventType}>{formatEventType(event.eventType)}</span>
                         <span className={styles.timestamp}>
                           {new Date(event.timestamp).toLocaleString()}
                         </span>
                       </div>
 
                       <dl className={styles.auditMeta}>
-                        <dt>Event ID</dt>
-                        <dd>{event.eventId}</dd>
+                        <dt>Activity Reference</dt>
+                        <dd>{'Entry #' + (index + 1)}</dd>
 
-                        <dt>User ID</dt>
-                        <dd>{event.userId}</dd>
-
-                        <dt>Payload Hash</dt>
-                        <dd className={styles.hash}>{event.payloadHash}</dd>
-
-                        {event.previousEventHash && (
-                          <>
-                            <dt>Previous Event Hash</dt>
-                            <dd className={styles.hash}>{event.previousEventHash}</dd>
-                          </>
-                        )}
-
-                        <dt>Event Hash</dt>
-                        <dd className={styles.hash}>{event.eventHash}</dd>
+                        <dt>Performed By</dt>
+                        <dd>{'User ...' + event.userId.slice(-8)}</dd>
                       </dl>
 
                       {event.previousEventHash && (
                         <div className={styles.chainIndicator}>
-                          ← Chained to previous event
+                          ✓ Linked to previous entry
                         </div>
                       )}
                     </div>
@@ -153,19 +149,12 @@ export default function AuditPage() {
               </div>
             )}
             trace={(
-              <MetadataBar
-                topicCatalogVersion={data.topicCatalogVersion}
-                topicCatalogHash={data.topicCatalogHash}
-                prsLogicVersion={data.prsLogicVersion}
-                prsLogicHash={data.prsLogicHash}
-                snapshotTimestamp={data.snapshotTimestamp}
-                domain={data.domain}
-                reportingDomain={data.reportingDomain}
-                mode={data.mode}
-                reportSource={data.reportSource}
-                snapshotId={data.snapshotId}
-                ingestionStatus={data.ingestionStatus}
-              />
+              <div style={{ padding: '16px', color: '#666', fontSize: '14px' }}>
+                <p><strong>Compliance Framework:</strong> {data.topicCatalogVersion}</p>
+                <p><strong>Rules Engine:</strong> {data.prsLogicVersion}</p>
+                <p><strong>Data as of:</strong> {new Date(data.snapshotTimestamp).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                <p><strong>Inspection Type:</strong> {data.mode === 'REAL' ? 'Live CQC Data' : 'Practice Inspection'}</p>
+              </div>
             )}
           />
         </main>

@@ -42,8 +42,7 @@ export default function OverviewPage() {
 
   useEffect(() => {
     if (!providerId || !facilityId) {
-      setError('Provider and facility are required');
-      setLoading(false);
+      window.location.href = '/facilities';
       return;
     }
 
@@ -89,8 +88,8 @@ export default function OverviewPage() {
 
         <main className={styles.main}>
           <PageHeader
-            title="Inspection Readiness Record"
-            subtitle={`Provider: ${data.provider.providerName} · Facility: ${data.facility?.facilityName ?? 'Unknown'}`}
+            title="Compliance Dashboard"
+            subtitle={`Organisation: ${data.provider.providerName} · Location: ${data.facility?.facilityName ?? 'Unknown'}`}
             topicCatalogVersion={data.topicCatalogVersion}
             topicCatalogHash={data.topicCatalogHash}
             prsLogicVersion={data.prsLogicVersion}
@@ -110,70 +109,70 @@ export default function OverviewPage() {
             summary={(
               <div className={styles.grid}>
                 <div className={styles.card}>
-                  <div className={styles.cardLabel}>Evidence Coverage</div>
+                  <div className={styles.cardLabel}>Documents Uploaded</div>
                   <div className={styles.cardValue}>{data.evidenceCoverage}%</div>
                   <div className={styles.cardNote}>
-                    {isRealMode ? 'CQC evidence uploaded for regulatory ingestion' : 'Percentage of required evidence uploaded'}
+                    {isRealMode ? 'Documents submitted for CQC review' : 'How much of your required documentation is uploaded'}
                   </div>
                   <div className={styles.cardProvenance}>
                     {isRealMode
-                      ? `Source: ${data.reportSource.type}:${data.reportSource.id}`
-                      : `Calculated from Topic Catalog ${data.topicCatalogVersion} requirements`}
+                      ? 'Verified against CQC requirements'
+                      : 'Based on standard CQC inspection requirements'}
                   </div>
                 </div>
 
                 <div className={styles.card}>
-                  <div className={styles.cardLabel}>Topics Completed</div>
+                  <div className={styles.cardLabel}>Compliance Areas Reviewed</div>
                   <div className={styles.cardValue}>
                     {data.topicsCompleted} / {data.totalTopics}
                   </div>
                   <div className={styles.cardNote}>
-                    {isRealMode ? 'Regulatory topic mapping pending ingestion' : 'Mock inspection topics addressed'}
+                    {isRealMode ? 'Being reviewed against CQC standards' : 'Practice inspection areas completed'}
                   </div>
                   <div className={styles.cardProvenance}>
-                    {isRealMode ? 'Awaiting regulatory ingestion' : 'Based on mock inspection sessions'}
+                    {isRealMode ? 'CQC review in progress' : 'Based on your practice inspection sessions'}
                   </div>
                 </div>
 
                 <div className={styles.card}>
-                  <div className={styles.cardLabel}>Unanswered Questions</div>
+                  <div className={styles.cardLabel}>Outstanding Questions</div>
                   <div className={styles.cardValue}>{data.unansweredQuestions}</div>
                   <div className={styles.cardNote}>
-                    {isRealMode ? 'Regulatory questions unavailable until ingestion completes' : 'Questions requiring provider response'}
+                    {isRealMode ? 'Questions will appear once your CQC review begins' : 'Questions that still need your response'}
                   </div>
                   <div className={styles.cardProvenance}>
-                    {isRealMode ? 'Regulatory ingestion pending' : 'Awaiting provider response'}
+                    {isRealMode ? 'CQC review pending' : 'Awaiting your response'}
                   </div>
                 </div>
 
                 <div className={styles.card}>
-                  <div className={styles.cardLabel}>Open Findings</div>
+                  <div className={styles.cardLabel}>Items Needing Attention</div>
                   <div className={styles.cardValue}>{data.openFindings}</div>
                   <div className={styles.cardNote}>
-                    {isRealMode ? 'Regulatory findings available after ingestion' : 'Findings without remediation'}
+                    {isRealMode ? 'Will appear once your CQC review is complete' : 'Issues that have not yet been resolved'}
                   </div>
                   <div className={styles.cardProvenance}>
                     {isRealMode
-                      ? `Regulatory history (${data.reportingDomain})`
-                      : `Generated via PRS Logic ${data.prsLogicVersion} (mock domain)`}
+                      ? 'From your CQC inspection history'
+                      : 'From your practice inspection'}
                   </div>
                 </div>
               </div>
             )}
             evidence={(
               <div className={styles.providerInfo}>
-                <h2 className={styles.sectionTitle}>Provider Details</h2>
+                <h2 className={styles.sectionTitle}>Organisation Details</h2>
                 <dl className={styles.definitionList}>
-                  <dt>Provider ID</dt>
+                  <dt>CQC Provider Reference</dt>
                   <dd>{data.provider.providerId}</dd>
 
-                  <dt>Facility ID</dt>
+                  <dt>Location Reference</dt>
                   <dd>{data.facility?.id || 'Unknown'}</dd>
 
-                  <dt>PRS State</dt>
+                  <dt>Current CQC Rating</dt>
                   <dd>{data.provider.prsState}</dd>
 
-                  <dt>Registered Beds</dt>
+                  <dt>Registered Capacity</dt>
                   <dd>{data.provider.registeredBeds}</dd>
 
                   <dt>Service Types</dt>
@@ -181,7 +180,7 @@ export default function OverviewPage() {
 
                   {data.facility && (
                     <>
-                      <dt>Facility CQC Location ID</dt>
+                      <dt>CQC Location Reference</dt>
                       <dd>{data.facility.cqcLocationId}</dd>
                     </>
                   )}

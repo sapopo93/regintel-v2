@@ -9,8 +9,8 @@
 
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
+import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { VersionBadge } from '../constitutional/VersionBadge';
 import { SIDEBAR_NAVIGATION } from '@/lib/constants';
 import styles from './Sidebar.module.css';
 
@@ -27,6 +27,7 @@ interface SidebarProps {
   prsLogicVersion: string;
   topicsCompleted?: number;
   totalTopics?: number;
+  defaultFacilityId?: string;
 }
 
 export function Sidebar({
@@ -37,22 +38,63 @@ export function Sidebar({
   prsLogicVersion,
   topicsCompleted,
   totalTopics,
+  defaultFacilityId,
 }: SidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const providerId = searchParams.get('provider');
-  const facilityId = searchParams.get('facility');
-  const statusLabel = status?.trim() ? status : 'STATUS UNAVAILABLE';
+  const facilityIdFromQuery = searchParams.get('facility');
+  const statusLabel = status?.trim() ? status : 'Not yet rated';
+  const [storedFacilityId, setStoredFacilityId] = useState<string | null>(null);
+
+  const facilityIdFromPath = useMemo(() => {
+    const match = pathname.match(/^\/facilities\/([^/?#]+)/);
+    return match ? decodeURIComponent(match[1]) : null;
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!providerId) return;
+    const storageKey = `regintel:lastFacility:${providerId}`;
+    const knownFacility =
+      facilityIdFromQuery || facilityIdFromPath || defaultFacilityId || null;
+
+    if (knownFacility) {
+      try {
+        window.localStorage.setItem(storageKey, knownFacility);
+      } catch {
+        // Ignore storage issues and keep runtime behavior.
+      }
+      setStoredFacilityId(knownFacility);
+      return;
+    }
+
+    try {
+      const persisted = window.localStorage.getItem(storageKey);
+      setStoredFacilityId(persisted);
+    } catch {
+      setStoredFacilityId(null);
+    }
+  }, [providerId, facilityIdFromQuery, facilityIdFromPath, defaultFacilityId]);
+
+  const resolvedFacilityId =
+    facilityIdFromQuery || facilityIdFromPath || defaultFacilityId || storedFacilityId;
 
   return (
     <aside className={styles.sidebar}>
       <div className={styles.header}>
         <div className={styles.providerName}>{providerName}</div>
-        <div className={styles.snapshot}>Snapshot: {snapshotDate}</div>
+        <div className={styles.snapshot}>
+          Last updated:{' '}
+          {new Date(snapshotDate).toLocaleDateString('en-GB', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          })}
+        </div>
         <div className={styles.status}>
-          <span className={styles.statusLabel}>Last Recorded Rating</span>
+          <span className={styles.statusLabel}>CQC Rating</span>
           <span className={styles.statusValue}>{statusLabel}</span>
-          <span className={styles.statusSource}>Source: CQC</span>
+          <span className={styles.statusSource}>Rated by CQC</span>
         </div>
       </div>
 
@@ -68,8 +110,26 @@ export function Sidebar({
           if (providerId) {
             query.set('provider', providerId);
           }
-          if (facilityId) {
-            query.set('facility', facilityId);
+          if (resolvedFacilityId) {
+            query.set('facility', resolvedFacilityId);
+          } else if (
+            providerId &&
+            item.id !== 'providers' &&
+            item.id !== 'facilities'
+          ) {
+            // Without a facility context, route users back to facility selection.
+            const facilitiesQuery = new URLSearchParams();
+            facilitiesQuery.set('provider', providerId);
+            return (
+              <Link
+                key={item.id}
+                href={`/facilities?${facilitiesQuery.toString()}` as any}
+                className={isActive ? styles.navItemActive : styles.navItem}
+                data-testid={`sidebar-link-${item.id}`}
+              >
+                {label}
+              </Link>
+            );
           }
           const href = query.toString() ? `${item.href}?${query.toString()}` : item.href;
 
@@ -87,16 +147,6 @@ export function Sidebar({
       </nav>
 
       <div className={styles.systemStatus}>
-        <VersionBadge
-          label="Topic Catalog"
-          version={topicCatalogVersion}
-          verified
-        />
-        <VersionBadge label="PRS Logic" version={prsLogicVersion} verified />
-        <div className={styles.statusItem}>
-          <span>Deterministic</span>
-          <span className={styles.checkmark}>✓</span>
-        </div>
         {!isE2EMode && <SignOutButton />}
       </div>
     </aside>

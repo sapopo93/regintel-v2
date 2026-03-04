@@ -30,18 +30,14 @@ export function MetadataBar({
   compact = false,
 }: MetadataBarProps) {
   if (compact) {
-    // Extract first 6 chars of hash for compact display
-    const tcHashPrefix = topicCatalogHash.replace('sha256:', '').substring(0, 6);
-    const prsHashPrefix = prsLogicHash.replace('sha256:', '').substring(0, 6);
-
     return (
       <div className={styles.containerCompact}>
         <DomainBadge domain={domain} />
-        <span className={styles.frozenLabel}>• Inspection Snapshot (Frozen)</span>
-        <TimestampDisplay timestamp={snapshotTimestamp} label="As-of" dateOnly />
+        <span className={styles.frozenLabel}>• Verified Inspection Record</span>
+        <TimestampDisplay timestamp={snapshotTimestamp} label="Data as of" dateOnly />
         <span className={styles.separator}>|</span>
         <span className={styles.version} title={`Topic Catalog: ${topicCatalogHash}\nPRS Logic: ${prsLogicHash}`}>
-          TC {topicCatalogVersion} ({tcHashPrefix}…) · PRS {prsLogicVersion} ({prsHashPrefix}…)
+          Compliance Framework {topicCatalogVersion} · Rules Engine {prsLogicVersion}
         </span>
       </div>
     );
@@ -51,28 +47,45 @@ export function MetadataBar({
     <div className={styles.container}>
       <div className={styles.row}>
         <DomainBadge domain={domain} />
-        <TimestampDisplay timestamp={snapshotTimestamp} label="Snapshot" />
+        <TimestampDisplay
+          timestamp={new Date(snapshotTimestamp).toLocaleDateString('en-GB', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          })}
+          label="Data as of"
+        />
       </div>
       <div className={styles.row}>
-        <VersionBadge label="Topic Catalog" version={topicCatalogVersion} />
+        <VersionBadge label="Compliance Framework" version={topicCatalogVersion} />
         <HashDisplay hash={topicCatalogHash} />
       </div>
       <div className={styles.row}>
-        <VersionBadge label="PRS Logic" version={prsLogicVersion} />
+        <VersionBadge label="Rules Engine" version={prsLogicVersion} />
         <HashDisplay hash={prsLogicHash} />
       </div>
       <div className={styles.row}>
-        <span className={styles.metaLabel}>Mode</span>
-        <span className={styles.metaValue}>{mode}</span>
-        <span className={styles.metaLabel}>Ingestion</span>
-        <span className={styles.metaValue}>{ingestionStatus}</span>
+        <span className={styles.metaLabel}>Inspection Type</span>
+        <span className={styles.metaValue}>
+          {mode === 'REAL' ? 'Live CQC Data' : mode === 'MOCK' ? 'Practice Inspection' : mode}
+        </span>
+        <span className={styles.metaLabel}>Import Status</span>
+        <span className={styles.metaValue}>
+          {ingestionStatus === 'READY'
+            ? 'Complete'
+            : ingestionStatus === 'INGESTION_INCOMPLETE'
+              ? 'In Progress'
+              : ingestionStatus === 'NO_SOURCE'
+                ? 'No data source'
+                : ingestionStatus}
+        </span>
       </div>
       <div className={styles.row}>
-        <span className={styles.metaLabel}>Snapshot ID</span>
+        <span className={styles.metaLabel}>Record Reference</span>
         <span className={styles.metaValueMono}>{snapshotId}</span>
       </div>
       <div className={styles.row}>
-        <span className={styles.metaLabel}>Report Source</span>
+        <span className={styles.metaLabel}>Data Source</span>
         <span className={styles.metaValueMono}>{reportSource.type}:{reportSource.id}</span>
       </div>
     </div>

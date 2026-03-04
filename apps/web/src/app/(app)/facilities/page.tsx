@@ -20,7 +20,6 @@ import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { MetadataBar } from '@/components/constitutional/MetadataBar';
 import { apiClient } from '@/lib/api/client';
 import type { FacilitiesListResponse } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
@@ -65,6 +64,7 @@ export default function FacilitiesPage() {
         snapshotDate: data.provider?.asOf || data.snapshotTimestamp,
         topicCatalogVersion: data.topicCatalogVersion,
         prsLogicVersion: data.prsLogicVersion,
+        defaultFacilityId: data.facilities[0]?.id,
       }
     : {
         providerName: 'Loading...',
@@ -79,28 +79,14 @@ export default function FacilitiesPage() {
 
       <main className={styles.main}>
         {loading ? (
-          <div className={styles.loading}>Loading facilities...</div>
+          <div className={styles.loading}>Loading locations...</div>
         ) : error || !data ? (
-          <div className={styles.error}>Error: {error || 'Failed to load facilities'}</div>
+          <div className={styles.error}>Error: {error || 'Failed to load locations'}</div>
         ) : (
           <>
             <PageHeader
-              title="Facilities"
-              subtitle={`${data.totalCount} facilities registered`}
-              topicCatalogVersion={data.topicCatalogVersion}
-              topicCatalogHash={data.topicCatalogHash}
-              prsLogicVersion={data.prsLogicVersion}
-              prsLogicHash={data.prsLogicHash}
-              snapshotTimestamp={data.snapshotTimestamp}
-              domain={data.domain}
-              reportingDomain={data.reportingDomain}
-              mode={data.mode}
-              reportSource={data.reportSource}
-              snapshotId={data.snapshotId}
-              ingestionStatus={data.ingestionStatus}
-            />
-
-            <MetadataBar
+              title="Locations"
+              subtitle={`${data.totalCount} locations registered`}
               topicCatalogVersion={data.topicCatalogVersion}
               topicCatalogHash={data.topicCatalogHash}
               prsLogicVersion={data.prsLogicVersion}
@@ -120,14 +106,14 @@ export default function FacilitiesPage() {
                 onClick={handleAddFacility}
                 data-testid="add-facility-button"
               >
-                Add Facility
+                Add Location
               </button>
             </div>
 
             {data.facilities.length === 0 ? (
               <div className={styles.empty}>
-                <p>No facilities registered yet.</p>
-                <p>Click "Add Facility" to register your first facility.</p>
+                <p>No locations registered yet.</p>
+                <p>Click "Add Location" to register your first location.</p>
               </div>
             ) : (
               <div className={styles.facilitiesList}>
@@ -145,7 +131,7 @@ export default function FacilitiesPage() {
                         <span className={styles.detailValue}>{facility.cqcLocationId}</span>
                       </div>
                       <div className={styles.detailRow}>
-                        <span className={styles.detailLabel}>Service Type:</span>
+                        <span className={styles.detailLabel}>Type of Service:</span>
                         <span className={styles.detailValue}>{facility.serviceType}</span>
                       </div>
                       <div className={styles.detailRow}>
@@ -154,15 +140,12 @@ export default function FacilitiesPage() {
                           {facility.addressLine1}, {facility.townCity}, {facility.postcode}
                         </span>
                       </div>
-                      {facility.capacity && (
+                      {facility.capacity && facility.capacity > 0 && (
                         <div className={styles.detailRow}>
-                          <span className={styles.detailLabel}>Capacity:</span>
+                          <span className={styles.detailLabel}>Registered Capacity / Service Users:</span>
                           <span className={styles.detailValue}>{facility.capacity}</span>
                         </div>
                       )}
-                    </div>
-                    <div className={styles.facilityHash}>
-                      Hash: {facility.facilityHash.substring(0, 16)}...
                     </div>
                   </div>
                 ))}

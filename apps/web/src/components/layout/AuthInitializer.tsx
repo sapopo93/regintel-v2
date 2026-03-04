@@ -33,7 +33,7 @@ function isTestTokenAllowed(): boolean {
  * This prevents accidental test auth bypass in production if NEXT_PUBLIC_CLERK_TEST_TOKEN
  * is accidentally set without E2E mode enabled.
  *
- * In E2E test mode, this component is not rendered (layout.tsx skips ClerkProvider).
+ * In E2E test mode, this component is rendered and may use NEXT_PUBLIC_CLERK_TEST_TOKEN.
  */
 export function AuthInitializer() {
     const { getToken } = useAuth();

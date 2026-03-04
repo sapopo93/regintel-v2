@@ -129,18 +129,18 @@ export default function ProvidersPage() {
       <main className={styles.main}>
         <div className={styles.header}>
           <div>
-            <p className={styles.kicker}>Onboarding</p>
-            <h1 className={styles.title}>Providers</h1>
-            <p className={styles.subtitle}>Create a provider and register facilities.</p>
+            <p className={styles.kicker}>Getting Started</p>
+            <h1 className={styles.title}>My Care Providers</h1>
+            <p className={styles.subtitle}>Create a provider and register locations.</p>
           </div>
         </div>
 
         <section className={styles.formCard}>
-          <h2 className={styles.sectionTitle}>Create Provider</h2>
+          <h2 className={styles.sectionTitle}>Add a New Provider</h2>
           {error && <div className={styles.error}>{error}</div>}
           <form onSubmit={handleSubmit} className={styles.form}>
             <label className={styles.label}>
-              Provider Name <span className={styles.required}>*</span>
+              Organisation Name <span className={styles.required}>*</span>
               <input
                 value={providerName}
                 onChange={(event) => setProviderName(event.target.value)}
@@ -151,7 +151,7 @@ export default function ProvidersPage() {
             </label>
 
             <label className={styles.label}>
-              Organisation Reference (optional)
+              Reference Code (optional)
               <input
                 value={orgRef}
                 onChange={(event) => setOrgRef(event.target.value)}
@@ -167,24 +167,24 @@ export default function ProvidersPage() {
               disabled={submitting}
               data-testid="primary-create-provider"
             >
-              {submitting ? 'Creating...' : 'Create Provider'}
+              {submitting ? 'Adding...' : 'Add Provider'}
             </button>
           </form>
         </section>
 
         <section className={styles.list}>
-          <h2 className={styles.sectionTitle}>Existing Providers</h2>
+          <h2 className={styles.sectionTitle}>Your Providers</h2>
           {data && data.providers.length === 0 ? (
-            <p className={styles.empty}>No providers yet.</p>
+            <p className={styles.empty}>You have not added any providers yet.</p>
           ) : (
             <div className={styles.grid}>
               {data?.providers.map((provider) => (
                 <div key={provider.providerId} className={styles.card}>
                   <div>
                     <h3 className={styles.cardTitle}>{provider.providerName}</h3>
-                    <p className={styles.cardMeta}>Provider ID: {provider.providerId}</p>
+                    <p className={styles.cardMeta}>CQC Provider Reference: {provider.providerId}</p>
                     {provider.orgRef && (
-                      <p className={styles.cardMeta}>Org ref: {provider.orgRef}</p>
+                      <p className={styles.cardMeta}>Reference: {provider.orgRef}</p>
                     )}
                   </div>
                   <button
@@ -193,7 +193,7 @@ export default function ProvidersPage() {
                     onClick={() => handleOpenProvider(provider)}
                     data-testid={`provider-open-${provider.providerId}`}
                   >
-                    Manage Facilities
+                    View Locations
                   </button>
                 </div>
               ))}

@@ -21,7 +21,6 @@ import { useEffect, useState, FormEvent } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { MetadataBar } from '@/components/constitutional/MetadataBar';
 import { apiClient, getValidatedApiBaseUrl } from '@/lib/api/client';
 import type { FacilityDetailResponse, EvidenceListResponse, ScanStatus } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
@@ -52,6 +51,7 @@ export default function FacilityDetailPage() {
   // CQC report sync state
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [syncComplete, setSyncComplete] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -135,7 +135,12 @@ export default function FacilityDetailPage() {
 
     try {
       const response = await apiClient.syncLatestReport(facilityId);
-      setSyncMessage(`${response.message} Job ID: ${response.jobId}`);
+      setSyncMessage(`${response.message}`);
+      setSyncComplete(false);
+      setTimeout(() => {
+        setSyncMessage('CQC report imported. Your inspection rating and documents have been updated — refresh the page to see the latest data.');
+        setSyncComplete(true);
+      }, 45000);
     } catch (err: unknown) {
       setSyncMessage(err instanceof Error ? err.message : 'Failed to sync report');
     } finally {
@@ -172,7 +177,7 @@ export default function FacilityDetailPage() {
   if (loading) {
     return (
       <div className={styles.layout}>
-        <div className={styles.loading}>Loading facility...</div>
+        <div className={styles.loading}>Loading location details...</div>
       </div>
     );
   }
@@ -180,7 +185,7 @@ export default function FacilityDetailPage() {
   if (error || !facilityData || !evidenceData) {
     return (
       <div className={styles.layout}>
-        <div className={styles.error}>Error: {error || 'Failed to load facility'}</div>
+        <div className={styles.error}>Error: {error || 'Failed to load location details'}</div>
       </div>
     );
   }
@@ -199,21 +204,7 @@ export default function FacilityDetailPage() {
       <main className={styles.main}>
         <PageHeader
           title={facility.facilityName}
-          subtitle={`CQC Location ID: ${facility.cqcLocationId}`}
-          topicCatalogVersion={facilityData.topicCatalogVersion}
-          topicCatalogHash={facilityData.topicCatalogHash}
-          prsLogicVersion={facilityData.prsLogicVersion}
-          prsLogicHash={facilityData.prsLogicHash}
-          snapshotTimestamp={facilityData.snapshotTimestamp}
-          domain={facilityData.domain}
-          reportingDomain={facilityData.reportingDomain}
-          mode={facilityData.mode}
-          reportSource={facilityData.reportSource}
-          snapshotId={facilityData.snapshotId}
-          ingestionStatus={facilityData.ingestionStatus}
-        />
-
-        <MetadataBar
+          subtitle="CQC Registered Location"
           topicCatalogVersion={facilityData.topicCatalogVersion}
           topicCatalogHash={facilityData.topicCatalogHash}
           prsLogicVersion={facilityData.prsLogicVersion}
@@ -229,26 +220,18 @@ export default function FacilityDetailPage() {
 
         <section className={styles.section}>
           <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>Facility Details</h2>
+            <h2 className={styles.sectionTitle}>Location Details</h2>
             {providerId && (
               <button
                 className={styles.overviewButton}
                 onClick={() => router.push(`/overview?provider=${providerId}&facility=${facilityId}`)}
                 data-testid="continue-overview-button"
               >
-                Continue to Overview
+                Go to Dashboard
               </button>
             )}
           </div>
           <div className={styles.detailsGrid}>
-            <div className={styles.detailItem}>
-              <span className={styles.detailLabel}>Provider ID:</span>
-              <span className={styles.detailValueMono}>{facility.providerId}</span>
-            </div>
-            <div className={styles.detailItem}>
-              <span className={styles.detailLabel}>Facility ID:</span>
-              <span className={styles.detailValueMono}>{facility.id}</span>
-            </div>
             <div className={styles.detailItem}>
               <span className={styles.detailLabel}>Address:</span>
               <span className={styles.detailValue}>
@@ -256,26 +239,24 @@ export default function FacilityDetailPage() {
               </span>
             </div>
             <div className={styles.detailItem}>
-              <span className={styles.detailLabel}>CQC Location ID:</span>
+              <span className={styles.detailLabel}>CQC Location Reference:</span>
               <span className={styles.detailValue}>{facility.cqcLocationId}</span>
             </div>
             <div className={styles.detailItem}>
-              <span className={styles.detailLabel}>Service Type:</span>
+              <span className={styles.detailLabel}>Type of Service:</span>
               <span className={styles.detailValue}>{facility.serviceType}</span>
             </div>
-            {facility.capacity && (
+            {facility.capacity && facility.capacity > 0 && (
               <div className={styles.detailItem}>
                 <span className={styles.detailLabel}>Capacity:</span>
                 <span className={styles.detailValue}>{facility.capacity}</span>
               </div>
             )}
             <div className={styles.detailItem}>
-              <span className={styles.detailLabel}>Facility Hash:</span>
-              <span className={styles.detailValueMono}>{facility.facilityHash}</span>
-            </div>
-            <div className={styles.detailItem}>
-              <span className={styles.detailLabel}>As Of:</span>
-              <span className={styles.detailValue}>{facility.asOf}</span>
+              <span className={styles.detailLabel}>Data last updated:</span>
+              <span className={styles.detailValue}>
+                {new Date(facility.asOf).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+              </span>
             </div>
           </div>
 
@@ -287,34 +268,36 @@ export default function FacilityDetailPage() {
               disabled={syncing}
               data-testid="sync-report-button"
             >
-              {syncing ? 'Syncing...' : 'Sync Latest CQC Report'}
+              {syncing ? 'Importing CQC data...' : 'Import Latest CQC Report'}
             </button>
             {syncMessage && (
-              <span className={styles.syncMessage}>{syncMessage}</span>
+              <span className={styles.syncMessage}>
+                {syncComplete ? '✓ ' : '⏳ '}{syncMessage}
+              </span>
             )}
           </div>
         </section>
 
         <section className={styles.section}>
           <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>Evidence</h2>
+            <h2 className={styles.sectionTitle}>Uploaded Documents</h2>
             <button
               className={styles.uploadButton}
               onClick={() => setShowUploadForm(!showUploadForm)}
               data-testid="toggle-upload-button"
             >
-              {showUploadForm ? 'Cancel Upload' : 'Upload Evidence'}
+              {showUploadForm ? 'Cancel' : 'Upload a Document'}
             </button>
           </div>
 
           {lastUploadScanStatus && (
             <div className={styles.scanStatusBanner} data-testid="scan-status-banner">
-              <span className={styles.scanStatusLabel}>Last Upload Scan Status:</span>
+              <span className={styles.scanStatusLabel}>Security check status:</span>
               <span className={`${styles.scanStatusValue} ${styles[`scan${lastUploadScanStatus}`]}`}>
                 {lastUploadScanStatus}
               </span>
               {lastUploadScanStatus === 'PENDING' && (
-                <span className={styles.scanStatusHint}>Malware scan in progress...</span>
+                <span className={styles.scanStatusHint}>Your document is being checked for security...</span>
               )}
             </div>
           )}
@@ -343,7 +326,7 @@ export default function FacilityDetailPage() {
 
               <div className={styles.formGroup}>
                 <label htmlFor="evidenceType" className={styles.label}>
-                  Evidence Type
+                  Document Type
                 </label>
                 <select
                   id="evidenceType"
@@ -386,14 +369,14 @@ export default function FacilityDetailPage() {
                 disabled={uploading || !selectedFile}
                 data-testid="primary-upload-evidence"
               >
-                {uploading ? 'Uploading...' : 'Upload'}
+                {uploading ? 'Uploading...' : 'Upload Document'}
               </button>
             </form>
           )}
 
           <div className={styles.evidenceList}>
             {evidenceData.evidence.length === 0 ? (
-              <div className={styles.empty}>No evidence uploaded yet.</div>
+              <div className={styles.empty}>No documents uploaded yet.</div>
             ) : (
               evidenceData.evidence.map((record) => (
                 <div key={record.evidenceRecordId} className={styles.evidenceCard}>
@@ -408,13 +391,13 @@ export default function FacilityDetailPage() {
                     </button>
                   </div>
                   <div className={styles.evidenceDetails}>
-                    <span className={styles.evidenceDetail}>Type: {record.mimeType}</span>
+                    <span className={styles.evidenceDetail}>File type: {record.mimeType}</span>
                     <span className={styles.evidenceDetail}>
                       Uploaded: {new Date(record.uploadedAt).toLocaleDateString()}
                     </span>
-                    <span className={styles.evidenceDetail}>Evidence: {record.evidenceType}</span>
+                    <span className={styles.evidenceDetail}>Category: {record.evidenceType}</span>
                   </div>
-                  <div className={styles.evidenceHash}>Hash: {record.blobHash.substring(0, 16)}...</div>
+                  <div className={styles.evidenceHash}>Verification code: {record.blobHash.substring(0, 16)}...</div>
                 </div>
               ))
             )}

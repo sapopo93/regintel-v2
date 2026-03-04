@@ -103,6 +103,8 @@ const IGNORE_PATTERNS = [
   'docs', // Documentation with example/placeholder credentials
   'scripts', // Operational scripts (may contain example URLs/patterns)
   '.github', // CI configuration with test environment setup
+  'test-results', // Playwright artifacts (binary traces/screenshots)
+  'playwright-report', // Playwright HTML report output
 ];
 
 /**

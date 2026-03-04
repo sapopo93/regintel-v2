@@ -35,11 +35,11 @@ export function DisclosurePanel({
 }: DisclosurePanelProps) {
   const [currentLayer, setCurrentLayer] = useState<DisclosureLayer>('summary');
 
-  const summaryLabel = labels?.summary ?? 'Summary';
-  const evidenceLabel = labels?.evidence ?? 'Evidence';
-  const traceLabel = labels?.trace ?? 'Trace';
-  const showEvidenceLabel = actions?.showEvidence ?? 'Show Evidence →';
-  const showTraceLabel = actions?.showTrace ?? 'Show Trace →';
+  const summaryLabel = labels?.summary ?? 'Overview';
+  const evidenceLabel = labels?.evidence ?? 'Supporting Documents';
+  const traceLabel = labels?.trace ?? 'Audit Trail';
+  const showEvidenceLabel = actions?.showEvidence ?? 'View Supporting Documents →';
+  const showTraceLabel = actions?.showTrace ?? 'View Audit Trail →';
 
   return (
     <div className={styles.container}>

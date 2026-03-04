@@ -21,6 +21,18 @@ import type { ProviderOverviewResponse, TopicsListResponse } from '@/lib/api/typ
 import { validateConstitutionalRequirements } from '@/lib/validators';
 import styles from './page.module.css';
 
+function getQuestionModeLabel(questionMode: string): string {
+  const labels: Record<string, string> = {
+    STRUCTURED: 'Structured Review',
+    OPEN: 'Open Questions',
+    HYBRID: 'Mixed Format',
+    evidence_first: 'Evidence First',
+    narrative_first: 'Narrative First',
+  };
+
+  return labels[questionMode] ?? questionMode.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+}
+
 export default function TopicsPage() {
   const searchParams = useSearchParams();
   const providerId = searchParams.get('provider');
@@ -82,8 +94,8 @@ export default function TopicsPage() {
 
         <main className={styles.main}>
           <PageHeader
-            title="Inspection Topics"
-            subtitle="All topics from frozen catalog"
+            title="Compliance Areas"
+            subtitle="All areas checked during a CQC inspection"
             topicCatalogVersion={data.topicCatalogVersion}
             topicCatalogHash={data.topicCatalogHash}
             prsLogicVersion={data.prsLogicVersion}
@@ -108,14 +120,14 @@ export default function TopicsPage() {
                   >
                     <div className={styles.topicHeader}>
                       <h3 className={styles.topicTitle}>{topic.title}</h3>
-                      <div className={styles.topicBadge}>{topic.questionMode}</div>
+                      <div className={styles.topicBadge}>{getQuestionModeLabel(topic.questionMode)}</div>
                     </div>
                     <div className={styles.topicMeta}>
-                      <span>Regulation: {topic.regulationSectionId}</span>
-                      <span>Max follow-ups: {topic.maxFollowUps}</span>
+                      <span>Regulation reference: {topic.regulationSectionId}</span>
+                      <span>Follow-up questions: {topic.maxFollowUps}</span>
                     </div>
                     <div className={styles.topicEvidence}>
-                      Evidence required: {topic.evidenceRequirements.length} items
+                      Documents required: {topic.evidenceRequirements.length}
                     </div>
                   </Link>
                 ))}
@@ -123,7 +135,7 @@ export default function TopicsPage() {
             )}
             evidence={(
               <div className={styles.completionPanel}>
-                <h2 className={styles.sectionTitle}>Completion Status</h2>
+                <h2 className={styles.sectionTitle}>Your Progress</h2>
                 <ul className={styles.completionList}>
                   {data.topics.map((topic) => {
                     const status = data.completionStatus[topic.id];

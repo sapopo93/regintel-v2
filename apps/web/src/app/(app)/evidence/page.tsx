@@ -13,7 +13,6 @@ import { useSearchParams } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DisclosurePanel } from '@/components/disclosure/DisclosurePanel';
-import { MetadataBar } from '@/components/constitutional/MetadataBar';
 import { SimulationFrame } from '@/components/mock/SimulationFrame';
 import { apiClient } from '@/lib/api/client';
 import type { EvidenceListResponse, ProviderOverviewResponse } from '@/lib/api/types';
@@ -81,8 +80,8 @@ export default function EvidencePage() {
 
         <main className={styles.main}>
           <PageHeader
-            title="Evidence Records"
-            subtitle={`${data.totalCount} evidence items`}
+            title="Uploaded Documents"
+            subtitle={`${data.totalCount} documents uploaded`}
             topicCatalogVersion={data.topicCatalogVersion}
             topicCatalogHash={data.topicCatalogHash}
             prsLogicVersion={data.prsLogicVersion}
@@ -99,16 +98,16 @@ export default function EvidencePage() {
           <DisclosurePanel
             summary={(
               <div className={styles.summaryPanel}>
-                <h2 className={styles.sectionTitle}>Evidence Summary</h2>
+                <h2 className={styles.sectionTitle}>Documents Overview</h2>
                 <p className={styles.summaryText}>
-                  {data.totalCount} evidence items are currently registered for this provider.
+                  {data.totalCount} documents have been uploaded for this location.
                 </p>
               </div>
             )}
             evidence={(
               <div className={styles.evidenceList}>
                 {data.evidence.length === 0 ? (
-                  <div className={styles.empty}>No evidence records found</div>
+                  <div className={styles.empty}>No documents have been uploaded yet</div>
                 ) : (
                   data.evidence.map((record) => (
                     <div key={record.evidenceRecordId} className={styles.evidenceCard}>
@@ -118,20 +117,20 @@ export default function EvidencePage() {
                       </div>
 
                       <dl className={styles.evidenceMeta}>
-                        <dt>Evidence ID</dt>
+                        <dt>Document Reference</dt>
                         <dd>{record.evidenceRecordId}</dd>
 
-                        <dt>Blob Hash</dt>
+                        <dt>File Verification Code</dt>
                         <dd className={styles.hash}>{record.blobHash}</dd>
 
-                        <dt>MIME Type</dt>
+                        <dt>File Type</dt>
                         <dd>{record.mimeType}</dd>
 
-                        <dt>Uploaded At</dt>
+                        <dt>Date Uploaded</dt>
                         <dd>{new Date(record.uploadedAt).toLocaleString()}</dd>
 
-                        <dt>Size</dt>
-                        <dd>{record.sizeBytes} bytes</dd>
+                        <dt>File Size</dt>
+                        <dd>{(record.sizeBytes / 1024).toFixed(1)} KB</dd>
                       </dl>
                     </div>
                   ))
@@ -139,19 +138,12 @@ export default function EvidencePage() {
               </div>
             )}
             trace={(
-              <MetadataBar
-                topicCatalogVersion={data.topicCatalogVersion}
-                topicCatalogHash={data.topicCatalogHash}
-                prsLogicVersion={data.prsLogicVersion}
-                prsLogicHash={data.prsLogicHash}
-                snapshotTimestamp={data.snapshotTimestamp}
-                domain={data.domain}
-                reportingDomain={data.reportingDomain}
-                mode={data.mode}
-                reportSource={data.reportSource}
-                snapshotId={data.snapshotId}
-                ingestionStatus={data.ingestionStatus}
-              />
+              <div style={{ padding: '16px', color: '#666', fontSize: '14px' }}>
+                <p><strong>Compliance Framework:</strong> {data.topicCatalogVersion}</p>
+                <p><strong>Rules Engine:</strong> {data.prsLogicVersion}</p>
+                <p><strong>Data as of:</strong> {new Date(data.snapshotTimestamp).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                <p><strong>Inspection Type:</strong> {data.mode === 'REAL' ? 'Live CQC Data' : 'Practice Inspection'}</p>
+              </div>
             )}
           />
         </main>
