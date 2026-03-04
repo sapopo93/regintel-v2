@@ -23,7 +23,6 @@ import { useSearchParams } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DisclosurePanel } from '@/components/disclosure/DisclosurePanel';
-import { MetadataBar } from '@/components/constitutional/MetadataBar';
 import { SimulationFrame } from '@/components/mock/SimulationFrame';
 import { SimulationModeBadge } from '@/components/mock/SimulationModeBadge';
 import { apiClient } from '@/lib/api/client';
@@ -188,19 +187,12 @@ export default function OverviewPage() {
               </div>
             )}
             trace={(
-              <MetadataBar
-                topicCatalogVersion={data.topicCatalogVersion}
-                topicCatalogHash={data.topicCatalogHash}
-                prsLogicVersion={data.prsLogicVersion}
-                prsLogicHash={data.prsLogicHash}
-                snapshotTimestamp={data.snapshotTimestamp}
-                domain={data.domain}
-                reportingDomain={data.reportingDomain}
-                mode={data.mode}
-                reportSource={data.reportSource}
-                snapshotId={data.snapshotId}
-                ingestionStatus={data.ingestionStatus}
-              />
+              <div style={{ padding: '16px', color: '#666', fontSize: '14px' }}>
+                <p><strong>Compliance Framework:</strong> {data.topicCatalogVersion}</p>
+                <p><strong>Rules Engine:</strong> {data.prsLogicVersion}</p>
+                <p><strong>Data as of:</strong> {new Date(data.snapshotTimestamp).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                <p><strong>Inspection Type:</strong> {data.mode === 'REAL' ? 'Live CQC Data' : 'Practice Inspection'}</p>
+              </div>
             )}
           />
         </main>
