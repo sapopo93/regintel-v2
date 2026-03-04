@@ -146,6 +146,7 @@ export default function ExportsPage() {
           providerName={overview.provider.providerName}
           snapshotDate={overview.provider.asOf}
           status={overview.provider.prsState}
+          latestRating={overview.facility?.latestRating}
           topicCatalogVersion={statusData.topicCatalogVersion}
           prsLogicVersion={statusData.prsLogicVersion}
           topicsCompleted={overview.topicsCompleted}

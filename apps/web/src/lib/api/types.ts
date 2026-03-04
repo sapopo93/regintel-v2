@@ -280,6 +280,7 @@ export interface Facility {
   cqcLocationId: string;
   serviceType: string;
   capacity?: number;
+  latestRating?: string;
   facilityHash: string;
   createdAt: string;
   createdBy: string;

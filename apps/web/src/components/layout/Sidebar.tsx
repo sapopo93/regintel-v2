@@ -23,6 +23,7 @@ interface SidebarProps {
   providerName: string;
   snapshotDate: string;
   status?: string;
+  latestRating?: string;
   topicCatalogVersion: string;
   prsLogicVersion: string;
   topicsCompleted?: number;
@@ -34,6 +35,7 @@ export function Sidebar({
   providerName,
   snapshotDate,
   status,
+  latestRating,
   topicCatalogVersion,
   prsLogicVersion,
   topicsCompleted,
@@ -44,7 +46,30 @@ export function Sidebar({
   const searchParams = useSearchParams();
   const providerId = searchParams.get('provider');
   const facilityIdFromQuery = searchParams.get('facility');
-  const statusLabel = status?.trim() ? status : 'Not yet rated';
+  const statusLabel = useMemo(() => {
+    const rating = latestRating?.trim();
+    if (rating) return rating;
+
+    const normalizedStatus = status?.trim().toUpperCase();
+    if (normalizedStatus === 'ESTABLISHED' || normalizedStatus === 'GOOD') {
+      return 'Good';
+    }
+    if (normalizedStatus === 'OUTSTANDING') {
+      return 'Outstanding';
+    }
+    if (normalizedStatus === 'REQUIRES_IMPROVEMENT') {
+      return 'Requires improvement';
+    }
+    if (normalizedStatus === 'INADEQUATE') {
+      return 'Inadequate';
+    }
+
+    if (status?.trim()) {
+      return status;
+    }
+
+    return 'Not yet rated';
+  }, [latestRating, status]);
   const [storedFacilityId, setStoredFacilityId] = useState<string | null>(null);
 
   const facilityIdFromPath = useMemo(() => {

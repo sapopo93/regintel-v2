@@ -197,6 +197,8 @@ export default function FacilityDetailPage() {
       <Sidebar
         providerName={facilityData.provider?.providerName || facility.facilityName}
         snapshotDate={facilityData.snapshotTimestamp}
+        status={facilityData.provider?.prsState}
+        latestRating={facility.latestRating}
         topicCatalogVersion={facilityData.topicCatalogVersion}
         prsLogicVersion={facilityData.prsLogicVersion}
       />
@@ -397,7 +399,6 @@ export default function FacilityDetailPage() {
                     </span>
                     <span className={styles.evidenceDetail}>Category: {record.evidenceType}</span>
                   </div>
-                  <div className={styles.evidenceHash}>Verification code: {record.blobHash.substring(0, 16)}...</div>
                 </div>
               ))
             )}

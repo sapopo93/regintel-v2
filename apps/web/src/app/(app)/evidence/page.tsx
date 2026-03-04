@@ -73,6 +73,7 @@ export default function EvidencePage() {
           providerName={overview.provider.providerName}
           snapshotDate={overview.provider.asOf}
           status={overview.provider.prsState}
+          latestRating={overview.facility?.latestRating}
           topicCatalogVersion={data.topicCatalogVersion}
           prsLogicVersion={data.prsLogicVersion}
           topicsCompleted={overview.topicsCompleted}
@@ -108,9 +109,54 @@ export default function EvidencePage() {
             summary={(
               <div className={styles.summaryPanel}>
                 <h2 className={styles.sectionTitle}>Documents Overview</h2>
-                <p className={styles.summaryText}>
-                  {data.totalCount === 0 ? 'No documents have been uploaded yet. Upload your policies, training records and CQC reports to improve your compliance score.' : `${data.totalCount} document${data.totalCount === 1 ? '' : 's'} uploaded for this location.`}
-                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '12px 0 8px' }}>
+                  <div style={{ flex: 1, height: '8px', background: '#eee', borderRadius: '4px', overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${Math.min(100, Math.round((data.totalCount / 12) * 100))}%`,
+                      background: data.totalCount >= 12 ? '#22c55e' : data.totalCount >= 6 ? '#f59e0b' : '#ef4444',
+                      borderRadius: '4px',
+                      transition: 'width 0.3s ease'
+                    }} />
+                  </div>
+                  <span style={{ fontSize: '13px', color: '#666', whiteSpace: 'nowrap' }}>
+                    {data.totalCount} of 12 recommended documents
+                  </span>
+                </div>
+                {data.totalCount === 0 ? (
+                  <p className={styles.summaryText}>
+                    No documents have been uploaded yet. Upload your policies, training records and CQC reports to improve your compliance score.
+                  </p>
+                ) : (
+                  <>
+                    <p className={styles.summaryText}>
+                      {data.totalCount} document{data.totalCount === 1 ? '' : 's'} uploaded for this location.
+                    </p>
+                    <div style={{ marginTop: '16px' }}>
+                      {['CQC_REPORT', 'POLICY', 'TRAINING', 'AUDIT', 'ROTA', 'SKILLS_MATRIX', 'SUPERVISION', 'CERTIFICATE', 'OTHER'].map((type) => {
+                        const count = data.evidence.filter(r => r.evidenceType === type).length;
+                        if (count === 0) return null;
+                        const labels: Record<string, string> = {
+                          CQC_REPORT: 'CQC Inspection Reports',
+                          POLICY: 'Policy Documents',
+                          TRAINING: 'Training Records',
+                          AUDIT: 'Audit Reports',
+                          ROTA: 'Staff Rotas',
+                          SKILLS_MATRIX: 'Skills Matrices',
+                          SUPERVISION: 'Supervision Records',
+                          CERTIFICATE: 'Certificates',
+                          OTHER: 'Other Documents',
+                        };
+                        return (
+                          <div key={type} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #eee', fontSize: '14px' }}>
+                            <span>{labels[type] ?? type}</span>
+                            <span style={{ fontWeight: 600 }}>{count}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
               </div>
             )}
             evidence={(

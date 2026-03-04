@@ -37,7 +37,7 @@ import type { Action } from '@regintel/domain/action';
 import { onboardFacility } from '@regintel/domain/onboarding';
 import {
   scrapeLatestReport,
-  downloadPdfReport,
+  buildHtmlReportBuffer,
   buildCqcReportSummary,
   isWebsiteReportNewer,
 } from '@regintel/domain/cqc-scraper';
@@ -74,6 +74,7 @@ const evidenceProcessJobs = new Map<string, string>();
 const mockInsightJobs = new Map<string, string>();
 
 const TOPICS = [
+  // ─── SAFE ───────────────────────────────────────────────────────────────────
   {
     id: 'safe-care-treatment',
     title: 'Safe Care and Treatment',
@@ -83,8 +84,272 @@ const TOPICS = [
     maxFollowUps: 4,
   },
   {
+    id: 'safeguarding',
+    title: 'Safeguarding Service Users from Abuse',
+    regulationSectionId: 'Reg 13',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT],
+    questionMode: 'evidence_first' as const,
+    maxFollowUps: 4,
+  },
+  {
+    id: 'medication-management',
+    title: 'Medication Management',
+    regulationSectionId: 'Reg 12(2)(b)',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT],
+    questionMode: 'evidence_first' as const,
+    maxFollowUps: 4,
+  },
+  {
+    id: 'infection-prevention-control',
+    title: 'Infection Prevention and Control',
+    regulationSectionId: 'Reg 12(2)(h)',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT],
+    questionMode: 'evidence_first' as const,
+    maxFollowUps: 3,
+  },
+  {
+    id: 'risk-assessment',
+    title: 'Risk Assessment and Management',
+    regulationSectionId: 'Reg 12(2)(a)',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT],
+    questionMode: 'evidence_first' as const,
+    maxFollowUps: 3,
+  },
+  {
+    id: 'premises-equipment',
+    title: 'Premises and Equipment',
+    regulationSectionId: 'Reg 15',
+    evidenceRequirements: [EvidenceType.AUDIT, EvidenceType.CERTIFICATE],
+    questionMode: 'evidence_first' as const,
+    maxFollowUps: 3,
+  },
+  {
+    id: 'deprivation-of-liberty',
+    title: 'Deprivation of Liberty Safeguards',
+    regulationSectionId: 'Reg 13(3)',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT],
+    questionMode: 'narrative_first' as const,
+    maxFollowUps: 4,
+  },
+
+  // ─── EFFECTIVE ──────────────────────────────────────────────────────────────
+  {
+    id: 'person-centred-care',
+    title: 'Person-Centred Care',
+    regulationSectionId: 'Reg 9',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT],
+    questionMode: 'narrative_first' as const,
+    maxFollowUps: 4,
+  },
+  {
+    id: 'consent',
+    title: 'Consent to Care and Treatment',
+    regulationSectionId: 'Reg 11',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT],
+    questionMode: 'evidence_first' as const,
+    maxFollowUps: 3,
+  },
+  {
+    id: 'nutrition-hydration',
+    title: 'Nutrition and Hydration',
+    regulationSectionId: 'Reg 14',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT],
+    questionMode: 'evidence_first' as const,
+    maxFollowUps: 3,
+  },
+  {
+    id: 'staff-training-development',
+    title: 'Staff Training and Development',
+    regulationSectionId: 'Reg 18',
+    evidenceRequirements: [EvidenceType.TRAINING, EvidenceType.CERTIFICATE, EvidenceType.SKILLS_MATRIX],
+    questionMode: 'evidence_first' as const,
+    maxFollowUps: 4,
+  },
+  {
+    id: 'supervision-appraisal',
+    title: 'Supervision and Appraisal',
+    regulationSectionId: 'Reg 18(1)',
+    evidenceRequirements: [EvidenceType.SUPERVISION, EvidenceType.POLICY],
+    questionMode: 'evidence_first' as const,
+    maxFollowUps: 3,
+  },
+  {
+    id: 'mental-capacity-act',
+    title: 'Mental Capacity Act Compliance',
+    regulationSectionId: 'Reg 11',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT],
+    questionMode: 'narrative_first' as const,
+    maxFollowUps: 4,
+  },
+
+  // ─── CARING ─────────────────────────────────────────────────────────────────
+  {
+    id: 'dignity-respect',
+    title: 'Dignity and Respect',
+    regulationSectionId: 'Reg 10',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT],
+    questionMode: 'narrative_first' as const,
+    maxFollowUps: 4,
+  },
+  {
+    id: 'service-user-involvement',
+    title: 'Service User Involvement',
+    regulationSectionId: 'Reg 9',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT],
+    questionMode: 'narrative_first' as const,
+    maxFollowUps: 3,
+  },
+  {
+    id: 'emotional-social-wellbeing',
+    title: 'Emotional and Social Wellbeing',
+    regulationSectionId: 'Reg 9',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT],
+    questionMode: 'narrative_first' as const,
+    maxFollowUps: 3,
+  },
+  {
+    id: 'end-of-life-care',
+    title: 'End of Life Care',
+    regulationSectionId: 'Reg 9',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT],
+    questionMode: 'narrative_first' as const,
+    maxFollowUps: 4,
+  },
+
+  // ─── RESPONSIVE ─────────────────────────────────────────────────────────────
+  {
+    id: 'complaints-handling',
+    title: 'Complaints Handling',
+    regulationSectionId: 'Reg 16',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT],
+    questionMode: 'evidence_first' as const,
+    maxFollowUps: 3,
+  },
+  {
+    id: 'care-planning-review',
+    title: 'Care Planning and Review',
+    regulationSectionId: 'Reg 9',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT],
+    questionMode: 'evidence_first' as const,
+    maxFollowUps: 4,
+  },
+  {
+    id: 'meeting-individual-needs',
+    title: 'Meeting Individual Needs',
+    regulationSectionId: 'Reg 9',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT],
+    questionMode: 'narrative_first' as const,
+    maxFollowUps: 3,
+  },
+  {
+    id: 'transitions-discharge',
+    title: 'Transitions and Discharge Planning',
+    regulationSectionId: 'Reg 9',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT],
+    questionMode: 'narrative_first' as const,
+    maxFollowUps: 3,
+  },
+  {
+    id: 'equality-diversity',
+    title: 'Equality and Diversity',
+    regulationSectionId: 'Reg 9',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT],
+    questionMode: 'narrative_first' as const,
+    maxFollowUps: 3,
+  },
+
+  // ─── WELL-LED ────────────────────────────────────────────────────────────────
+  {
+    id: 'governance-oversight',
+    title: 'Governance and Oversight',
+    regulationSectionId: 'Reg 17',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT],
+    questionMode: 'evidence_first' as const,
+    maxFollowUps: 4,
+  },
+  {
+    id: 'quality-assurance',
+    title: 'Quality Assurance and Improvement',
+    regulationSectionId: 'Reg 17',
+    evidenceRequirements: [EvidenceType.AUDIT, EvidenceType.POLICY],
+    questionMode: 'evidence_first' as const,
+    maxFollowUps: 4,
+  },
+  {
+    id: 'staff-recruitment',
+    title: 'Staff Recruitment and DBS',
+    regulationSectionId: 'Reg 19',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.CERTIFICATE, EvidenceType.AUDIT],
+    questionMode: 'evidence_first' as const,
+    maxFollowUps: 4,
+  },
+  {
+    id: 'fit-proper-persons',
+    title: 'Fit and Proper Persons',
+    regulationSectionId: 'Reg 20',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.CERTIFICATE, EvidenceType.AUDIT],
+    questionMode: 'evidence_first' as const,
+    maxFollowUps: 3,
+  },
+  {
+    id: 'whistleblowing-openness',
+    title: 'Whistleblowing and Duty of Candour',
+    regulationSectionId: 'Reg 17',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING],
+    questionMode: 'narrative_first' as const,
+    maxFollowUps: 3,
+  },
+  {
+    id: 'notifications-cqc',
+    title: 'Notifications to CQC',
+    regulationSectionId: 'Reg 18',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT],
+    questionMode: 'evidence_first' as const,
+    maxFollowUps: 3,
+  },
+  {
+    id: 'financial-sustainability',
+    title: 'Financial Sustainability',
+    regulationSectionId: 'Reg 17',
+    evidenceRequirements: [EvidenceType.AUDIT, EvidenceType.POLICY],
+    questionMode: 'evidence_first' as const,
+    maxFollowUps: 3,
+  },
+  {
+    id: 'records-management',
+    title: 'Records Management',
+    regulationSectionId: 'Reg 17',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT],
+    questionMode: 'evidence_first' as const,
+    maxFollowUps: 3,
+  },
+  {
+    id: 'staff-wellbeing',
+    title: 'Staff Wellbeing and Support',
+    regulationSectionId: 'Reg 18',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.SUPERVISION, EvidenceType.AUDIT],
+    questionMode: 'narrative_first' as const,
+    maxFollowUps: 3,
+  },
+  {
+    id: 'learning-from-incidents',
+    title: 'Learning from Incidents and Accidents',
+    regulationSectionId: 'Reg 17',
+    evidenceRequirements: [EvidenceType.AUDIT, EvidenceType.POLICY, EvidenceType.TRAINING],
+    questionMode: 'evidence_first' as const,
+    maxFollowUps: 4,
+  },
+  {
+    id: 'partnership-working',
+    title: 'Partnership Working and Referrals',
+    regulationSectionId: 'Reg 17',
+    evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT],
+    questionMode: 'narrative_first' as const,
+    maxFollowUps: 3,
+  },
+  {
     id: 'staffing',
-    title: 'Staffing',
+    title: 'Staffing Levels and Skill Mix',
     regulationSectionId: 'Reg 18(1)',
     evidenceRequirements: [EvidenceType.ROTA, EvidenceType.SKILLS_MATRIX, EvidenceType.SUPERVISION],
     questionMode: 'narrative_first' as const,
@@ -2314,27 +2579,38 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         };
       }
 
-      // Download PDF if available
-      if (report.pdfUrl) {
-        const pdfResult = await downloadPdfReport(report.pdfUrl);
-        if (pdfResult.success) {
-          const contentBase64 = pdfResult.contentBase64;
-          await store.createEvidenceBlob(ctx, {
-            contentBase64,
-            mimeType: 'application/pdf',
-          });
+      // Save HTML report as evidence record
+      if (report.hasReport) {
+        try {
+          const existingEvidence = await store.listEvidenceByFacility(ctx, facilityId);
+          const reportFileName = `CQC-Report-${report.reportDate || 'latest'}.html`;
+          const alreadyExists = existingEvidence.some(
+            (e) => e.evidenceType === EvidenceType.CQC_REPORT && e.fileName === reportFileName
+          );
 
-          const pdfBuffer = Buffer.from(contentBase64, 'base64');
-          const blobMetadata = await blobStorage.upload(pdfBuffer, 'application/pdf');
+          if (!alreadyExists) {
+            const { buffer: htmlBuffer, mimeType } = buildHtmlReportBuffer(report);
+            const blobMetadata = await blobStorage.upload(htmlBuffer, mimeType);
 
-          await store.createEvidenceRecord(ctx, {
-            facilityId,
-            providerId,
-            blobHash: blobMetadata.contentHash,
-            evidenceType: EvidenceType.CQC_REPORT,
-            fileName: `CQC-Report-${report.reportDate || 'latest'}.pdf`,
-            description: `CQC inspection report (${summary.rating || report.rating})`,
-          });
+            // Register blob in store (required before createEvidenceRecord)
+            const contentBase64 = htmlBuffer.toString('base64');
+            await store.createEvidenceBlob(ctx, {
+              contentBase64,
+              mimeType,
+            });
+
+            await store.createEvidenceRecord(ctx, {
+              facilityId,
+              providerId,
+              blobHash: blobMetadata.contentHash,
+              evidenceType: EvidenceType.CQC_REPORT,
+              fileName: reportFileName,
+              description: `CQC inspection report (${report.rating || 'unknown rating'}) — ${report.reportDate || ''}`,
+            });
+            console.log('[SCRAPE] HTML report saved successfully:', blobMetadata.contentHash);
+          }
+        } catch (htmlErr) {
+          console.error('[SCRAPE] Failed to save HTML report:', htmlErr);
         }
       }
 

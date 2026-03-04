@@ -79,6 +79,7 @@ export default function OverviewPage() {
           providerName={data.provider.providerName}
           snapshotDate={data.provider.asOf}
           status={data.provider.prsState}
+          latestRating={data.facility?.latestRating}
           topicCatalogVersion={data.topicCatalogVersion}
           prsLogicVersion={data.prsLogicVersion}
           topicsCompleted={data.topicsCompleted}
