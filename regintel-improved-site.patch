@@ -1,0 +1,936 @@
+diff --git a/apps/api/package.json b/apps/api/package.json
+index 1c70e85..ef6dc8b 100644
+--- a/apps/api/package.json
++++ b/apps/api/package.json
+@@ -3,8 +3,11 @@
+   "version": "0.1.0",
+   "private": true,
+   "scripts": {
++    "predev": "prisma generate",
+     "dev": "tsx watch src/server.ts",
++    "prebuild": "prisma generate",
+     "build": "tsc",
++    "prestart": "prisma generate",
+     "start": "tsx src/server.ts",
+     "test": "vitest run",
+     "test:integration": "vitest run src/*.integration.test.ts",
+diff --git a/apps/web/src/app/(app)/audit/page.tsx b/apps/web/src/app/(app)/audit/page.tsx
+index 0129431..a558fff 100644
+--- a/apps/web/src/app/(app)/audit/page.tsx
++++ b/apps/web/src/app/(app)/audit/page.tsx
+@@ -66,6 +66,18 @@ export default function AuditPage() {
+     );
+   }
+ 
++  const toActivityLabel = (eventType: string) => {
++    const map: Record<string, string> = {
++      MOCK_SESSION_STARTED: 'Practice inspection started',
++      MOCK_SESSION_ANSWERED: 'Practice inspection answer saved',
++      MOCK_SESSION_COMPLETED: 'Practice inspection completed',
++      FINDING_CREATED: 'Finding created',
++      EVIDENCE_UPLOADED: 'Evidence uploaded',
++      EXPORT_GENERATED: 'Export generated',
++    };
++    return map[eventType] ?? eventType.replaceAll('_', ' ').toLowerCase();
++  };
++
+   return (
+     <SimulationFrame reportingDomain={data.reportingDomain}>
+       <div className={styles.layout}>
+@@ -99,10 +111,9 @@ export default function AuditPage() {
+           <DisclosurePanel
+             summary={(
+               <div className={styles.integrity}>
+-                <h2 className={styles.integrityTitle}>Hash Chain Integrity</h2>
++                <h2 className={styles.integrityTitle}>Activity Integrity</h2>
+                 <p className={styles.integrityDescription}>
+-                  All audit events are linked via cryptographic hashes. Each event includes the hash of the previous event,
+-                  forming an immutable chain. Any tampering with historical events will break the chain and be detected.
++                  This timeline records key provider actions in order so teams can review what happened and when.
+                 </p>
+               </div>
+             )}
+@@ -115,38 +126,18 @@ export default function AuditPage() {
+                     <div key={event.eventId} className={styles.auditCard}>
+                       <div className={styles.auditHeader}>
+                         <span className={styles.eventNumber}>#{index + 1}</span>
+-                        <span className={styles.eventType}>{event.eventType}</span>
++                        <span className={styles.eventType}>{toActivityLabel(event.eventType)}</span>
+                         <span className={styles.timestamp}>
+                           {new Date(event.timestamp).toLocaleString()}
+                         </span>
+                       </div>
+ 
+                       <dl className={styles.auditMeta}>
+-                        <dt>Event ID</dt>
+-                        <dd>{event.eventId}</dd>
+-
+-                        <dt>User ID</dt>
++                        <dt>Recorded By</dt>
+                         <dd>{event.userId}</dd>
+-
+-                        <dt>Payload Hash</dt>
+-                        <dd className={styles.hash}>{event.payloadHash}</dd>
+-
+-                        {event.previousEventHash && (
+-                          <>
+-                            <dt>Previous Event Hash</dt>
+-                            <dd className={styles.hash}>{event.previousEventHash}</dd>
+-                          </>
+-                        )}
+-
+-                        <dt>Event Hash</dt>
+-                        <dd className={styles.hash}>{event.eventHash}</dd>
+                       </dl>
+ 
+-                      {event.previousEventHash && (
+-                        <div className={styles.chainIndicator}>
+-                          ← Chained to previous event
+-                        </div>
+-                      )}
++                      {event.previousEventHash && <div className={styles.chainIndicator}>Linked to previous activity</div>}
+                     </div>
+                   ))
+                 )}
+diff --git a/apps/web/src/app/(app)/evidence/page.tsx b/apps/web/src/app/(app)/evidence/page.tsx
+index c9ec70b..2886ba3 100644
+--- a/apps/web/src/app/(app)/evidence/page.tsx
++++ b/apps/web/src/app/(app)/evidence/page.tsx
+@@ -66,6 +66,12 @@ export default function EvidencePage() {
+     );
+   }
+ 
++  const formatBytes = (size: number) => {
++    if (size < 1024) return `${size} B`;
++    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
++    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
++  };
++
+   return (
+     <SimulationFrame reportingDomain={data.reportingDomain}>
+       <div className={styles.layout}>
+@@ -118,20 +124,14 @@ export default function EvidencePage() {
+                       </div>
+ 
+                       <dl className={styles.evidenceMeta}>
+-                        <dt>Evidence ID</dt>
+-                        <dd>{record.evidenceRecordId}</dd>
+-
+-                        <dt>Blob Hash</dt>
+-                        <dd className={styles.hash}>{record.blobHash}</dd>
+-
+-                        <dt>MIME Type</dt>
++                        <dt>File Type</dt>
+                         <dd>{record.mimeType}</dd>
+ 
+                         <dt>Uploaded At</dt>
+                         <dd>{new Date(record.uploadedAt).toLocaleString()}</dd>
+ 
+-                        <dt>Size</dt>
+-                        <dd>{record.sizeBytes} bytes</dd>
++                        <dt>File Size</dt>
++                        <dd>{formatBytes(record.sizeBytes)}</dd>
+                       </dl>
+                     </div>
+                   ))
+diff --git a/apps/web/src/app/(app)/exports/page.tsx b/apps/web/src/app/(app)/exports/page.tsx
+index 7821a00..825b436 100644
+--- a/apps/web/src/app/(app)/exports/page.tsx
++++ b/apps/web/src/app/(app)/exports/page.tsx
+@@ -219,7 +219,7 @@ export default function ExportsPage() {
+                     {exportError}
+                     {!isRealMode && (exportError.includes('No completed session') || exportError.includes('Conflict')) && (
+                       <div style={{ marginTop: '8px', fontSize: '0.9em' }}>
+-                        💡 Tip: Complete a mock inspection session first. Navigate to "Mock Session" from the sidebar.
++                        Tip: Complete a practice inspection first. Use "Practice Inspection" in the sidebar.
+                       </div>
+                     )}
+                     {isRealMode && exportError.includes('Regulatory exports') && (
+@@ -249,10 +249,10 @@ export default function ExportsPage() {
+               <div className={styles.section}>
+                 <h2 className={styles.sectionTitle}>Export Contents</h2>
+                 <ul className={styles.contentList}>
+-                  <li>Session metadata (ID, provider, versions, hashes)</li>
+-                  <li>Topic Catalog version and hash</li>
+-                  <li>PRS Logic Profile version and hash</li>
+-                  <li>{isRealMode ? 'Regulatory findings (if available)' : 'All findings from mock sessions'}</li>
++                  <li>Session details (provider, location, and inspection date)</li>
++                  <li>Relevant CQC quality statement references</li>
++                  <li>Risk profile summary used for scoring</li>
++                  <li>{isRealMode ? 'Regulatory findings (if available)' : 'All findings from practice inspections'}</li>
+                   <li>Evidence coverage statistics</li>
+                   <li>Watermark on every page/row (if enabled)</li>
+                 </ul>
+@@ -265,7 +265,7 @@ export default function ExportsPage() {
+                   ) : (
+                     <>
+                       <strong>Note:</strong> Exports NEVER include regulatory history findings.
+-                      All exported findings have origin=SYSTEM_MOCK.
++                      All exported findings are marked as practice inspection findings.
+                     </>
+                   )}
+                 </div>
+diff --git a/apps/web/src/app/(app)/facilities/[facilityId]/page.tsx b/apps/web/src/app/(app)/facilities/[facilityId]/page.tsx
+index 74b20c2..42d4036 100644
+--- a/apps/web/src/app/(app)/facilities/[facilityId]/page.tsx
++++ b/apps/web/src/app/(app)/facilities/[facilityId]/page.tsx
+@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
+  * - Evidence list
+  */
+ 
+-import { useEffect, useState, FormEvent } from 'react';
++import { useEffect, useRef, useState, FormEvent } from 'react';
+ import { useParams, useSearchParams, useRouter } from 'next/navigation';
+ 
+ import { Sidebar } from '@/components/layout/Sidebar';
+@@ -55,6 +55,17 @@ export default function FacilityDetailPage() {
+   const [syncing, setSyncing] = useState(false);
+   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+ 
++  useEffect(() => {
++    if (providerId && facilityId) {
++      try {
++        sessionStorage.setItem(
++          'regintel:provider_context',
++          JSON.stringify({ providerId, facilityId })
++        );
++      } catch { /* ignore */ }
++    }
++  }, [providerId, facilityId]);
++
+   useEffect(() => {
+     Promise.all([
+       apiClient.getFacility(facilityId),
+@@ -70,6 +81,38 @@ export default function FacilityDetailPage() {
+       .finally(() => setLoading(false));
+   }, [facilityId]);
+ 
++  // Poll evidence list when arriving from onboarding with cqcSyncing=true.
++  // The API enqueues the scrape job synchronously but it can take 30-60s.
++  // Stop when a CQC_REPORT record appears or after 90s.
++  const cqcPollingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
++  useEffect(() => {
++    if (!cqcSyncing) return;
++
++    const startTime = Date.now();
++    const TIMEOUT_MS = 90_000;
++    const POLL_INTERVAL_MS = 5_000;
++
++    const poll = async () => {
++      if (Date.now() - startTime > TIMEOUT_MS) return;
++      try {
++        const evidence = await apiClient.getFacilityEvidence(facilityId);
++        const hasCqcReport = evidence.evidence.some((e) => e.evidenceType === 'CQC_REPORT');
++        if (hasCqcReport) {
++          setEvidenceData(evidence);
++          const base = `/facilities/${encodeURIComponent(facilityId)}`;
++          router.replace(providerId ? `${base}?provider=${encodeURIComponent(providerId)}` : base);
++          return;
++        }
++      } catch { /* ignore polling errors */ }
++      cqcPollingRef.current = setTimeout(poll, POLL_INTERVAL_MS);
++    };
++
++    cqcPollingRef.current = setTimeout(poll, POLL_INTERVAL_MS);
++    return () => {
++      if (cqcPollingRef.current) clearTimeout(cqcPollingRef.current);
++    };
++  }, [cqcSyncing, facilityId, providerId, router]);
++
+   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+     const file = e.target.files?.[0] || null;
+     setSelectedFile(file);
+@@ -137,7 +180,7 @@ export default function FacilityDetailPage() {
+ 
+     try {
+       const response = await apiClient.syncLatestReport(facilityId);
+-      setSyncMessage(`${response.message} Job ID: ${response.jobId}`);
++      setSyncMessage(response.message);
+     } catch (err: unknown) {
+       setSyncMessage(err instanceof Error ? err.message : 'Failed to sync report');
+     } finally {
+@@ -249,14 +292,6 @@ export default function FacilityDetailPage() {
+             )}
+           </div>
+           <div className={styles.detailsGrid}>
+-            <div className={styles.detailItem}>
+-              <span className={styles.detailLabel}>Provider ID:</span>
+-              <span className={styles.detailValueMono}>{facility.providerId}</span>
+-            </div>
+-            <div className={styles.detailItem}>
+-              <span className={styles.detailLabel}>Facility ID:</span>
+-              <span className={styles.detailValueMono}>{facility.id}</span>
+-            </div>
+             <div className={styles.detailItem}>
+               <span className={styles.detailLabel}>Address:</span>
+               <span className={styles.detailValue}>
+@@ -277,10 +312,6 @@ export default function FacilityDetailPage() {
+                 <span className={styles.detailValue}>{facility.capacity}</span>
+               </div>
+             )}
+-            <div className={styles.detailItem}>
+-              <span className={styles.detailLabel}>Facility Hash:</span>
+-              <span className={styles.detailValueMono}>{facility.facilityHash}</span>
+-            </div>
+             <div className={styles.detailItem}>
+               <span className={styles.detailLabel}>As Of:</span>
+               <span className={styles.detailValue}>{facility.asOf}</span>
+@@ -422,7 +453,6 @@ export default function FacilityDetailPage() {
+                     </span>
+                     <span className={styles.evidenceDetail}>Evidence: {record.evidenceType}</span>
+                   </div>
+-                  <div className={styles.evidenceHash}>Hash: {record.blobHash.substring(0, 16)}...</div>
+                 </div>
+               ))
+             )}
+diff --git a/apps/web/src/app/(app)/facilities/new/page.tsx b/apps/web/src/app/(app)/facilities/new/page.tsx
+index ea70c52..fbe5266 100644
+--- a/apps/web/src/app/(app)/facilities/new/page.tsx
++++ b/apps/web/src/app/(app)/facilities/new/page.tsx
+@@ -115,7 +115,7 @@ export default function NewFacilityPage() {
+     setError(null);
+ 
+     if (!providerId) {
+-      setError('Provider ID is required');
++      setError('A provider must be selected');
+       return;
+     }
+ 
+diff --git a/apps/web/src/app/(app)/findings/[findingId]/page.tsx b/apps/web/src/app/(app)/findings/[findingId]/page.tsx
+index 2fe98ef..16b82a8 100644
+--- a/apps/web/src/app/(app)/findings/[findingId]/page.tsx
++++ b/apps/web/src/app/(app)/findings/[findingId]/page.tsx
+@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
+  * Finding Detail Page
+  *
+  * Progressive disclosure: Summary → Evidence → Trace layers.
+- * Mock findings have SYSTEM_MOCK badge and darker border.
++ * Practice findings have a visual badge and darker border.
+  */
+ 
+ import { useEffect, useState } from 'react';
+@@ -19,6 +19,7 @@ import { TraceLayer } from '@/components/disclosure/TraceLayer';
+ import { SimulationFrame } from '@/components/mock/SimulationFrame';
+ import { apiClient } from '@/lib/api/client';
+ import type { FindingDetailResponse, ProviderOverviewResponse } from '@/lib/api/types';
++import { ORIGIN_LABELS } from '@/lib/constants';
+ import { validateConstitutionalRequirements, validateFindingForDisplay } from '@/lib/validators';
+ import styles from './page.module.css';
+ 
+@@ -108,30 +109,27 @@ export default function FindingDetailPage() {
+               <div className={styles.section}>
+                 <div className={styles.sectionHeader}>
+                   <h2 className={styles.sectionTitle}>Summary</h2>
+-                  {isMock && <div className={styles.originBadge}>SYSTEM_MOCK</div>}
++                  {isMock && <div className={styles.originBadge}>{ORIGIN_LABELS.SYSTEM_MOCK}</div>}
+                 </div>
+ 
+                 <dl className={styles.definitionList}>
+-                  <dt>Finding ID</dt>
+-                  <dd>{data.finding.id}</dd>
+-
+                   <dt>Severity</dt>
+                   <dd>{data.finding.severity}</dd>
+ 
+                   <dt>Composite Risk Score</dt>
+                   <dd>{data.finding.compositeRiskScore}</dd>
+ 
+-                  <dt>Topic ID</dt>
++                  <dt>Inspection Area</dt>
+                   <dd>{data.finding.topicId}</dd>
+ 
+                   <dt>Regulation Section</dt>
+                   <dd>{data.finding.regulationSectionId}</dd>
+ 
+                   <dt>Origin</dt>
+-                  <dd>{data.finding.origin}</dd>
++                  <dd>{ORIGIN_LABELS[data.finding.origin]}</dd>
+ 
+-                  <dt>Reporting Domain</dt>
+-                  <dd>{data.finding.reportingDomain}</dd>
++                  <dt>Record Type</dt>
++                  <dd>{isMock ? 'Practice inspection record' : 'Regulatory inspection record'}</dd>
+                 </dl>
+ 
+                 <div className={styles.description}>
+diff --git a/apps/web/src/app/(app)/findings/page.tsx b/apps/web/src/app/(app)/findings/page.tsx
+index b517c43..0bc2dbc 100644
+--- a/apps/web/src/app/(app)/findings/page.tsx
++++ b/apps/web/src/app/(app)/findings/page.tsx
+@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
+  * Findings List Page
+  *
+  * Displays all inspection findings for a provider.
+- * Mock findings have visual separation (SYSTEM_MOCK badge).
++ * Practice findings have visual separation.
+  */
+ 
+ import { useEffect, useState } from 'react';
+@@ -19,6 +19,7 @@ import { MetadataBar } from '@/components/constitutional/MetadataBar';
+ import { SimulationFrame } from '@/components/mock/SimulationFrame';
+ import { apiClient } from '@/lib/api/client';
+ import type { FindingsListResponse, ProviderOverviewResponse } from '@/lib/api/types';
++import { ORIGIN_LABELS } from '@/lib/constants';
+ import { validateConstitutionalRequirements, validateFindingForDisplay } from '@/lib/validators';
+ import styles from './page.module.css';
+ 
+@@ -88,7 +89,7 @@ export default function FindingsPage() {
+             subtitle={
+               data.mode === 'REAL'
+                 ? 'Regulatory findings (ingestion pending)'
+-                : 'All findings from mock sessions'
++                : 'All findings from practice inspections'
+             }
+             topicCatalogVersion={data.topicCatalogVersion}
+             topicCatalogHash={data.topicCatalogHash}
+@@ -119,7 +120,7 @@ export default function FindingsPage() {
+                         <h3 className={styles.findingTitle}>{finding.title}</h3>
+                         <div className={styles.badges}>
+                           {finding.origin === 'SYSTEM_MOCK' && (
+-                            <div className={styles.originBadge}>SYSTEM_MOCK</div>
++                            <div className={styles.originBadge}>{ORIGIN_LABELS.SYSTEM_MOCK}</div>
+                           )}
+                           <div className={styles.severityBadge}>{finding.severity}</div>
+                         </div>
+diff --git a/apps/web/src/app/(app)/mock-session/[sessionId]/page.tsx b/apps/web/src/app/(app)/mock-session/[sessionId]/page.tsx
+index 9fb9737..350a565 100644
+--- a/apps/web/src/app/(app)/mock-session/[sessionId]/page.tsx
++++ b/apps/web/src/app/(app)/mock-session/[sessionId]/page.tsx
+@@ -21,6 +21,18 @@ import type { MockInspectionSession, ConstitutionalMetadata, ProviderOverviewRes
+ import { validateConstitutionalRequirements } from '@/lib/validators';
+ import styles from './page.module.css';
+ 
++const PRS_LABELS: Record<string, string> = {
++  NEW_PROVIDER: 'New provider',
++  ESTABLISHED: 'No active enforcement',
++  SPECIAL_MEASURES: 'Special Measures',
++  ENFORCEMENT_ACTION: 'Enforcement action',
++  RATING_INADEQUATE: 'Rated: Inadequate',
++  RATING_REQUIRES_IMPROVEMENT: 'Rated: Requires Improvement',
++  REOPENED_SERVICE: 'Reopened service',
++  MERGED_SERVICE: 'Merged service',
++  STABLE: 'Standard regulation',
++};
++
+ export default function MockSessionDetailPage() {
+   const searchParams = useSearchParams();
+   const params = useParams();
+@@ -106,7 +118,7 @@ export default function MockSessionDetailPage() {
+ 
+         <main className={styles.main}>
+           <PageHeader
+-            title={`Session ${data.sessionId}`}
++            title="Practice inspection session"
+             subtitle="Practice inspection session detail"
+             topicCatalogVersion={data.topicCatalogVersion}
+             topicCatalogHash={data.topicCatalogHash}
+@@ -126,10 +138,7 @@ export default function MockSessionDetailPage() {
+               <div className={styles.section}>
+                 <h2 className={styles.sectionTitle}>Session Information</h2>
+                 <dl className={styles.definitionList}>
+-                  <dt>Session ID</dt>
+-                  <dd>{data.sessionId}</dd>
+-
+-                  <dt>Topic ID</dt>
++                  <dt>Inspection Area</dt>
+                   <dd>{data.topicId}</dd>
+ 
+                   <dt>Status</dt>
+@@ -154,17 +163,14 @@ export default function MockSessionDetailPage() {
+               <div className={styles.section}>
+                 <h2 className={styles.sectionTitle}>Provider Details</h2>
+                 <dl className={styles.definitionList}>
+-                  <dt>Provider ID</dt>
+-                  <dd>{data.providerSnapshot.providerId}</dd>
+-
+                   <dt>Provider Name</dt>
+                   <dd>{data.providerSnapshot.providerName}</dd>
+ 
+                   <dt>Recorded on</dt>
+-                  <dd>{data.providerSnapshot.asOf}</dd>
++                  <dd>{new Date(data.providerSnapshot.asOf).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</dd>
+ 
+                   <dt>Regulatory Status</dt>
+-                  <dd>{data.providerSnapshot.prsState}</dd>
++                  <dd>{PRS_LABELS[data.providerSnapshot.prsState] ?? data.providerSnapshot.prsState}</dd>
+ 
+                   <dt>Registered Beds</dt>
+                   <dd>{data.providerSnapshot.registeredBeds}</dd>
+diff --git a/apps/web/src/app/(app)/mock-session/page.tsx b/apps/web/src/app/(app)/mock-session/page.tsx
+index c663e59..5b7191e 100644
+--- a/apps/web/src/app/(app)/mock-session/page.tsx
++++ b/apps/web/src/app/(app)/mock-session/page.tsx
+@@ -68,14 +68,14 @@ export default function MockSessionsPage() {
+ 
+     setCreating(true);
+     setError(null);
+-    setCreateStatus('Creating mock session...');
++    setCreateStatus('Starting practice inspection...');
+     setCreatedSessionId(null);
+ 
+     try {
+       const created = await apiClient.createMockSession(providerId, selectedTopic, facilityId);
+       const refreshed = await apiClient.getMockSessions(providerId, facilityId);
+       setData(refreshed);
+-      setCreateStatus(`Session created: ${created.sessionId}`);
++      setCreateStatus('Practice inspection started.');
+       setCreatedSessionId(created.sessionId);
+     } catch (err: unknown) {
+       setError(err instanceof Error ? err.message : 'Failed to start session');
+@@ -144,13 +144,13 @@ export default function MockSessionsPage() {
+                       className={styles.sessionCard}
+                     >
+                       <div className={styles.sessionHeader}>
+-                        <h3 className={styles.sessionTitle}>Session {session.sessionId}</h3>
++                        <h3 className={styles.sessionTitle}>Practice inspection</h3>
+                         <div className={`${styles.statusBadge} ${styles[session.status.toLowerCase()]}`}>
+                           {session.status}
+                         </div>
+                       </div>
+                       <div className={styles.sessionMeta}>
+-                        <span>Topic: {session.topicId}</span>
++                        <span>Inspection area selected</span>
+                         <span>Follow-ups: {session.followUpsUsed}/{session.maxFollowUps}</span>
+                       </div>
+                       <div className={styles.sessionDate}>
+diff --git a/apps/web/src/app/(app)/overview/page.tsx b/apps/web/src/app/(app)/overview/page.tsx
+index 00718e7..38d627c 100644
+--- a/apps/web/src/app/(app)/overview/page.tsx
++++ b/apps/web/src/app/(app)/overview/page.tsx
+@@ -120,8 +120,8 @@ export default function OverviewPage() {
+                   </div>
+                   <div className={styles.cardProvenance}>
+                     {isRealMode
+-                      ? `Source: ${data.reportSource.type}:${data.reportSource.id}`
+-                      : `Calculated from Topic Catalog ${data.topicCatalogVersion} requirements`}
++                      ? 'Based on linked CQC report data'
++                      : 'Calculated from CQC quality statement requirements'}
+                   </div>
+                 </div>
+ 
+@@ -134,7 +134,7 @@ export default function OverviewPage() {
+                     {isRealMode ? 'Regulatory topic mapping pending ingestion' : 'Mock inspection topics addressed'}
+                   </div>
+                   <div className={styles.cardProvenance}>
+-                    {isRealMode ? 'Awaiting regulatory ingestion' : 'Based on mock inspection sessions'}
++                    {isRealMode ? 'Awaiting regulatory ingestion' : 'Based on practice inspections'}
+                   </div>
+                 </div>
+ 
+@@ -157,8 +157,8 @@ export default function OverviewPage() {
+                   </div>
+                   <div className={styles.cardProvenance}>
+                     {isRealMode
+-                      ? `Regulatory history (${data.reportingDomain})`
+-                      : `Generated via PRS Logic ${data.prsLogicVersion} (mock domain)`}
++                      ? 'Taken from regulatory inspection history'
++                      : 'Generated from risk profile rules for practice mode'}
+                   </div>
+                 </div>
+               </div>
+@@ -167,12 +167,6 @@ export default function OverviewPage() {
+               <div className={styles.providerInfo}>
+                 <h2 className={styles.sectionTitle}>Provider Details</h2>
+                 <dl className={styles.definitionList}>
+-                  <dt>Provider ID</dt>
+-                  <dd>{data.provider.providerId}</dd>
+-
+-                  <dt>Facility ID</dt>
+-                  <dd>{data.facility?.id || 'Unknown'}</dd>
+-
+                   <dt>PRS State</dt>
+                   <dd>{data.provider.prsState}</dd>
+ 
+diff --git a/apps/web/src/app/(app)/topics/[topicId]/page.tsx b/apps/web/src/app/(app)/topics/[topicId]/page.tsx
+index da81e4b..f74cdaa 100644
+--- a/apps/web/src/app/(app)/topics/[topicId]/page.tsx
++++ b/apps/web/src/app/(app)/topics/[topicId]/page.tsx
+@@ -104,14 +104,11 @@ export default function TopicDetailPage() {
+               <div className={styles.section}>
+                 <h2 className={styles.sectionTitle}>Topic Information</h2>
+                 <dl className={styles.definitionList}>
+-                  <dt>Topic ID</dt>
+-                  <dd>{data.id}</dd>
+-
+                   <dt>Regulation Section</dt>
+                   <dd>{data.regulationSectionId}</dd>
+ 
+-                  <dt>Question Mode</dt>
+-                  <dd>{data.questionMode}</dd>
++                  <dt>Review Approach</dt>
++                  <dd>{data.questionMode.replaceAll('_', ' ')}</dd>
+ 
+                   <dt>Max Follow-ups</dt>
+                   <dd>{data.maxFollowUps}</dd>
+diff --git a/apps/web/src/app/layout.tsx b/apps/web/src/app/layout.tsx
+index aa10d7e..5d68938 100644
+--- a/apps/web/src/app/layout.tsx
++++ b/apps/web/src/app/layout.tsx
+@@ -15,8 +15,11 @@ export const metadata: Metadata = {
+   description: 'Evidence-based compliance for UK CQC-registered care providers',
+ };
+ 
+-// Check if E2E test mode is enabled (server-side)
+-const isE2EMode = process.env.E2E_TEST_MODE === 'true';
++// E2E bypass mode must be enabled on BOTH server and client env flags.
++// This prevents skipping ClerkProvider when only the server flag is set.
++const isE2EMode =
++  process.env.E2E_TEST_MODE === 'true' &&
++  process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true';
+ 
+ export default function RootLayout({
+   children,
+diff --git a/apps/web/src/app/page.tsx b/apps/web/src/app/page.tsx
+index 18a3887..67450a3 100644
+--- a/apps/web/src/app/page.tsx
++++ b/apps/web/src/app/page.tsx
+@@ -11,7 +11,9 @@ import LandingPage from '@/components/marketing/LandingPage';
+  * - Not signed in: show landing page
+  */
+ export default async function HomePage() {
+-  const isE2EMode = process.env.E2E_TEST_MODE === 'true';
++  const isE2EMode =
++    process.env.E2E_TEST_MODE === 'true' &&
++    process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true';
+ 
+   if (isE2EMode) {
+     redirect('/providers');
+diff --git a/apps/web/src/app/providers/page.tsx b/apps/web/src/app/providers/page.tsx
+index 072cec3..90eb9f8 100644
+--- a/apps/web/src/app/providers/page.tsx
++++ b/apps/web/src/app/providers/page.tsx
+@@ -12,9 +12,20 @@ import type {
+ import { validateConstitutionalRequirements } from '@/lib/validators';
+ import styles from './page.module.css';
+ 
+-export default function ProvidersPage() {
++const isE2EMode = process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true';
++
++interface ProvidersPageInnerProps {
++  isLoaded: boolean;
++  isSignedIn: boolean;
++  enableSignInRedirect: boolean;
++}
++
++function ProvidersPageInner({
++  isLoaded,
++  isSignedIn,
++  enableSignInRedirect,
++}: ProvidersPageInnerProps) {
+   const router = useRouter();
+-  const { isLoaded, isSignedIn } = useAuth();
+ 
+   const [data, setData] = useState<ProvidersListResponse | null>(null);
+   const [providerName, setProviderName] = useState('');
+@@ -63,10 +74,18 @@ export default function ProvidersPage() {
+   }
+ 
+   // If not signed in, redirect to sign-in (using Clerk component, not window.location)
+-  if (!isSignedIn || authError) {
++  if (enableSignInRedirect && (!isSignedIn || authError)) {
+     return <RedirectToSignIn />;
+   }
+ 
++  if (!enableSignInRedirect && authError) {
++    return (
++      <div className={styles.layout}>
++        <div className={styles.error}>Error: Authentication required</div>
++      </div>
++    );
++  }
++
+   const handleSubmit = async (event: FormEvent) => {
+     event.preventDefault();
+     setError(null);
+@@ -178,7 +197,6 @@ export default function ProvidersPage() {
+                 <div key={provider.providerId} className={styles.card}>
+                   <div>
+                     <h3 className={styles.cardTitle}>{provider.providerName}</h3>
+-                    <p className={styles.cardMeta}>Provider ID: {provider.providerId}</p>
+                     {provider.orgRef && (
+                       <p className={styles.cardMeta}>Org ref: {provider.orgRef}</p>
+                     )}
+@@ -200,3 +218,28 @@ export default function ProvidersPage() {
+     </div>
+   );
+ }
++
++function ProvidersPageWithClerkAuth() {
++  const { isLoaded, isSignedIn } = useAuth();
++  return (
++    <ProvidersPageInner
++      isLoaded={isLoaded}
++      isSignedIn={isSignedIn}
++      enableSignInRedirect
++    />
++  );
++}
++
++export default function ProvidersPage() {
++  if (isE2EMode) {
++    return (
++      <ProvidersPageInner
++        isLoaded
++        isSignedIn
++        enableSignInRedirect={false}
++      />
++    );
++  }
++
++  return <ProvidersPageWithClerkAuth />;
++}
+diff --git a/apps/web/src/components/constitutional/MetadataBar.tsx b/apps/web/src/components/constitutional/MetadataBar.tsx
+index aba39af..5754f9f 100644
+--- a/apps/web/src/components/constitutional/MetadataBar.tsx
++++ b/apps/web/src/components/constitutional/MetadataBar.tsx
+@@ -1,59 +1,36 @@
+ /**
+  * MetadataBar Component
+  *
+- * Displays constitutional metadata (version, hash, time, domain) at top of views.
+- * Every view must include this to satisfy UI constitutional requirements.
++ * Displays plain-language CQC record context for users.
+  */
+ 
+-import { HashDisplay } from './HashDisplay';
+-import { VersionBadge } from './VersionBadge';
+ import { TimestampDisplay } from './TimestampDisplay';
+ import { DomainBadge } from './DomainBadge';
+ import type { ConstitutionalMetadata } from '@/lib/api/types';
++import { toCqcIngestionStatus, toCqcMode } from '@/lib/cqcLanguage';
+ import styles from './MetadataBar.module.css';
+ 
+ interface MetadataBarProps extends ConstitutionalMetadata {
+   compact?: boolean;
+ }
+ 
+-const INGESTION_LABELS: Record<string, string> = {
+-  INGESTION_INCOMPLETE: 'Loading CQC data...',
+-  READY: 'CQC data loaded',
+-};
+-
+-const MODE_LABELS: Record<string, string> = {
+-  MOCK: 'Practice',
+-};
+-
+ export function MetadataBar({
+-  topicCatalogVersion,
+-  topicCatalogHash,
+-  prsLogicVersion,
+-  prsLogicHash,
+   snapshotTimestamp,
+   domain,
+   mode,
+-  reportSource,
+-  snapshotId,
+   ingestionStatus,
+   compact = false,
+ }: MetadataBarProps) {
+-  const ingestionLabel = INGESTION_LABELS[ingestionStatus] ?? ingestionStatus;
+-  const modeLabel = MODE_LABELS[mode] ?? mode;
++  const ingestionLabel = toCqcIngestionStatus(ingestionStatus);
++  const modeLabel = toCqcMode(mode);
+   if (compact) {
+-    // Extract first 6 chars of hash for compact display
+-    const tcHashPrefix = topicCatalogHash.replace('sha256:', '').substring(0, 6);
+-    const prsHashPrefix = prsLogicHash.replace('sha256:', '').substring(0, 6);
+-
+     return (
+       <div className={styles.containerCompact}>
+         <DomainBadge domain={domain} />
+-        <span className={styles.frozenLabel}>• Compliance Record (Locked)</span>
++        <span className={styles.frozenLabel}>• Inspection Summary</span>
+         <TimestampDisplay timestamp={snapshotTimestamp} label="As-of" dateOnly />
+         <span className={styles.separator}>|</span>
+-        <span className={styles.version} title={`Topic Catalog: ${topicCatalogHash}\nPRS Logic: ${prsLogicHash}`}>
+-          TC {topicCatalogVersion} ({tcHashPrefix}…) · PRS {prsLogicVersion} ({prsHashPrefix}…)
+-        </span>
++        <span className={styles.version}>{ingestionLabel}</span>
+       </div>
+     );
+   }
+@@ -62,30 +39,14 @@ export function MetadataBar({
+     <div className={styles.container}>
+       <div className={styles.row}>
+         <DomainBadge domain={domain} />
+-        <TimestampDisplay timestamp={snapshotTimestamp} label="Snapshot" />
++        <TimestampDisplay timestamp={snapshotTimestamp} label="Inspection Record" />
+       </div>
+       <div className={styles.row}>
+-        <VersionBadge label="Topic Catalog" version={topicCatalogVersion} />
+-        <HashDisplay hash={topicCatalogHash} />
+-      </div>
+-      <div className={styles.row}>
+-        <VersionBadge label="PRS Logic" version={prsLogicVersion} />
+-        <HashDisplay hash={prsLogicHash} />
+-      </div>
+-      <div className={styles.row}>
+-        <span className={styles.metaLabel}>Mode</span>
++        <span className={styles.metaLabel}>Data Type</span>
+         <span className={styles.metaValue}>{modeLabel}</span>
+-        <span className={styles.metaLabel}>Data Status</span>
++        <span className={styles.metaLabel}>CQC Report Status</span>
+         <span className={styles.metaValue}>{ingestionLabel}</span>
+       </div>
+-      <div className={styles.row}>
+-        <span className={styles.metaLabel}>Snapshot ID</span>
+-        <span className={styles.metaValueMono}>{snapshotId}</span>
+-      </div>
+-      <div className={styles.row}>
+-        <span className={styles.metaLabel}>Report Source</span>
+-        <span className={styles.metaValueMono}>{reportSource.type}:{reportSource.id}</span>
+-      </div>
+     </div>
+   );
+ }
+diff --git a/apps/web/src/components/disclosure/TraceLayer.tsx b/apps/web/src/components/disclosure/TraceLayer.tsx
+index 2bcbb16..20b4c0a 100644
+--- a/apps/web/src/components/disclosure/TraceLayer.tsx
++++ b/apps/web/src/components/disclosure/TraceLayer.tsx
+@@ -1,12 +1,9 @@
+ /**
+  * TraceLayer Component (The WHY Panel)
+  *
+- * Third layer: How the conclusion was reached (deterministic reasoning chain).
+- * Shows versions, hashes, regulation references, and deterministic hash.
++ * Third layer: plain-language context for how the finding was reached.
+  */
+ 
+-import { HashDisplay } from '../constitutional/HashDisplay';
+-import { VersionBadge } from '../constitutional/VersionBadge';
+ import styles from './TraceLayer.module.css';
+ 
+ interface TraceLayerProps {
+@@ -20,15 +17,10 @@ interface TraceLayerProps {
+ 
+ export function TraceLayer({
+   regulationSectionId,
+-  topicCatalogVersion,
+-  topicCatalogHash,
+-  prsLogicVersion,
+-  prsLogicHash,
+-  deterministicHash,
+ }: TraceLayerProps) {
+   return (
+     <div className={styles.container}>
+-      <h3 className={styles.title}>WHY THIS FINDING EXISTS</h3>
++      <h3 className={styles.title}>HOW THIS FINDING WAS REVIEWED</h3>
+ 
+       <div className={styles.section}>
+         <div className={styles.label}>Regulation Section</div>
+@@ -36,25 +28,17 @@ export function TraceLayer({
+       </div>
+ 
+       <div className={styles.section}>
+-        <div className={styles.label}>Topic Catalog</div>
+-        <VersionBadge label="" version={topicCatalogVersion} />
+-        <HashDisplay hash={topicCatalogHash} />
++        <div className={styles.label}>Quality Statements</div>
++        <div className={styles.value}>Reviewed against CQC quality statements</div>
+       </div>
+ 
+       <div className={styles.section}>
+-        <div className={styles.label}>PRS Logic</div>
+-        <VersionBadge label="" version={prsLogicVersion} />
+-        <HashDisplay hash={prsLogicHash} />
+-      </div>
+-
+-      <div className={styles.section}>
+-        <div className={styles.label}>Deterministic Hash</div>
+-        <code className={styles.deterministicHash}>{deterministicHash}</code>
++        <div className={styles.label}>Risk Profile</div>
++        <div className={styles.value}>Applied consistent risk rules to the available evidence</div>
+       </div>
+ 
+       <div className={styles.notice}>
+-        This finding was generated deterministically using the versions and
+-        hashes shown above. The same inputs will always produce the same result.
++        This finding is produced using a consistent review method so similar evidence is handled the same way.
+       </div>
+     </div>
+   );
+diff --git a/apps/web/src/components/layout/PageHeader.tsx b/apps/web/src/components/layout/PageHeader.tsx
+index 992dba5..5751cbf 100644
+--- a/apps/web/src/components/layout/PageHeader.tsx
++++ b/apps/web/src/components/layout/PageHeader.tsx
+@@ -37,8 +37,7 @@ export function PageHeader({
+         <div className={styles.ingestionBanner} data-testid="ingestion-status-banner">
+           <strong>CQC data still loading.</strong>
+           <span>
+-            Source {metadata.reportSource.type}:{metadata.reportSource.id} · Snapshot {metadata.snapshotId}.
+-            Mock fallback disabled.
++            Your latest CQC report is still being linked and checked.
+           </span>
+         </div>
+       )}
+diff --git a/apps/web/src/lib/cqcLanguage.ts b/apps/web/src/lib/cqcLanguage.ts
+new file mode 100644
+index 0000000..0a7564a
+--- /dev/null
++++ b/apps/web/src/lib/cqcLanguage.ts
+@@ -0,0 +1,65 @@
++/**
++ * CQC Language Adapter
++ * Maps internal state/enum values to plain CQC/SAF34 language.
++ * All customer-facing labels must flow through this module.
++ */
++
++export const PRS_LABELS: Record<string, string> = {
++  NEW_PROVIDER: 'New provider',
++  ESTABLISHED: 'No active enforcement',
++  SPECIAL_MEASURES: 'Special Measures',
++  ENFORCEMENT_ACTION: 'Enforcement action',
++  RATING_INADEQUATE: 'Rated: Inadequate',
++  RATING_REQUIRES_IMPROVEMENT: 'Rated: Requires Improvement',
++  REOPENED_SERVICE: 'Reopened service',
++  MERGED_SERVICE: 'Merged service',
++  STABLE: 'Standard regulation',
++};
++
++const CQC_LABEL_MAP: Record<string, string> = {
++  // UI section labels
++  Snapshot: 'Inspection Record',
++  'Topic Catalog': 'Quality Statements',
++  'PRS Logic': 'Risk Profile',
++  Mode: 'Data Mode',
++  'Data Status': 'CQC Report Status',
++  'Snapshot ID': 'Record ID',
++  'Report Source': 'CQC Source',
++  'Compliance Record (Locked)': 'Inspection Summary (locked)',
++
++  // IngestionStatus enum values
++  NO_SOURCE: 'Awaiting CQC report link',
++  INGESTION_INCOMPLETE: 'Loading CQC data...',
++  READY: 'CQC data loaded',
++
++  // ReportMode enum values
++  MOCK: 'Demonstration data (not live CQC)',
++  REAL: 'Live CQC data',
++
++  // Sentinels
++  STATUS_UNAVAILABLE: 'Rating not yet available',
++  'mock:mock:uninitialized': 'No CQC report linked yet',
++  uninitialized: 'Not yet assessed',
++};
++
++export function toCqcLabel(key: string, ctx?: { date?: string }): string {
++  if (ctx?.date && key === 'Compliance Record (Locked)') {
++    return `Inspection Summary (as at ${ctx.date})`;
++  }
++  return CQC_LABEL_MAP[key] ?? key;
++}
++
++export const toCqcStatus = toCqcLabel;
++
++export function toCqcIngestionStatus(status: string): string {
++  return CQC_LABEL_MAP[status] ?? status;
++}
++
++export function toCqcMode(mode: string): string {
++  return CQC_LABEL_MAP[mode] ?? mode;
++}
++
++export function toCqcPrsStatus(raw: string | undefined): string {
++  if (!raw?.trim()) return CQC_LABEL_MAP['STATUS_UNAVAILABLE'];
++  return PRS_LABELS[raw] ?? raw;
++}
