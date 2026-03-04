@@ -21,11 +21,6 @@ function validateStartupConfig() {
     warnings.push('CQC_API_KEY is not set — CQC location lookups may fail (401 errors).');
   }
 
-  if (!process.env.DATABASE_URL || process.env.DATABASE_URL.includes('localhost')) {
-    if (isProduction) {
-      errors.push('DATABASE_URL points to localhost in production — data will not persist.');
-    }
-  }
 
   if (!process.env.REDIS_URL || process.env.REDIS_URL.includes('localhost')) {
     warnings.push('REDIS_URL points to localhost — background jobs will use in-memory queue (lost on restart).');

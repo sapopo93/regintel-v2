@@ -767,8 +767,7 @@ export class PrismaStore {
     input: { contentBase64: string; mimeType: string }
   ): Promise<EvidenceBlobRecord> {
     const buffer = Buffer.from(input.contentBase64, 'base64');
-    const hashHex = computeBlobHash(buffer);
-    const blobHash = `sha256:${hashHex}`;
+    const blobHash = `sha256:${computeBlobHash(buffer)}`;
 
     const row = await prisma.evidenceBlob.upsert({
       where: { contentHash: blobHash },
@@ -777,7 +776,6 @@ export class PrismaStore {
         contentType: input.mimeType,
         sizeBytes: BigInt(buffer.byteLength),
         storagePath: '',
-        uploadedAt: new Date(),
       },
       update: {},
     });
@@ -793,16 +791,13 @@ export class PrismaStore {
   }
 
   async getEvidenceBlob(_ctx: TenantContext, blobHash: string): Promise<EvidenceBlobRecord | undefined> {
-    const row = await prisma.evidenceBlob.findUnique({ where: { contentHash: blobHash } });
-    if (!row) {
-      return undefined;
-    }
-
+    const record = await prisma.evidenceBlob.findUnique({ where: { contentHash: blobHash } });
+    if (!record) return undefined;
     return {
-      blobHash: row.contentHash,
-      mimeType: row.contentType,
-      sizeBytes: Number(row.sizeBytes),
-      uploadedAt: row.uploadedAt.toISOString(),
+      blobHash: record.contentHash,
+      mimeType: record.contentType,
+      sizeBytes: Number(record.sizeBytes),
+      uploadedAt: record.uploadedAt.toISOString(),
     };
   }
 
@@ -835,7 +830,6 @@ export class PrismaStore {
         description: input.description,
         collectedAt: new Date(blob.uploadedAt),
         metadata: {
-          tenantId: ctx.tenantId,
           providerId: input.providerId,
           facilityId: input.facilityId,
           fileName: input.fileName,
@@ -874,14 +868,28 @@ export class PrismaStore {
   }
 
   async listEvidenceByFacility(ctx: TenantContext, facilityId: string): Promise<EvidenceRecordRecord[]> {
-    const rows = await prisma.evidenceRecord.findMany({
+    const records = await prisma.evidenceRecord.findMany({
       where: { tenantId: this.toUuid(ctx.tenantId) },
+      include: { blob: true },
       orderBy: { createdAt: 'asc' },
     });
 
-    return rows
-      .filter((row) => this.getEvidenceMetadata(row.metadata).facilityId === facilityId)
-      .map((row) => this.mapEvidenceRecord(row, ctx.tenantId));
+    return records
+      .filter((record) => (record.metadata as any)?.facilityId === facilityId)
+      .map((record) => ({
+        id: record.id,
+        tenantId: ctx.tenantId,
+        providerId: (record.metadata as any)?.providerId ?? '',
+        facilityId: (record.metadata as any)?.facilityId ?? '',
+        blobHash: record.contentHash,
+        mimeType: (record.metadata as any)?.mimeType ?? record.blob?.contentType ?? '',
+        sizeBytes: Number(record.blob?.sizeBytes ?? (record.metadata as any)?.sizeBytes ?? 0),
+        evidenceType: record.evidenceType,
+        fileName: record.title,
+        description: record.description ?? undefined,
+        uploadedAt: record.collectedAt.toISOString(),
+        createdBy: record.createdBy,
+      }));
   }
 
   async listEvidenceByProvider(ctx: TenantContext, providerId: string): Promise<EvidenceRecordRecord[]> {
