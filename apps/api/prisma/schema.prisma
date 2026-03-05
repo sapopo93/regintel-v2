@@ -288,3 +288,25 @@ model AuditEvent {
   @@index([tenantId, entityType, entityId])
   @@map("audit_events")
 }
+
+model DocumentAudit {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String   @map("tenant_id")
+  facilityId       String   @map("facility_id")
+  providerId       String   @map("provider_id")
+  evidenceRecordId String   @map("evidence_record_id")
+  documentType     String   @map("document_type")
+  originalFileName String   @map("original_file_name")
+  overallResult    String   @map("overall_result")
+  complianceScore  Int      @map("compliance_score")
+  criticalFindings Int      @default(0) @map("critical_findings")
+  highFindings     Int      @default(0) @map("high_findings")
+  auditResultJson  Json     @map("audit_result_json")
+  auditedAt        DateTime @default(now()) @map("audited_at") @db.Timestamptz
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([tenantId, facilityId])
+  @@index([tenantId, documentType])
+  @@index([facilityId, auditedAt])
+  @@map("document_audits")
+}
