@@ -41,9 +41,9 @@ export interface FacilityRecord {
   latestRating?: string;
   latestRatingDate?: string;
   inspectionStatus: 'NEVER_INSPECTED' | 'INSPECTED' | 'PENDING_FIRST_INSPECTION';
-  lastReportScrapedAt?: string | null;
-  lastScrapedReportDate?: string;
-  lastScrapedReportUrl?: string;
+  lastReportScrapedAt: string | null;
+  lastScrapedReportDate: string | null;
+  lastScrapedReportUrl: string | null;
 }
 
 export interface EvidenceBlobRecord {
@@ -270,8 +270,8 @@ export class PrismaStore {
         | 'INSPECTED'
         | 'PENDING_FIRST_INSPECTION',
       lastReportScrapedAt: row.lastReportScrapedAt,
-      lastScrapedReportDate: row.lastScrapedReportDate ?? undefined,
-      lastScrapedReportUrl: row.lastScrapedReportUrl ?? undefined,
+      lastScrapedReportDate: row.lastScrapedReportDate,
+      lastScrapedReportUrl: row.lastScrapedReportUrl,
     };
   }
 
@@ -642,8 +642,8 @@ export class PrismaStore {
       latestRatingDate?: string;
       inspectionStatus?: 'NEVER_INSPECTED' | 'INSPECTED' | 'PENDING_FIRST_INSPECTION';
       lastReportScrapedAt?: string | null;
-      lastScrapedReportDate?: string;
-      lastScrapedReportUrl?: string;
+      lastScrapedReportDate?: string | null;
+      lastScrapedReportUrl?: string | null;
     }
   ): Promise<{ facility: FacilityRecord; isNew: boolean }> {
     const provider = await this.getProviderById(ctx, input.providerId);

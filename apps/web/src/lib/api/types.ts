@@ -162,6 +162,8 @@ export interface ProviderOverviewResponse extends ConstitutionalMetadata {
   provider: ProviderContextSnapshot;
   facility?: Facility;
   evidenceCoverage: number;
+  evidenceCount?: number;
+  documentUploadPercentage?: number;
   topicsCompleted: number;
   totalTopics: number;
   unansweredQuestions: number;

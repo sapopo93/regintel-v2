@@ -924,16 +924,19 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
 
     const facilityEvidence = await store.listEvidenceByFacility(ctx, facilityId);
     const hasCqcReport = facilityEvidence.some((record) => record.evidenceType === EvidenceType.CQC_REPORT);
+    const evidenceCount = facilityEvidence.length;
+    const totalExpectedDocuments = getAllRequiredEvidenceTypes().length;
+    const documentUploadPercentage = totalExpectedDocuments > 0
+      ? Math.min(100, Math.round((evidenceCount / totalExpectedDocuments) * 100))
+      : evidenceCount > 0 ? 100 : 0;
 
-    // Calculate evidence coverage based on all required types
-    const evidenceTypesPresent = new Set(facilityEvidence.map((r) => r.evidenceType));
-    const allRequiredTypes = getAllRequiredEvidenceTypes();
-    const matchedTypes = allRequiredTypes.filter((type) => evidenceTypesPresent.has(type));
-    const evidenceCoverage = allRequiredTypes.length > 0
-      ? Math.round((matchedTypes.length / allRequiredTypes.length) * 100)
-      : 0;
+    // Keep legacy field for backward compatibility with existing UI.
+    const evidenceCoverage = documentUploadPercentage;
 
-    const reportContext = await resolveReportContextForFacility(ctx, providerId, facilityId);
+    const baseReportContext = await resolveReportContextForFacility(ctx, providerId, facilityId);
+    const reportContext = hasCqcReport
+      ? { ...baseReportContext, ingestionStatus: 'READY' as const }
+      : baseReportContext;
 
     let topicsCompleted = 0;
     let unansweredQuestions = 0;
@@ -957,6 +960,8 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       provider,
       facility,
       evidenceCoverage,
+      evidenceCount,
+      documentUploadPercentage,
       topicsCompleted,
       totalTopics: TOPICS.length,
       unansweredQuestions,
@@ -2583,16 +2588,12 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       // Save HTML report as evidence record
       if (report.hasReport) {
         try {
-          const existingEvidence = await store.listEvidenceByFacility(ctx, facilityId);
           const reportFileName = `CQC-Report-${report.reportDate || 'latest'}.html`;
-          const alreadyExists = existingEvidence.some(
-            (e) => e.evidenceType === EvidenceType.CQC_REPORT && e.fileName === reportFileName
-          );
+          const { buffer: htmlBuffer, mimeType } = buildHtmlReportBuffer(report);
+          const blobMetadata = await blobStorage.upload(htmlBuffer, mimeType);
+          const existingByHash = await store.getEvidenceRecordByContentHash(ctx, blobMetadata.contentHash);
 
-          if (!alreadyExists) {
-            const { buffer: htmlBuffer, mimeType } = buildHtmlReportBuffer(report);
-            const blobMetadata = await blobStorage.upload(htmlBuffer, mimeType);
-
+          if (!existingByHash) {
             // Register blob in store (required before createEvidenceRecord)
             const contentBase64 = htmlBuffer.toString('base64');
             await store.createEvidenceBlob(ctx, {
@@ -2609,6 +2610,8 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
               description: `CQC inspection report (${report.rating || 'unknown rating'}) — ${report.reportDate || ''}`,
             });
             console.log('[SCRAPE] HTML report saved successfully:', blobMetadata.contentHash);
+          } else {
+            console.log('[SCRAPE] Duplicate report detected, skipping evidence record create:', blobMetadata.contentHash);
           }
         } catch (htmlErr) {
           console.error('[SCRAPE] Failed to save HTML report:', htmlErr);

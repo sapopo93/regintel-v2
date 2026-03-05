@@ -54,6 +54,16 @@ export type ScrapeResult =
   | { success: true; report: CqcInspectionReport }
   | { success: false; error: ScrapeError };
 
+const KEY_QUESTION_SECTIONS = [
+  { slug: 'safe', key: 'safe' },
+  { slug: 'effective', key: 'effective' },
+  { slug: 'caring', key: 'caring' },
+  { slug: 'responsive', key: 'responsive' },
+  { slug: 'well-led', key: 'wellLed' },
+] as const;
+
+const MIN_FINDING_PARAGRAPH_LENGTH = 100;
+
 /**
  * Scrapes the CQC website for the latest inspection report.
  *
@@ -119,15 +129,33 @@ export async function scrapeLatestReport(
     const html = await response.text();
     const reportPlanId = html.match(/\/location\/[^/]+\/reports\/([^/]+)\/overall/)?.[1];
     const htmlReportUrl = reportPlanId
-      ? `https://www.cqc.org.uk/location/${normalized}/reports/${reportPlanId}/overall`
+      ? `${baseUrl}/location/${normalized}/reports/${reportPlanId}/overall`
       : undefined;
 
-    const keyQuestionRatings = extractKeyQuestionRatings(html);
+    let overallReportHtml: string | undefined;
+    let keyQuestionRatings = extractKeyQuestionRatings(html);
+    if (htmlReportUrl) {
+      overallReportHtml = await fetchHtmlPage({
+        url: htmlReportUrl,
+        timeoutMs,
+        fetchFn,
+      });
+
+      if (overallReportHtml) {
+        keyQuestionRatings = mergeKeyQuestionRatings(
+          keyQuestionRatings,
+          extractKeyQuestionRatings(overallReportHtml)
+        );
+      }
+    }
 
     const keyQuestionFindings = reportPlanId
       ? await scrapeKeyQuestionFindings({
+          baseUrl,
           locationId: normalized,
           reportPlanId,
+          htmlReportUrl,
+          overallReportHtml,
           timeoutMs,
           fetchFn,
         })
@@ -140,6 +168,7 @@ export async function scrapeLatestReport(
       keyQuestionFindings,
       reportPlanId,
       htmlReportUrl,
+      baseUrl,
     });
 
     return {
@@ -187,6 +216,7 @@ function parseReportFromHtml(
     keyQuestionFindings?: CqcInspectionReport['keyQuestionFindings'];
     reportPlanId?: string;
     htmlReportUrl?: string;
+    baseUrl?: string;
   }
 ): CqcInspectionReport {
   // Check for "never inspected" indicators
@@ -207,7 +237,7 @@ function parseReportFromHtml(
       reportDate: '',
       publishedDate: new Date().toISOString(),
       rating: '',
-      reportUrl: `https://www.cqc.org.uk/location/${locationId}`,
+      reportUrl: `${extractedData?.baseUrl ?? 'https://www.cqc.org.uk'}/location/${locationId}`,
       keyQuestionRatings: extractedData?.keyQuestionRatings,
       keyQuestionFindings: extractedData?.keyQuestionFindings,
       reportPlanId: extractedData?.reportPlanId,
@@ -229,7 +259,7 @@ function parseReportFromHtml(
     reportDate,
     publishedDate: new Date().toISOString(),
     rating,
-    reportUrl: `https://www.cqc.org.uk/location/${locationId}`,
+    reportUrl: `${extractedData?.baseUrl ?? 'https://www.cqc.org.uk'}/location/${locationId}`,
     keyQuestionRatings: extractedData?.keyQuestionRatings,
     keyQuestionFindings: extractedData?.keyQuestionFindings,
     reportPlanId: extractedData?.reportPlanId,
@@ -246,61 +276,96 @@ function parseReportFromHtml(
 function extractKeyQuestionRatings(
   html: string
 ): CqcInspectionReport['keyQuestionRatings'] | undefined {
-  const matches = html.matchAll(/data-test="(\w+[\w-]*) rating text: (\w+)"/g);
   const ratings: NonNullable<CqcInspectionReport['keyQuestionRatings']> = {};
 
-  for (const match of matches) {
+  // 1) Primary source: CQC data-test attributes (e.g. data-test="safe rating text: Good")
+  const dataAttrMatches = html.matchAll(/data-test="([^"]*?)\s*rating text:\s*([^"]+)"/gi);
+  for (const match of dataAttrMatches) {
     const key = toKeyQuestionKey(match[1]);
     if (!key) continue;
-    ratings[key] = match[2];
+    const rating = normalizeRating(match[2]);
+    if (!rating) continue;
+    ratings[key] = rating;
+  }
+
+  // 2) Fallback source: rating summaries rendered in text/table form.
+  const text = stripHtmlToText(html);
+  const summaryMatches = text.matchAll(
+    /\b(Safe|Effective|Caring|Responsive|Well[-\s]?led)\b[\s:|-]{0,10}(Outstanding|Good|Requires improvement|Requires Improvement|Inadequate|Insufficient evidence)\b/gi
+  );
+  for (const match of summaryMatches) {
+    const key = toKeyQuestionKey(match[1]);
+    if (!key || ratings[key]) continue;
+    const rating = normalizeRating(match[2]);
+    if (!rating) continue;
+    ratings[key] = rating;
   }
 
   return Object.keys(ratings).length > 0 ? ratings : undefined;
 }
 
 async function scrapeKeyQuestionFindings(params: {
+  baseUrl: string;
   locationId: string;
   reportPlanId: string;
+  htmlReportUrl?: string;
+  overallReportHtml?: string;
   timeoutMs: number;
   fetchFn: typeof globalThis.fetch;
 }): Promise<CqcInspectionReport['keyQuestionFindings'] | undefined> {
-  const sections = ['safe', 'effective', 'caring', 'responsive', 'well-led'] as const;
-  const findings: NonNullable<CqcInspectionReport['keyQuestionFindings']> = {};
+  const findingsBySection = new Map<
+    keyof NonNullable<CqcInspectionReport['keyQuestionFindings']>,
+    string[]
+  >();
+
+  let overallHtml = params.overallReportHtml;
+  if (!overallHtml && params.htmlReportUrl) {
+    overallHtml = await fetchHtmlPage({
+      url: params.htmlReportUrl,
+      timeoutMs: params.timeoutMs,
+      fetchFn: params.fetchFn,
+    });
+  }
+
+  // Try extracting section text from the overall report page first.
+  if (overallHtml) {
+    const overallSectionParagraphs = extractSectionParagraphsFromOverallHtml(overallHtml);
+    for (const section of KEY_QUESTION_SECTIONS) {
+      const paragraphs = overallSectionParagraphs[section.key];
+      if (!paragraphs?.length) continue;
+      findingsBySection.set(section.key, paragraphs);
+    }
+  }
 
   await Promise.all(
-    sections.map(async (section) => {
-      const sectionUrl = `https://www.cqc.org.uk/location/${params.locationId}/reports/${params.reportPlanId}/overall/${section}`;
+    KEY_QUESTION_SECTIONS.map(async (section) => {
+      const sectionUrl =
+        `${params.baseUrl}/location/${params.locationId}/reports/${params.reportPlanId}/overall/${section.slug}`;
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), params.timeoutMs);
-
-        const response = await params.fetchFn(sectionUrl, {
-          method: 'GET',
-          headers: {
-            Accept: 'text/html',
-            'User-Agent': 'RegIntel/2.0 (Compliance Platform)',
-          },
-          signal: controller.signal,
+        const html = await fetchHtmlPage({
+          url: sectionUrl,
+          timeoutMs: params.timeoutMs,
+          fetchFn: params.fetchFn,
         });
-        clearTimeout(timeoutId);
 
-        if (!response.ok) return;
-
-        const html = await response.text();
-        const paragraphs = [...html.matchAll(/<p[^>]*>([^<]{50,})<\/p>/g)]
-          .map((match) => match[1].replace(/\s+/g, ' ').trim())
-          .filter(Boolean);
-
+        if (!html) return;
+        const paragraphs = extractQualifiedParagraphs(html);
         if (paragraphs.length === 0) return;
 
-        const key = toKeyQuestionKey(section);
-        if (!key) return;
-        findings[key] = paragraphs.slice(0, 5).join('\n');
+        const existing = findingsBySection.get(section.key) ?? [];
+        findingsBySection.set(section.key, dedupeParagraphs([...existing, ...paragraphs]));
       } catch {
         // Ignore section-level failures and return what we can from other sections.
       }
     })
   );
+
+  const findings: NonNullable<CqcInspectionReport['keyQuestionFindings']> = {};
+  for (const section of KEY_QUESTION_SECTIONS) {
+    const paragraphs = findingsBySection.get(section.key);
+    if (!paragraphs?.length) continue;
+    findings[section.key] = paragraphs.join('\n');
+  }
 
   return Object.keys(findings).length > 0 ? findings : undefined;
 }
@@ -308,12 +373,163 @@ async function scrapeKeyQuestionFindings(params: {
 function toKeyQuestionKey(
   input: string
 ): 'safe' | 'effective' | 'caring' | 'responsive' | 'wellLed' | undefined {
-  if (input === 'well-led') return 'wellLed';
-  if (input === 'safe' || input === 'effective' || input === 'caring' || input === 'responsive') {
-    return input;
+  const normalized = input.trim().toLowerCase();
+  if (normalized.includes('well-led') || normalized.includes('well led') || normalized === 'wellled') {
+    return 'wellLed';
   }
+  if (normalized.includes('safe')) return 'safe';
+  if (normalized.includes('effective')) return 'effective';
+  if (normalized.includes('caring')) return 'caring';
+  if (normalized.includes('responsive')) return 'responsive';
 
   return undefined;
+}
+
+function normalizeRating(value: string): string | undefined {
+  const cleaned = value.replace(/\s+/g, ' ').trim().replace(/[.,;:]+$/, '');
+  if (!cleaned) return undefined;
+
+  const lower = cleaned.toLowerCase();
+  if (lower === 'good') return 'Good';
+  if (lower === 'outstanding') return 'Outstanding';
+  if (lower === 'requires improvement') return 'Requires Improvement';
+  if (lower === 'inadequate') return 'Inadequate';
+  if (lower === 'insufficient evidence') return 'Insufficient Evidence';
+
+  return undefined;
+}
+
+function stripHtmlToText(html: string): string {
+  return html
+    .replace(/<\/(p|div|li|tr|td|th|h[1-6])>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function mergeKeyQuestionRatings(
+  primary?: CqcInspectionReport['keyQuestionRatings'],
+  fallback?: CqcInspectionReport['keyQuestionRatings']
+): CqcInspectionReport['keyQuestionRatings'] | undefined {
+  if (!primary && !fallback) return undefined;
+
+  return {
+    safe: primary?.safe ?? fallback?.safe,
+    effective: primary?.effective ?? fallback?.effective,
+    caring: primary?.caring ?? fallback?.caring,
+    responsive: primary?.responsive ?? fallback?.responsive,
+    wellLed: primary?.wellLed ?? fallback?.wellLed,
+  };
+}
+
+function extractSectionParagraphsFromOverallHtml(
+  html: string
+): Partial<Record<keyof NonNullable<CqcInspectionReport['keyQuestionFindings']>, string[]>> {
+  const output: Partial<Record<keyof NonNullable<CqcInspectionReport['keyQuestionFindings']>, string[]>> = {};
+  const sectionHeadingPattern = '(safe|effective|caring|responsive|well[-\\s]?led)';
+
+  for (const section of KEY_QUESTION_SECTIONS) {
+    const headingToken = section.slug === 'well-led' ? 'well[-\\s]?led' : section.slug;
+    const sectionRegex = new RegExp(
+      `<h[1-6][^>]*>[^<]*${headingToken}[^<]*<\\/h[1-6]>([\\s\\S]*?)(?=<h[1-6][^>]*>[^<]*${sectionHeadingPattern}[^<]*<\\/h[1-6]>|$)`,
+      'i'
+    );
+    const sectionMatch = html.match(sectionRegex);
+    if (!sectionMatch?.[1]) continue;
+
+    const paragraphs = extractQualifiedParagraphs(sectionMatch[1]);
+    if (paragraphs.length === 0) continue;
+    output[section.key] = paragraphs;
+  }
+
+  return output;
+}
+
+function extractQualifiedParagraphs(html: string): string[] {
+  const rawParagraphs = [...html.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)].map((match) =>
+    stripHtmlToText(match[1])
+  );
+
+  return dedupeParagraphs(rawParagraphs.filter(isQualifyingFindingParagraph));
+}
+
+function dedupeParagraphs(paragraphs: string[]): string[] {
+  return Array.from(new Set(paragraphs.map((paragraph) => paragraph.trim()).filter(Boolean)));
+}
+
+function isQualifyingFindingParagraph(paragraph: string): boolean {
+  if (!paragraph || paragraph.length < MIN_FINDING_PARAGRAPH_LENGTH) {
+    return false;
+  }
+
+  if (/^In [A-Z][a-z]+,\s+[A-Z]{1,2}\d/.test(paragraph)) {
+    return false;
+  }
+
+  const lower = paragraph.toLowerCase();
+  if (lower.includes('your information helps us decide')) {
+    return false;
+  }
+  if (lower.includes("let's make care better together")) {
+    return false;
+  }
+  if (lower.includes('tel:')) {
+    return false;
+  }
+  if (/\b(?:\+44|0)\d[\d\s().-]{7,}\d\b/.test(paragraph)) {
+    return false;
+  }
+  if (isLikelyUiText(lower)) {
+    return false;
+  }
+
+  return true;
+}
+
+function isLikelyUiText(lower: string): boolean {
+  const blockedUiFragments = [
+    'skip to main content',
+    'set cookie preferences',
+    'accept all cookies',
+    'back to top',
+    'find and compare services',
+    'page last updated',
+    'contact us',
+    'privacy notice',
+  ];
+
+  return blockedUiFragments.some((fragment) => lower.includes(fragment));
+}
+
+async function fetchHtmlPage(params: {
+  url: string;
+  timeoutMs: number;
+  fetchFn: typeof globalThis.fetch;
+}): Promise<string | undefined> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), params.timeoutMs);
+
+  try {
+    const response = await params.fetchFn(params.url, {
+      method: 'GET',
+      headers: {
+        Accept: 'text/html',
+        'User-Agent': 'RegIntel/2.0 (Compliance Platform)',
+      },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) return undefined;
+    return await response.text();
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 /**
