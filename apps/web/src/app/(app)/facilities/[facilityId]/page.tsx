@@ -223,6 +223,7 @@ export default function FacilityDetailPage() {
           reportSource={facilityData.reportSource}
           snapshotId={facilityData.snapshotId}
           ingestionStatus={facilityData.ingestionStatus}
+          hasReport={Boolean(facility.lastReportScrapedAt)}
         />
 
         <section className={styles.section}>

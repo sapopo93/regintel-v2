@@ -12,16 +12,20 @@ interface PageHeaderProps extends ConstitutionalMetadata {
   title: string;
   subtitle?: string;
   actions?: React.ReactNode;
+  hasReport?: boolean;
 }
 
 export function PageHeader({
   title,
   subtitle,
   actions,
+  hasReport,
   ...metadata
 }: PageHeaderProps) {
   const showIngestionBanner =
-    metadata.mode === 'REAL' && metadata.ingestionStatus !== 'READY';
+    metadata.mode === 'REAL' &&
+    metadata.ingestionStatus !== 'READY' &&
+    !hasReport;
 
   return (
     <header className={styles.header}>

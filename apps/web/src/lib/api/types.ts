@@ -15,6 +15,11 @@ export interface ReportSource {
   type: 'cqc_upload' | 'mock';
   id: string;
   asOf: string;
+  inspectionStatus?: string;
+  lastReportScrapedAt?: string | null;
+  lastScrapedReportDate?: string;
+  cqcSyncedAt?: string | null;
+  dataSource?: string;
 }
 
 export interface ConstitutionalMetadata {
@@ -39,6 +44,11 @@ export interface Provider {
   providerName: string;
   orgRef?: string;
   asOf: string;
+  inspectionStatus?: string;
+  lastReportScrapedAt?: string | null;
+  lastScrapedReportDate?: string;
+  cqcSyncedAt?: string | null;
+  dataSource?: string;
   prsState: string;
   registeredBeds: number;
   serviceTypes: string[];
@@ -51,6 +61,11 @@ export interface ProviderContextSnapshot {
   providerId: string;
   providerName: string;
   asOf: string;
+  inspectionStatus?: string;
+  lastReportScrapedAt?: string | null;
+  lastScrapedReportDate?: string;
+  cqcSyncedAt?: string | null;
+  dataSource?: string;
   prsState: string;
   registeredBeds: number;
   serviceTypes: string[];
@@ -285,6 +300,11 @@ export interface Facility {
   createdAt: string;
   createdBy: string;
   asOf: string;
+  inspectionStatus?: string;
+  lastReportScrapedAt?: string | null;
+  lastScrapedReportDate?: string;
+  cqcSyncedAt?: string | null;
+  dataSource?: string;
 }
 
 /**
