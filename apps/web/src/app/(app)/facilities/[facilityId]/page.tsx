@@ -19,6 +19,7 @@ export const dynamic = "force-dynamic";
 
 import { useEffect, useState, FormEvent } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
+import { useAuth } from '@clerk/nextjs';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { apiClient, getValidatedApiBaseUrl } from '@/lib/api/client';
@@ -30,6 +31,7 @@ export default function FacilityDetailPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { getToken } = useAuth();
   // Decode URL-encoded params (colons in tenant:resource IDs get encoded as %3A)
   const facilityId = decodeURIComponent(params.facilityId as string);
   const providerId = searchParams.get('provider') ? decodeURIComponent(searchParams.get('provider')!) : null;
@@ -151,8 +153,11 @@ export default function FacilityDetailPage() {
   const handleDownloadEvidence = async (blobHash: string, fileName: string) => {
     try {
       const baseUrl = getValidatedApiBaseUrl();
-      const response = await fetch(`${baseUrl}/v1/evidence/blobs/${blobHash}`, {
-        credentials: 'include',
+      const token = await getToken();
+      const response = await fetch(`${baseUrl}/v1/evidence/blobs/${encodeURIComponent(blobHash)}`, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
       });
 
       if (!response.ok) {
