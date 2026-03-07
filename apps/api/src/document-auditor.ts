@@ -1,7 +1,455 @@
-import fs from 'fs';
 import Anthropic from '@anthropic-ai/sdk';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+export interface SAFStatementResult {
+  statementId: string;
+  statementName: string;
+  rating: 'MET' | 'PARTIALLY_MET' | 'NOT_MET' | 'NOT_APPLICABLE';
+  evidence: string;
+}
+
+export interface AuditFinding {
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  category: string;
+  description: string;
+  regulatoryReference?: string;
+  regulation?: string;
+  safStatement?: string;
+}
+
+export interface AuditCorrection {
+  finding: string;
+  correction: string;
+  policyReference: string;
+  priority: 'IMMEDIATE' | 'THIS_WEEK' | 'THIS_MONTH';
+  exampleWording?: string;
+}
+
+export interface DocumentAuditResult {
+  documentType: string;
+  auditDate: string;
+  overallResult: 'PASS' | 'NEEDS_IMPROVEMENT' | 'CRITICAL_GAPS';
+  complianceScore: number;
+  safStatements: SAFStatementResult[];
+  findings: AuditFinding[];
+  corrections: AuditCorrection[];
+  summary: string;
+}
+
+export interface DocumentAuditSummary {
+  status: 'PENDING' | 'COMPLETED';
+  evidenceRecordId: string;
+  documentType?: string;
+  originalFileName?: string;
+  overallResult?: DocumentAuditResult['overallResult'];
+  complianceScore?: number;
+  criticalFindings?: number;
+  highFindings?: number;
+  summary?: string;
+  auditedAt?: string;
+  result?: DocumentAuditResult;
+}
+
+interface StoredDocumentAudit extends DocumentAuditSummary {
+  facilityId: string;
+  providerId: string;
+}
+
+const OVERALL_RESULTS = new Set<DocumentAuditResult['overallResult']>([
+  'PASS',
+  'NEEDS_IMPROVEMENT',
+  'CRITICAL_GAPS',
+]);
+const FINDING_SEVERITIES = new Set<AuditFinding['severity']>([
+  'CRITICAL',
+  'HIGH',
+  'MEDIUM',
+  'LOW',
+]);
+const CORRECTION_PRIORITIES = new Set<AuditCorrection['priority']>([
+  'IMMEDIATE',
+  'THIS_WEEK',
+  'THIS_MONTH',
+]);
+const STATEMENT_RATINGS = new Set<SAFStatementResult['rating']>([
+  'MET',
+  'PARTIALLY_MET',
+  'NOT_MET',
+  'NOT_APPLICABLE',
+]);
+
+let anthropicClient: Anthropic | null = null;
+let pgPoolPromise: Promise<any> | null = null;
+
+function getAnthropicClient(): Anthropic | null {
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+  if (!apiKey) {
+    return null;
+  }
+
+  if (!anthropicClient) {
+    anthropicClient = new Anthropic({ apiKey });
+  }
+
+  return anthropicClient;
+}
+
+async function getPgPool(): Promise<any | null> {
+  const connectionString = process.env.DATABASE_URL?.trim();
+  if (!connectionString) {
+    return null;
+  }
+
+  if (!pgPoolPromise) {
+    pgPoolPromise = import('pg').then(({ Pool }) => new Pool({ connectionString }));
+  }
+
+  return pgPoolPromise;
+}
+
+
+const AUDIT_PROMPTS: Record<string, string> = {
+  MAR_CHART: 'Audit MAR chart vs Reg12 SAF34. Two CD sigs, no gaps, PRN, allergy, dates, dose/route/time. JSON only: {"documentType":"MAR_CHART","auditDate":"","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":0,"safStatements":[{"id":"S2.1","name":"Medicines","rating":"MET|PARTIALLY_MET|NOT_MET","evidence":""}],"findings":[{"severity":"CRITICAL|HIGH|MEDIUM|LOW","category":"","description":"","regulation":""}],"corrections":[{"finding":"","correction":"","policyReference":"","priority":"IMMEDIATE|THIS_WEEK|THIS_MONTH"}],"summary":""}',
+  CARE_PLAN: 'Audit Care Plan vs Care Act 2014 KLOEs. Person-centred, MCA, consent, risk, cultural, review dates. JSON only: {"documentType":"CARE_PLAN","auditDate":"","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":0,"safStatements":[{"id":"","name":"","rating":"MET|PARTIALLY_MET|NOT_MET","evidence":""}],"findings":[{"severity":"CRITICAL|HIGH|MEDIUM|LOW","category":"","description":"","regulation":""}],"corrections":[{"finding":"","correction":"","policyReference":"","priority":"IMMEDIATE|THIS_WEEK|THIS_MONTH"}],"summary":""}',
+  RISK_ASSESSMENT: 'Audit Risk Assessment vs Reg12. Hazards, scoring, controls, review, sig. JSON only: {"documentType":"RISK_ASSESSMENT","auditDate":"","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":0,"safStatements":[{"id":"","name":"","rating":"MET|PARTIALLY_MET|NOT_MET","evidence":""}],"findings":[{"severity":"CRITICAL|HIGH|MEDIUM|LOW","category":"","description":"","regulation":""}],"corrections":[{"finding":"","correction":"","policyReference":"","priority":"IMMEDIATE|THIS_WEEK|THIS_MONTH"}],"summary":""}',
+  INCIDENT_REPORT: 'Audit Incident Report vs Reg20. Description, datetime, witnesses, actions, notifications, learning. JSON only: {"documentType":"INCIDENT_REPORT","auditDate":"","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":0,"safStatements":[{"id":"","name":"","rating":"MET|PARTIALLY_MET|NOT_MET","evidence":""}],"findings":[{"severity":"CRITICAL|HIGH|MEDIUM|LOW","category":"","description":"","regulation":""}],"corrections":[{"finding":"","correction":"","policyReference":"","priority":"IMMEDIATE|THIS_WEEK|THIS_MONTH"}],"summary":""}',
+  DAILY_NOTES: 'Audit Daily Notes vs Reg17. Person-centred, factual, timed+signed, wellbeing, escalation. JSON only: {"documentType":"DAILY_NOTES","auditDate":"","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":0,"safStatements":[{"id":"","name":"","rating":"MET|PARTIALLY_MET|NOT_MET","evidence":""}],"findings":[{"severity":"CRITICAL|HIGH|MEDIUM|LOW","category":"","description":"","regulation":""}],"corrections":[{"finding":"","correction":"","policyReference":"","priority":"IMMEDIATE|THIS_WEEK|THIS_MONTH"}],"summary":""}',
+  HANDOVER_NOTES: 'Audit Handover Notes vs Reg12. All residents, priorities, med changes, tasks, safeguarding. JSON only: {"documentType":"HANDOVER_NOTES","auditDate":"","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":0,"safStatements":[{"id":"","name":"","rating":"MET|PARTIALLY_MET|NOT_MET","evidence":""}],"findings":[{"severity":"CRITICAL|HIGH|MEDIUM|LOW","category":"","description":"","regulation":""}],"corrections":[{"finding":"","correction":"","policyReference":"","priority":"IMMEDIATE|THIS_WEEK|THIS_MONTH"}],"summary":""}',
+  SUPERVISION_RECORD: 'Audit Supervision Record vs Reg18. Frequency, topics, target dates, signed, safeguarding. JSON only: {"documentType":"SUPERVISION_RECORD","auditDate":"","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":0,"safStatements":[{"id":"","name":"","rating":"MET|PARTIALLY_MET|NOT_MET","evidence":""}],"findings":[{"severity":"CRITICAL|HIGH|MEDIUM|LOW","category":"","description":"","regulation":""}],"corrections":[{"finding":"","correction":"","policyReference":"","priority":"IMMEDIATE|THIS_WEEK|THIS_MONTH"}],"summary":""}',
+  MEDICATION_PROTOCOL: 'Audit Med Protocol vs Reg12 NICE. CDs, storage, admin, competency, disposal, audit trail. JSON only: {"documentType":"MEDICATION_PROTOCOL","auditDate":"","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":0,"safStatements":[{"id":"","name":"","rating":"MET|PARTIALLY_MET|NOT_MET","evidence":""}],"findings":[{"severity":"CRITICAL|HIGH|MEDIUM|LOW","category":"","description":"","regulation":""}],"corrections":[{"finding":"","correction":"","policyReference":"","priority":"IMMEDIATE|THIS_WEEK|THIS_MONTH"}],"summary":""}',
+  OTHER: 'Review care home doc vs CQC Regs 9-20. Compliance concerns, missing sigs, gaps. JSON only: {"documentType":"OTHER","auditDate":"","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":0,"safStatements":[],"findings":[{"severity":"CRITICAL|HIGH|MEDIUM|LOW","category":"","description":"","regulation":""}],"corrections":[{"finding":"","correction":"","policyReference":"","priority":"IMMEDIATE|THIS_WEEK|THIS_MONTH"}],"summary":""}',
+};
+
+function createFallbackResult(
+  documentType: string,
+  summary = 'Audit failed - retry or review manually.'
+): DocumentAuditResult {
+  return {
+    documentType,
+    auditDate: new Date().toISOString(),
+    overallResult: 'NEEDS_IMPROVEMENT',
+    complianceScore: 0,
+    safStatements: [],
+    findings: [
+      {
+        severity: 'HIGH',
+        category: 'Audit Error',
+        description: 'Audit could not be completed',
+        regulation: '',
+      },
+    ],
+    corrections: [],
+    summary,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function asText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeComplianceScore(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function normalizeSafStatements(value: unknown): SAFStatementResult[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter(isRecord)
+    .map((statement) => {
+      const rating = asText(statement.rating);
+
+      return {
+        statementId: asText(statement.statementId || statement.id),
+        statementName: asText(statement.statementName || statement.name),
+        rating: STATEMENT_RATINGS.has(rating as SAFStatementResult['rating'])
+          ? (rating as SAFStatementResult['rating'])
+          : 'NOT_MET',
+        evidence: asText(statement.evidence),
+      };
+    })
+    .filter((statement) => statement.statementId || statement.statementName || statement.evidence);
+}
+
+function normalizeFindings(value: unknown): AuditFinding[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter(isRecord)
+    .map((finding) => {
+      const severity = asText(finding.severity).toUpperCase();
+      const regulatoryReference = asText(finding.regulatoryReference || finding.regulation);
+      const safStatement = asText(finding.safStatement);
+
+      return {
+        severity: FINDING_SEVERITIES.has(severity as AuditFinding['severity'])
+          ? (severity as AuditFinding['severity'])
+          : 'MEDIUM',
+        category: asText(finding.category) || 'General',
+        description: asText(finding.description) || 'Compliance concern identified.',
+        ...(regulatoryReference ? { regulatoryReference, regulation: regulatoryReference } : {}),
+        ...(safStatement ? { safStatement } : {}),
+      };
+    });
+}
+
+function normalizeCorrections(value: unknown): AuditCorrection[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter(isRecord)
+    .map((correction) => {
+      const priority = asText(correction.priority).toUpperCase();
+      const exampleWording = asText(correction.exampleWording);
+
+      return {
+        finding: asText(correction.finding) || 'Compliance concern identified.',
+        correction: asText(correction.correction) || 'Review document and correct the missing detail.',
+        policyReference: asText(correction.policyReference) || 'Internal policy review required.',
+        priority: CORRECTION_PRIORITIES.has(priority as AuditCorrection['priority'])
+          ? (priority as AuditCorrection['priority'])
+          : 'THIS_WEEK',
+        ...(exampleWording ? { exampleWording } : {}),
+      };
+    });
+}
+
+function parseAuditPayload(rawText: string): unknown {
+  const cleaned = rawText.replace(/```json|```/gi, '').trim();
+  if (!cleaned) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (firstBrace === -1 || lastBrace <= firstBrace) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
+    } catch {
+      return null;
+    }
+  }
+}
+
+function normalizeAuditResult(payload: unknown, defaultDocumentType: string): DocumentAuditResult {
+  const fallback = createFallbackResult(defaultDocumentType);
+  if (!isRecord(payload)) {
+    return fallback;
+  }
+
+  const overallResult = asText(payload.overallResult).toUpperCase();
+  const summary = asText(payload.summary);
+  const documentType = asText(payload.documentType) || defaultDocumentType;
+  const auditDate = asText(payload.auditDate) || new Date().toISOString();
+  const findings = normalizeFindings(payload.findings);
+
+  return {
+    documentType,
+    auditDate,
+    overallResult: OVERALL_RESULTS.has(overallResult as DocumentAuditResult['overallResult'])
+      ? (overallResult as DocumentAuditResult['overallResult'])
+      : 'NEEDS_IMPROVEMENT',
+    complianceScore: normalizeComplianceScore(payload.complianceScore),
+    safStatements: normalizeSafStatements(payload.safStatements),
+    findings,
+    corrections: normalizeCorrections(payload.corrections),
+    summary: summary || fallback.summary,
+  };
+}
+
+function extractResponseText(response: any): string {
+  const content = Array.isArray(response?.content) ? response.content : [];
+
+  return content
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text)
+    .join('')
+    .trim();
+}
+
+function countFindings(result: DocumentAuditResult, severity: AuditFinding['severity']): number {
+  return result.findings.filter((finding) => finding.severity === severity).length;
+}
+
+function toIsoString(value: unknown): string {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  return asText(value) || new Date().toISOString();
+}
+
+function createCompletedSummary(
+  evidenceRecordId: string,
+  fileName: string,
+  result: DocumentAuditResult
+): DocumentAuditSummary {
+  return {
+    status: 'COMPLETED',
+    evidenceRecordId,
+    documentType: result.documentType,
+    originalFileName: fileName,
+    overallResult: result.overallResult,
+    complianceScore: result.complianceScore,
+    criticalFindings: countFindings(result, 'CRITICAL'),
+    highFindings: countFindings(result, 'HIGH'),
+    summary: result.summary,
+    auditedAt: result.auditDate,
+    result,
+  };
+}
+
+function mapDocumentAuditRow(row: Record<string, unknown>): StoredDocumentAudit {
+  const result = normalizeAuditResult(row.audit_result_json, asText(row.document_type));
+
+  return {
+    status: 'COMPLETED',
+    evidenceRecordId: asText(row.evidence_record_id),
+    facilityId: asText(row.facility_id),
+    providerId: asText(row.provider_id),
+    documentType: asText(row.document_type) || result.documentType,
+    originalFileName: asText(row.original_file_name),
+    overallResult: OVERALL_RESULTS.has(asText(row.overall_result) as DocumentAuditResult['overallResult'])
+      ? (asText(row.overall_result) as DocumentAuditResult['overallResult'])
+      : result.overallResult,
+    complianceScore: normalizeComplianceScore(row.compliance_score),
+    criticalFindings: normalizeComplianceScore(row.critical_findings),
+    highFindings: normalizeComplianceScore(row.high_findings),
+    summary: result.summary,
+    auditedAt: toIsoString(row.audited_at),
+    result,
+  };
+}
+
+export function createPendingDocumentAuditSummary(evidenceRecordId: string): DocumentAuditSummary {
+  return {
+    status: 'PENDING',
+    evidenceRecordId,
+  };
+}
+
+export function getBlobPath(blobHash: string): string {
+  const hashHex = blobHash.replace(/^sha256:/, '');
+
+  return join(
+    process.env.BLOB_STORAGE_PATH || '/var/regintel/evidence-blobs',
+    hashHex.slice(0, 2),
+    hashHex.slice(2, 4),
+    hashHex
+  );
+}
+
+export async function saveDocumentAudit(params: {
+  tenantId: string; facilityId: string; providerId: string;
+  evidenceRecordId: string; fileName: string; result: DocumentAuditResult;
+}): Promise<void> {
+  const pool = await getPgPool();
+  if (!pool) {
+    console.warn('[AUDITOR] DATABASE_URL is not set; skipping audit persistence.');
+    return;
+  }
+
+  const result = normalizeAuditResult(params.result, params.result.documentType);
+  const crit = countFindings(result, 'CRITICAL');
+  const high = countFindings(result, 'HIGH');
+  const placeholders = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((n) => '$' + n).join(',');
+  const sql = `INSERT INTO document_audits (tenant_id,facility_id,provider_id,evidence_record_id,document_type,original_file_name,overall_result,compliance_score,critical_findings,high_findings,audit_result_json,audited_at,created_at) VALUES (${placeholders},NOW(),NOW()) ON CONFLICT (evidence_record_id) DO UPDATE SET overall_result=EXCLUDED.overall_result,compliance_score=EXCLUDED.compliance_score,critical_findings=EXCLUDED.critical_findings,high_findings=EXCLUDED.high_findings,audit_result_json=EXCLUDED.audit_result_json,audited_at=NOW()`;
+  await pool.query(sql, [
+    params.tenantId, params.facilityId, params.providerId, params.evidenceRecordId,
+    result.documentType, params.fileName, result.overallResult,
+    result.complianceScore, crit, high, JSON.stringify(result),
+  ]);
+  console.log('[AUDITOR] Saved:', result.documentType, result.overallResult, result.complianceScore);
+}
+
+export async function listDocumentAuditSummariesByEvidenceRecordIds(
+  tenantId: string,
+  evidenceRecordIds: string[]
+): Promise<Map<string, DocumentAuditSummary>> {
+  if (evidenceRecordIds.length === 0) {
+    return new Map();
+  }
+
+  const pool = await getPgPool();
+  if (!pool) {
+    return new Map();
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT evidence_record_id, facility_id, provider_id, document_type, original_file_name,
+              overall_result, compliance_score, critical_findings, high_findings,
+              audit_result_json, audited_at
+         FROM document_audits
+        WHERE tenant_id = $1
+          AND evidence_record_id = ANY($2::text[])`,
+      [tenantId, evidenceRecordIds]
+    );
+
+    return new Map(
+      rows.map((row: Record<string, unknown>) => {
+        const audit = mapDocumentAuditRow(row);
+        return [audit.evidenceRecordId, audit] as const;
+      })
+    );
+  } catch (error) {
+    console.error('[AUDITOR] Failed to load document audit summaries:', error);
+    return new Map();
+  }
+}
+
+export async function getDocumentAuditByEvidenceRecordId(
+  tenantId: string,
+  evidenceRecordId: string
+): Promise<DocumentAuditSummary | null> {
+  const pool = await getPgPool();
+  if (!pool) {
+    return null;
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT evidence_record_id, facility_id, provider_id, document_type, original_file_name,
+              overall_result, compliance_score, critical_findings, high_findings,
+              audit_result_json, audited_at
+         FROM document_audits
+        WHERE tenant_id = $1
+          AND evidence_record_id = $2
+        LIMIT 1`,
+      [tenantId, evidenceRecordId]
+    );
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    return mapDocumentAuditRow(rows[0] as Record<string, unknown>);
+  } catch (error) {
+    console.error('[AUDITOR] Failed to load document audit:', error);
+    return null;
+  }
+}
 
 export function detectDocumentType(fileName: string, mimeType: string): string {
   void mimeType;
@@ -35,51 +483,79 @@ export function detectDocumentType(fileName: string, mimeType: string): string {
   return 'OTHER';
 }
 
-export async function extractDocumentContent(filePath: string, mimeType: string): Promise<string> {
+
+
+export async function auditDocument(
+  docType: string,
+  blobPath: string,
+  facilityName: string
+): Promise<DocumentAuditResult> {
+  const fallback = createFallbackResult(docType);
+  const anthropic = getAnthropicClient();
+  if (!anthropic) {
+    console.warn('[AUDITOR] ANTHROPIC_API_KEY is not set; skipping audit.');
+    return createFallbackResult(docType, 'Audit skipped - ANTHROPIC_API_KEY is not configured.');
+  }
+
+  let fileBuffer: Buffer;
   try {
-    const fileBuffer = fs.readFileSync(filePath);
-    const base64 = fileBuffer.toString('base64');
-    if (!mimeType.startsWith('image/') && mimeType !== 'application/pdf') {
-      return '';
+    fileBuffer = await readFile(blobPath);
+  } catch (error) {
+    console.error('[AUDITOR] Blob not found:', blobPath, error);
+    return fallback;
+  }
+
+  if (fileBuffer.subarray(0, 4).toString('utf8') !== '%PDF') {
+    console.log('[AUDITOR] Skipping non-PDF:', blobPath);
+    return createFallbackResult(docType, 'Not a PDF - cannot audit.');
+  }
+
+  const b64 = fileBuffer.toString('base64');
+  const prompt = AUDIT_PROMPTS[docType] ?? AUDIT_PROMPTS['OTHER'];
+
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001', max_tokens: 2000,
+      messages: [{ role: 'user', content: [
+        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } as any },
+        { type: 'text', text: 'Facility: ' + facilityName + '\n\n' + prompt },
+      ]}],
+    });
+    const parsed = parseAuditPayload(extractResponseText(response));
+    const normalized = normalizeAuditResult(parsed, docType);
+
+    if (!normalized.summary.trim()) {
+      return fallback;
     }
 
-    const response = await anthropic.messages.create({
-      model: 'claude-opus-4-5-20251101',
-      max_tokens: 4000,
-      messages: [
-        {
-          role: 'user',
-          content: mimeType.startsWith('image/')
-            ? [
-                {
-                  type: 'image',
-                  source: { type: 'base64', media_type: mimeType, data: base64 },
-                },
-                {
-                  type: 'text',
-                  text: 'Extract ALL text from this document exactly as written. Preserve all dates, names, times, medication names, signatures (mark as [SIGNED] or [UNSIGNED]). Return plain text only.',
-                },
-              ]
-            : [
-                {
-                  type: 'document',
-                  source: { type: 'base64', media_type: 'application/pdf', data: base64 },
-                },
-                {
-                  type: 'text',
-                  text: 'Extract ALL text from this document exactly as written.',
-                },
-              ],
-        },
-      ],
-    });
-
-    return response.content
-      .filter((block) => block.type === 'text')
-      .map((block) => block.text)
-      .join('\n');
+    return normalized;
   } catch (error) {
-    console.error('[AUDITOR] extraction failed', error);
-    return '';
+    console.error('[AUDITOR] audit failed', error);
+    return fallback;
   }
+}
+
+export async function runDocumentAuditForEvidence(params: {
+  tenantId: string;
+  facilityId: string;
+  facilityName: string;
+  providerId: string;
+  evidenceRecordId: string;
+  blobHash: string;
+  fileName: string;
+  mimeType: string;
+}): Promise<DocumentAuditSummary> {
+  const documentType = detectDocumentType(params.fileName, params.mimeType);
+  const result = await auditDocument(documentType, getBlobPath(params.blobHash), params.facilityName);
+
+  await saveDocumentAudit({
+    tenantId: params.tenantId,
+    facilityId: params.facilityId,
+    providerId: params.providerId,
+    evidenceRecordId: params.evidenceRecordId,
+    fileName: params.fileName,
+    result,
+  });
+
+  return createCompletedSummary(params.evidenceRecordId, params.fileName, result);
 }

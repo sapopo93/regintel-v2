@@ -57,6 +57,14 @@ import {
 import { handleClerkWebhook } from './webhooks/clerk';
 import { blobStorage } from './blob-storage';
 import { scanBlob } from './malware-scanner';
+import {
+  createPendingDocumentAuditSummary,
+  getDocumentAuditByEvidenceRecordId,
+  listDocumentAuditSummariesByEvidenceRecordIds,
+  runDocumentAuditForEvidence,
+  type DocumentAuditSummary,
+} from './document-auditor';
+import { startAuditWorker, type DocumentAuditJobData } from './audit-worker';
 
 const useDbStore =
   process.env.USE_DB_STORE === 'true' ||
@@ -66,6 +74,7 @@ const store = useDbStore ? prismaStore : new InMemoryStore();
 // Queue adapters (BullMQ with in-memory fallback)
 const scrapeReportQueue = getQueueAdapter(QUEUE_NAMES.SCRAPE_REPORT);
 const malwareScanQueue = getQueueAdapter(QUEUE_NAMES.MALWARE_SCAN);
+const documentAuditQueue = getQueueAdapter(QUEUE_NAMES.DOCUMENT_AUDIT);
 const evidenceProcessQueue = getQueueAdapter(QUEUE_NAMES.EVIDENCE_PROCESS);
 const aiInsightQueue = getQueueAdapter(QUEUE_NAMES.AI_INSIGHT);
 
@@ -568,7 +577,7 @@ function sendError(
   res.status(status).json({ ...buildConstitutionalMetadata(metadataOverrides), error: message });
 }
 
-function mapEvidenceRecord(record: EvidenceRecordRecord) {
+function mapEvidenceRecord(record: EvidenceRecordRecord, documentAudit?: DocumentAuditSummary) {
   return {
     evidenceRecordId: record.id,
     providerId: record.providerId,
@@ -582,6 +591,7 @@ function mapEvidenceRecord(record: EvidenceRecordRecord) {
     fileName: record.fileName,
     description: record.description,
     uploadedAt: record.uploadedAt,
+    ...(documentAudit ? { documentAudit } : {}),
   };
 }
 
@@ -1328,7 +1338,11 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     const evidence = facilityId
       ? await store.listEvidenceByFacility(ctx, facilityId)
       : await store.listEvidenceByProvider(ctx, providerId);
-    const mapped = evidence.map(mapEvidenceRecord);
+    const auditSummaries = await listDocumentAuditSummariesByEvidenceRecordIds(
+      ctx.tenantId,
+      evidence.map((record) => record.id)
+    );
+    const mapped = evidence.map((record) => mapEvidenceRecord(record, auditSummaries.get(record.id)));
     const reportContext = facilityId
       ? await resolveReportContextForFacility(ctx, providerId, facilityId)
       : undefined;
@@ -1746,6 +1760,22 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         description,
       });
 
+    // Enqueue audit job - processed async by worker (avoids OOM in API process)
+    documentAuditQueue.add({
+      tenantId: ctx.tenantId,
+      facilityId,
+      facilityName: facility.facilityName || 'Unknown facility',
+      providerId: facility.providerId,
+      evidenceRecordId: record.id,
+      blobHash: record.blobHash,
+      fileName: record.fileName,
+      mimeType: record.mimeType,
+    } as DocumentAuditJobData).then(job => {
+      console.log(`[AUDIT] Queued job ${job.id} for evidence ${record.id}`);
+    }).catch(err => {
+      console.error('[AUDIT] Failed to enqueue:', err);
+    });
+
       await store.appendAuditEvent(ctx, facility.providerId, 'EVIDENCE_RECORDED', {
         facilityId,
         evidenceRecordId: record.id,
@@ -1780,7 +1810,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       sendWithMetadata(
         res,
         {
-          record: mapEvidenceRecord(record),
+          record: mapEvidenceRecord(record, createPendingDocumentAuditSummary(record.id)),
           processingJobId: processJob.id,
           processingStatus: 'PENDING',
         },
@@ -1805,9 +1835,28 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       return;
     }
     const evidence = await store.listEvidenceByFacility(ctx, facilityId);
-    const mapped = evidence.map(mapEvidenceRecord);
+    const auditSummaries = await listDocumentAuditSummariesByEvidenceRecordIds(
+      ctx.tenantId,
+      evidence.map((record) => record.id)
+    );
+    const mapped = evidence.map((record) => mapEvidenceRecord(record, auditSummaries.get(record.id)));
     const reportContext = await resolveReportContextForFacility(ctx, facility.providerId, facilityId);
     sendWithMetadata(res, { evidence: mapped, totalCount: mapped.length }, reportContext);
+  });
+
+  app.get('/v1/evidence/:evidenceRecordId/document-audit', async (req, res) => {
+    const ctx = getContext(req);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ evidenceRecordId: zId }).strip(),
+    });
+    if (!parsed) return;
+    const { evidenceRecordId } = parsed.params as { evidenceRecordId: string };
+
+    const audit = await getDocumentAuditByEvidenceRecordId(ctx.tenantId, evidenceRecordId);
+    sendWithMetadata(
+      res,
+      audit ?? createPendingDocumentAuditSummary(evidenceRecordId)
+    );
   });
 
   app.get('/v1/providers/:providerId/exports', async (req, res) => {

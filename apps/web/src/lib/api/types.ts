@@ -140,6 +140,50 @@ export interface EvidenceRecord {
   fileName: string;
   description?: string;
   uploadedAt: string;
+  documentAudit?: DocumentAuditSummary;
+}
+
+export interface DocumentAuditResult {
+  documentType: string;
+  auditDate: string;
+  overallResult: 'PASS' | 'NEEDS_IMPROVEMENT' | 'CRITICAL_GAPS';
+  complianceScore: number;
+  safStatements: Array<{
+    statementId: string;
+    statementName: string;
+    rating: 'MET' | 'PARTIALLY_MET' | 'NOT_MET' | 'NOT_APPLICABLE';
+    evidence: string;
+  }>;
+  findings: Array<{
+    severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+    category: string;
+    description: string;
+    regulatoryReference?: string;
+    regulation?: string;
+    safStatement?: string;
+  }>;
+  corrections: Array<{
+    finding: string;
+    correction: string;
+    policyReference: string;
+    priority: 'IMMEDIATE' | 'THIS_WEEK' | 'THIS_MONTH';
+    exampleWording?: string;
+  }>;
+  summary: string;
+}
+
+export interface DocumentAuditSummary {
+  status: 'PENDING' | 'COMPLETED';
+  evidenceRecordId: string;
+  documentType?: string;
+  originalFileName?: string;
+  overallResult?: 'PASS' | 'NEEDS_IMPROVEMENT' | 'CRITICAL_GAPS';
+  complianceScore?: number;
+  criticalFindings?: number;
+  highFindings?: number;
+  summary?: string;
+  auditedAt?: string;
+  result?: DocumentAuditResult;
 }
 
 /**
@@ -435,6 +479,8 @@ export interface CreateFacilityEvidenceRequest {
 export interface CreateFacilityEvidenceResponse extends ConstitutionalMetadata {
   record: EvidenceRecord;
 }
+
+export interface DocumentAuditResponse extends ConstitutionalMetadata, DocumentAuditSummary {}
 
 /**
  * Malware scan response

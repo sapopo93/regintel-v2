@@ -136,6 +136,13 @@
   padding: 16px;
 }
 
+.evidenceCardHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
 .evidenceTitle {
   margin: 0 0 8px;
   font-size: 16px;
@@ -153,6 +160,90 @@
   background: #f4f6f8;
   padding: 4px 8px;
   border-radius: 999px;
+}
+
+.downloadButton {
+  border: 1px solid #d9dde3;
+  background: #fff;
+  color: #1b1a17;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.auditPanel {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.auditStatusRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.auditBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.auditPending {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.auditPASS {
+  background: #ecfdf3;
+  color: #166534;
+}
+
+.auditNEEDS_IMPROVEMENT {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.auditCRITICAL_GAPS {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.auditScore {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.auditSummary {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #334155;
+}
+
+.auditMetrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.auditMetric {
+  background: #fff;
+  border: 1px solid #dbe4ee;
+  color: #334155;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
 }
 
 .evidenceHash {

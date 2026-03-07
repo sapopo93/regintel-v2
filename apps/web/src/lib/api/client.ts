@@ -33,6 +33,7 @@ import type {
   CreateEvidenceBlobResponseWithScan,
   CreateFacilityEvidenceRequest,
   CreateFacilityEvidenceResponse,
+  DocumentAuditResponse,
   BackgroundJobResponse,
   MalwareScanResponse,
   AIInsightsResponse,
@@ -439,6 +440,15 @@ export class ApiClient {
   async getFacilityEvidence(facilityId: string): Promise<EvidenceListResponse> {
     return this.fetch<EvidenceListResponse>(
       `/v1/facilities/${facilityId}/evidence`
+    );
+  }
+
+  /**
+   * Get document audit status/result for an evidence record
+   */
+  async getDocumentAudit(evidenceRecordId: string): Promise<DocumentAuditResponse> {
+    return this.fetch<DocumentAuditResponse>(
+      `/v1/evidence/${evidenceRecordId}/document-audit`
     );
   }
 

@@ -23,9 +23,33 @@ import { useAuth } from '@clerk/nextjs';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { apiClient, getValidatedApiBaseUrl } from '@/lib/api/client';
-import type { FacilityDetailResponse, EvidenceListResponse, ScanStatus } from '@/lib/api/types';
+import type {
+  DocumentAuditSummary,
+  EvidenceListResponse,
+  EvidenceRecord,
+  FacilityDetailResponse,
+  ScanStatus,
+} from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
 import styles from './page.module.css';
+
+function upsertEvidenceRecord(records: EvidenceRecord[], nextRecord: EvidenceRecord): EvidenceRecord[] {
+  const withoutExisting = records.filter(
+    (record) => record.evidenceRecordId !== nextRecord.evidenceRecordId
+  );
+
+  return [nextRecord, ...withoutExisting].sort(
+    (left, right) => new Date(right.uploadedAt).getTime() - new Date(left.uploadedAt).getTime()
+  );
+}
+
+function mergeDocumentAudit(records: EvidenceRecord[], audit: DocumentAuditSummary): EvidenceRecord[] {
+  return records.map((record) =>
+    record.evidenceRecordId === audit.evidenceRecordId
+      ? { ...record, documentAudit: audit }
+      : record
+  );
+}
 
 export default function FacilityDetailPage() {
   const params = useParams();
@@ -70,6 +94,62 @@ export default function FacilityDetailPage() {
       .finally(() => setLoading(false));
   }, [facilityId]);
 
+  useEffect(() => {
+    const pendingAuditIds = evidenceData?.evidence
+      .filter((record) => record.documentAudit?.status === 'PENDING')
+      .map((record) => record.evidenceRecordId) ?? [];
+
+    if (pendingAuditIds.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const pollAudits = async () => {
+      const results = await Promise.all(
+        pendingAuditIds.map((evidenceRecordId) =>
+          apiClient.getDocumentAudit(evidenceRecordId).catch(() => null)
+        )
+      );
+
+      if (cancelled) {
+        return;
+      }
+
+      const completedAudits = results.filter(
+        (audit): audit is DocumentAuditSummary => audit !== null && audit.status === 'COMPLETED'
+      );
+
+      if (completedAudits.length === 0) {
+        return;
+      }
+
+      setEvidenceData((current) => {
+        if (!current) {
+          return current;
+        }
+
+        return {
+          ...current,
+          evidence: completedAudits.reduce(
+            (records, audit) => mergeDocumentAudit(records, audit),
+            current.evidence
+          ),
+        };
+      });
+    };
+
+    void pollAudits();
+    const intervalId = window.setInterval(() => {
+      void pollAudits();
+    }, 4000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [evidenceData]);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
     setSelectedFile(file);
@@ -107,7 +187,7 @@ export default function FacilityDetailPage() {
       // Show scan status from blob upload
       setLastUploadScanStatus(blobResponse.scanStatus);
 
-      await apiClient.createFacilityEvidence({
+      const evidenceResponse = await apiClient.createFacilityEvidence({
         facilityId,
         blobHash: blobResponse.blobHash,
         evidenceType,
@@ -115,9 +195,21 @@ export default function FacilityDetailPage() {
         description: description.trim() || undefined,
       });
 
-      // Reload evidence list
-      const evidence = await apiClient.getFacilityEvidence(facilityId);
-      setEvidenceData(evidence);
+      setEvidenceData((current) => {
+        if (!current) {
+          return current;
+        }
+
+        return {
+          ...current,
+          evidence: upsertEvidenceRecord(current.evidence, evidenceResponse.record),
+          totalCount: current.evidence.some(
+            (record) => record.evidenceRecordId === evidenceResponse.record.evidenceRecordId
+          )
+            ? current.totalCount
+            : current.totalCount + 1,
+        };
+      });
 
       // Reset form
       setShowUploadForm(false);
@@ -405,6 +497,54 @@ export default function FacilityDetailPage() {
                     </span>
                     <span className={styles.evidenceDetail}>Category: {record.evidenceType}</span>
                   </div>
+                  {record.documentAudit && (
+                    <div className={styles.auditPanel}>
+                      <div className={styles.auditStatusRow}>
+                        <span
+                          className={`${styles.auditBadge} ${
+                            record.documentAudit.status === 'PENDING'
+                              ? styles.auditPending
+                              : styles[`audit${record.documentAudit.overallResult}`]
+                          }`}
+                        >
+                          {record.documentAudit.status === 'PENDING'
+                            ? 'Audit running'
+                            : record.documentAudit.overallResult?.replace(/_/g, ' ')}
+                        </span>
+                        {record.documentAudit.status === 'COMPLETED' &&
+                          typeof record.documentAudit.complianceScore === 'number' && (
+                            <span className={styles.auditScore}>
+                              Score {record.documentAudit.complianceScore}%
+                            </span>
+                          )}
+                      </div>
+                      <p className={styles.auditSummary}>
+                        {record.documentAudit.status === 'PENDING'
+                          ? 'Automatic compliance audit is in progress for this upload.'
+                          : record.documentAudit.summary}
+                      </p>
+                      {record.documentAudit.status === 'COMPLETED' && (
+                        <div className={styles.auditMetrics}>
+                          {record.documentAudit.documentType && (
+                            <span className={styles.auditMetric}>
+                              Type: {record.documentAudit.documentType}
+                            </span>
+                          )}
+                          <span className={styles.auditMetric}>
+                            Critical: {record.documentAudit.criticalFindings ?? 0}
+                          </span>
+                          <span className={styles.auditMetric}>
+                            High: {record.documentAudit.highFindings ?? 0}
+                          </span>
+                          {record.documentAudit.auditedAt && (
+                            <span className={styles.auditMetric}>
+                              Audited: {new Date(record.documentAudit.auditedAt).toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))
             )}

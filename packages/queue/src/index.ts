@@ -6,6 +6,7 @@ export const QUEUE_NAMES = {
   MALWARE_SCAN: 'malware-scan',
   EVIDENCE_PROCESS: 'evidence-process',
   AI_INSIGHT: 'ai-insight',
+  DOCUMENT_AUDIT: 'document-audit',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -125,4 +126,16 @@ export async function processInMemoryJob<T, R>(
     job.error = err instanceof Error ? err.message : String(err);
     job.processedAt = new Date();
   }
+}
+
+// Return IDs of all waiting jobs for a given queue name prefix
+export function consumeWaitingJobs(queueName: QueueName): string[] {
+  const prefix = `${queueName}:`;
+  const waiting: string[] = [];
+  for (const [id, job] of jobs.entries()) {
+    if (id.startsWith(prefix) && job.state === 'waiting') {
+      waiting.push(id);
+    }
+  }
+  return waiting;
 }

@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { createApp } from './app';
+import { startAuditWorker } from './audit-worker';
 
 const PORT = process.env.PORT || 3001;
 
@@ -58,7 +59,10 @@ async function start() {
     await (store as any).waitForReady();
   }
   app.listen(PORT, () => {
-    console.log(`\nRegIntel API server running on http://localhost:${PORT}\n`);
+    console.log(`
+RegIntel API server running on http://localhost:${PORT}
+`);
+    startAuditWorker();
   });
 }
 
