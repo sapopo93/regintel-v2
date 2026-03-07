@@ -66,6 +66,19 @@ import {
 } from './document-auditor';
 import { startAuditWorker, type DocumentAuditJobData } from './audit-worker';
 
+//  Memory safety helpers 
+const MAP_CAP = 500;
+function setBounded<K, V>(map: Map<K, V>, key: K, value: V): void {
+  map.set(key, value);
+  if (map.size > MAP_CAP) {
+    map.delete(map.keys().next().value!);
+  }
+}
+const asyncRoute = (fn: (req: any, res: any, next: any) => Promise<any>) =>
+  (req: any, res: any, next: any) => Promise.resolve(fn(req, res, next)).catch(next);
+// 
+
+
 const useDbStore =
   process.env.USE_DB_STORE === 'true' ||
   (process.env.NODE_ENV !== 'test' && process.env.USE_DB_STORE !== 'false');
@@ -80,7 +93,6 @@ const aiInsightQueue = getQueueAdapter(QUEUE_NAMES.AI_INSIGHT);
 
 // In-memory job indexes (fallback only)
 const blobScanJobs = new Map<string, string>();
-const evidenceProcessJobs = new Map<string, string>();
 const mockInsightJobs = new Map<string, string>();
 
 const TOPICS = [
@@ -1208,7 +1220,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
           serviceType: facility?.serviceType,
         } as AIInsightJobData);
 
-        mockInsightJobs.set(sessionId, job.id);
+        setBounded(mockInsightJobs, sessionId, job.id);
       } catch (error) {
         console.error('[AI_INSIGHTS] Failed to enqueue job:', error);
       }
@@ -1386,7 +1398,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         mimeType,
       } as MalwareScanJobData);
 
-      blobScanJobs.set(blobMetadata.contentHash, scanJob.id);
+      setBounded(blobScanJobs, blobMetadata.contentHash, scanJob.id);
 
       if (await malwareScanQueue.isInMemory()) {
         await processInMemoryJob(
@@ -1809,8 +1821,6 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         facilityId,
         providerId: facility.providerId,
       } as EvidenceProcessJobData);
-
-      evidenceProcessJobs.set(record.id, processJob.id);
 
       if (await evidenceProcessQueue.isInMemory()) {
         await processInMemoryJob(
@@ -2745,3 +2755,11 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
 
   return { app, store };
 }
+
+//  Global Express error handler 
+app.use((err: any, req: any, res: any, _next: any) => {
+  console.error('[API] Unhandled route error:', err?.message || err);
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});

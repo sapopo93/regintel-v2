@@ -68,6 +68,7 @@ interface QueueAdapter<T, R> {
 }
 
 // In-memory job storage
+const MAX_IN_MEMORY_JOBS = 500;
 const jobs = new Map<string, Job<unknown, unknown>>();
 
 function createInMemoryQueue<T, R>(name: string): QueueAdapter<T, R> {
@@ -138,4 +139,12 @@ export function consumeWaitingJobs(queueName: QueueName): string[] {
     }
   }
   return waiting;
+}
+
+export function consumeNextWaitingJob(queueName: QueueName): string | null {
+  const prefix = `${queueName}:`;
+  for (const [id, job] of jobs.entries()) {
+    if (id.startsWith(prefix) && job.state === 'waiting') return id;
+  }
+  return null;
 }

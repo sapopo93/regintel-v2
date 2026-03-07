@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { createApp } from './app';
-import { startAuditWorker } from './audit-worker';
+import { startAuditWorker, stopAuditWorker } from './audit-worker';
 
 const PORT = process.env.PORT || 3001;
 
@@ -58,12 +58,30 @@ async function start() {
   if ('waitForReady' in store && typeof (store as any).waitForReady === 'function') {
     await (store as any).waitForReady();
   }
-  app.listen(PORT, () => {
-    console.log(`
-RegIntel API server running on http://localhost:${PORT}
-`);
+  const server = app.listen(PORT, () => {
+    console.log(`RegIntel API server running on http://localhost:${PORT}`);
     startAuditWorker();
   });
+
+  server.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`[SERVER] Port ${PORT} already in use. Exiting.`);
+    } else {
+      console.error('[SERVER] Fatal listen error:', err);
+    }
+    process.exit(1);
+  });
+
+  const shutdown = (signal: string) => {
+    console.log(`[SERVER] ${signal}  graceful shutdown`);
+    stopAuditWorker();
+    server.close(() => { console.log('[SERVER] Closed'); process.exit(0); });
+    setTimeout(() => process.exit(1), 10000).unref();
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT',  () => shutdown('SIGINT'));
+  process.on('unhandledRejection', (r) => console.error('[SERVER] Unhandled rejection:', r));
+  process.on('uncaughtException',  (e) => { console.error('[SERVER] Uncaught exception:', e); process.exit(1); });
 }
 
 start().catch((err) => {
