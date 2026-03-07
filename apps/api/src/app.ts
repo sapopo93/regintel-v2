@@ -2753,9 +2753,6 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     }
   }
 
-  return { app, store };
-}
-
 //  Global Express error handler 
 app.use((err: any, req: any, res: any, _next: any) => {
   console.error('[API] Unhandled route error:', err?.message || err);
@@ -2763,3 +2760,6 @@ app.use((err: any, req: any, res: any, _next: any) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+  return { app, store };
+}
