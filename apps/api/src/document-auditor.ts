@@ -282,8 +282,8 @@ function extractResponseText(response: any): string {
   const content = Array.isArray(response?.content) ? response.content : [];
 
   return content
-    .filter((block) => block.type === 'text')
-    .map((block) => block.text)
+    .filter((block: { type: string; text: string }) => block.type === 'text')
+    .map((block: { type: string; text: string }) => block.text)
     .join('')
     .trim();
 }
