@@ -9,10 +9,24 @@
 
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { useEffect, useMemo, useState } from 'react';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import { VersionBadge } from '../constitutional/VersionBadge';
 import { SIDEBAR_NAVIGATION } from '@/lib/constants';
+import { useProviderContext } from '@/lib/hooks/useProviderContext';
+import { toCqcPrsStatus } from '@/lib/cqcLanguage';
 import styles from './Sidebar.module.css';
+
+function formatSnapshotDate(dateStr: string): string {
+  try {
+    return new Date(dateStr).toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+  } catch {
+    return dateStr;
+  }
+}
 
 const isE2EMode = process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true';
 
@@ -43,79 +57,16 @@ export function Sidebar({
   defaultFacilityId,
 }: SidebarProps) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const providerId = searchParams.get('provider');
-  const facilityIdFromQuery = searchParams.get('facility');
-  const statusLabel = useMemo(() => {
-    const rating = latestRating?.trim();
-    if (rating) return rating;
-
-    const normalizedStatus = status?.trim().toUpperCase();
-    if (normalizedStatus === 'ESTABLISHED' || normalizedStatus === 'GOOD') {
-      return 'Good';
-    }
-    if (normalizedStatus === 'OUTSTANDING') {
-      return 'Outstanding';
-    }
-    if (normalizedStatus === 'REQUIRES_IMPROVEMENT') {
-      return 'Requires improvement';
-    }
-    if (normalizedStatus === 'INADEQUATE') {
-      return 'Inadequate';
-    }
-
-    if (status?.trim()) {
-      return status;
-    }
-
-    return 'Not yet rated';
-  }, [latestRating, status]);
-  const [storedFacilityId, setStoredFacilityId] = useState<string | null>(null);
-
-  const facilityIdFromPath = useMemo(() => {
-    const match = pathname.match(/^\/facilities\/([^/?#]+)/);
-    return match ? decodeURIComponent(match[1]) : null;
-  }, [pathname]);
-
-  useEffect(() => {
-    if (!providerId) return;
-    const storageKey = `regintel:lastFacility:${providerId}`;
-    const knownFacility =
-      facilityIdFromQuery || facilityIdFromPath || defaultFacilityId || null;
-
-    if (knownFacility) {
-      try {
-        window.localStorage.setItem(storageKey, knownFacility);
-      } catch {
-        // Ignore storage issues and keep runtime behavior.
-      }
-      setStoredFacilityId(knownFacility);
-      return;
-    }
-
-    try {
-      const persisted = window.localStorage.getItem(storageKey);
-      setStoredFacilityId(persisted);
-    } catch {
-      setStoredFacilityId(null);
-    }
-  }, [providerId, facilityIdFromQuery, facilityIdFromPath, defaultFacilityId]);
-
-  const resolvedFacilityId =
-    facilityIdFromQuery || facilityIdFromPath || defaultFacilityId || storedFacilityId;
+  const { providerId, facilityId } = useProviderContext();
+  const rawStatus = status?.trim() || '';
+  const statusLabel = toCqcPrsStatus(rawStatus || undefined);
+  const formattedDate = formatSnapshotDate(snapshotDate);
 
   return (
     <aside className={styles.sidebar}>
       <div className={styles.header}>
         <div className={styles.providerName}>{providerName}</div>
-        <div className={styles.snapshot}>
-          Last updated:{' '}
-          {new Date(snapshotDate).toLocaleDateString('en-GB', {
-            day: 'numeric',
-            month: 'long',
-            year: 'numeric',
-          })}
-        </div>
+        <div className={styles.snapshot}>Data recorded: {formattedDate}</div>
         <div className={styles.status}>
           <span className={styles.statusLabel}>CQC Rating</span>
           <span className={styles.statusValue}>{statusLabel}</span>
@@ -128,7 +79,7 @@ export function Sidebar({
           const isActive = pathname === item.href;
           const label =
             item.id === 'topics' && topicsCompleted !== undefined && totalTopics !== undefined
-              ? `${item.label} (${topicsCompleted}/${totalTopics} complete)`
+              ? `${item.label} (${topicsCompleted} of ${totalTopics} covered)`
               : item.label;
 
           const query = new URLSearchParams();
@@ -172,6 +123,16 @@ export function Sidebar({
       </nav>
 
       <div className={styles.systemStatus}>
+        <VersionBadge
+          label="Inspection Framework"
+          version={topicCatalogVersion}
+          verified
+        />
+        <VersionBadge label="Assessment Rules" version={prsLogicVersion} verified />
+        <div className={styles.statusItem}>
+          <span>Verified</span>
+          <span className={styles.checkmark}>✓</span>
+        </div>
         {!isE2EMode && <SignOutButton />}
       </div>
     </aside>

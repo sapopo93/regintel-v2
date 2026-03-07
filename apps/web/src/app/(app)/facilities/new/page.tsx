@@ -141,8 +141,11 @@ export default function NewFacilityPage() {
 
       const response = await apiClient.onboardFacility(request);
 
-      // Redirect to facility detail page
-      const query = providerId ? `?provider=${providerId}` : '';
+      // Fire background CQC sync — don't await, don't block redirect
+      apiClient.syncLatestReport(response.facility.id).catch(() => {});
+
+      // Redirect to facility detail page with sync flag so it shows loading message
+      const query = providerId ? `?provider=${providerId}&cqcSyncing=true` : '?cqcSyncing=true';
       router.push(`/facilities/${response.facility.id}${query}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to create facility');
@@ -159,13 +162,13 @@ export default function NewFacilityPage() {
     <div className={styles.layout}>
       <main className={styles.main}>
         <div className={styles.formContainer}>
-          <h1 className={styles.title}>Add New Facility</h1>
+          <h1 className={styles.title}>Register Location</h1>
 
           {error && <div className={styles.error}>{error}</div>}
 
           {fetchAttempted && dataSource === 'CQC_API' && (
             <div className={styles.success}>
-              ✅ Facility data successfully fetched from CQC API
+              ✅ Location data successfully fetched from CQC
             </div>
           )}
 
@@ -211,7 +214,7 @@ export default function NewFacilityPage() {
               <>
                 <div className={styles.formGroup}>
                   <label htmlFor="facilityName" className={styles.label}>
-                    Facility Name <span className={styles.required}>*</span>
+                    Location Name <span className={styles.required}>*</span>
                   </label>
                   <input
                     id="facilityName"
@@ -327,7 +330,7 @@ export default function NewFacilityPage() {
                   disabled={submitting || fetching || !facilityName.trim() || !addressLine1.trim() || !townCity.trim() || !postcode.trim() || !cqcLocationId.trim() || !serviceType.trim()}
                   data-testid="primary-create-facility"
                 >
-                {submitting ? 'Creating...' : 'Create Facility'}
+                {submitting ? 'Registering...' : 'Register Location'}
               </button>
             </div>
           </form>

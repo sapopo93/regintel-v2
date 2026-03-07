@@ -38,10 +38,8 @@ export function PageHeader({
       </div>
       {showIngestionBanner && (
         <div className={styles.ingestionBanner} data-testid="ingestion-status-banner">
-          <strong>CQC data import in progress.</strong>
-          <span>
-            Your CQC inspection data is being imported. Some information may not yet be available.
-          </span>
+          <strong>CQC data still loading.</strong>
+          <span>CQC inspection data not yet available. Retrieve the latest published report to continue.</span>
         </div>
       )}
     </header>

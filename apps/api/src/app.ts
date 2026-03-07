@@ -1708,6 +1708,21 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         isNew,
       });
 
+      // Enqueue report scraping
+      const syncJob = await scrapeReportQueue.add({
+        tenantId: ctx.tenantId,
+        facilityId: facility.id,
+        locationId: facility.cqcLocationId,
+      } as ScrapeReportJobData);
+
+      if (await scrapeReportQueue.isInMemory()) {
+        await processInMemoryJob(
+          QUEUE_NAMES.SCRAPE_REPORT,
+          syncJob.id,
+          async (data: ScrapeReportJobData) => handleScrapeReportJob(data, ctx)
+        );
+      }
+
       // Return response with onboarding metadata
       sendWithMetadata(res, {
         facility,
@@ -1715,6 +1730,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         isNew,
         dataSource: facility.dataSource,
         syncedAt: facility.cqcSyncedAt,
+        reportSyncJobId: syncJob.id,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Facility onboarding failed';
@@ -2565,7 +2581,6 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
   ): Promise<ScrapeReportJobResult> {
     const cqcLocationId = job.cqcLocationId || job.locationId;
     const { facilityId } = job;
-    const providerId = job.providerId || '';
 
     try {
       const apiResult = await fetchCqcLocation(cqcLocationId, {
@@ -2594,6 +2609,8 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
           error: 'Facility not found',
         };
       }
+
+      const providerId = facility.providerId;
 
       // Handle never-inspected facilities
       if (!report.hasReport) {

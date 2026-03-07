@@ -172,7 +172,13 @@ export default function EvidencePage() {
                       </div>
 
                       <dl className={styles.evidenceMeta}>
-                        <dt>File Type</dt>
+                        <dt>Evidence ID</dt>
+                        <dd>{record.evidenceRecordId}</dd>
+
+                        <dt>Blob Hash</dt>
+                        <dd className={styles.hash}>{record.blobHash.substring(0, 24)}…</dd>
+
+                        <dt>MIME Type</dt>
                         <dd>{record.mimeType}</dd>
 
                         <dt>Date Uploaded</dt>

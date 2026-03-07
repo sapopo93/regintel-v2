@@ -35,11 +35,6 @@ export default function FacilitiesPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!providerId) {
-      setError('Provider ID is required');
-      setLoading(false);
-      return;
-    }
     apiClient.getFacilities(providerId || undefined)
       .then((response) => {
         validateConstitutionalRequirements(response, { strict: true });
@@ -50,7 +45,8 @@ export default function FacilitiesPage() {
   }, [providerId]);
 
   const handleAddFacility = () => {
-    router.push(`/facilities/new?provider=${providerId}`);
+    const query = providerId ? `?provider=${providerId}` : '';
+    router.push(`/facilities/new${query}`);
   };
 
   const handleViewFacility = (facilityId: string) => {
@@ -100,20 +96,34 @@ export default function FacilitiesPage() {
               ingestionStatus={data.ingestionStatus}
             />
 
+            <MetadataBar
+              topicCatalogVersion={data.topicCatalogVersion}
+              topicCatalogHash={data.topicCatalogHash}
+              prsLogicVersion={data.prsLogicVersion}
+              prsLogicHash={data.prsLogicHash}
+              snapshotTimestamp={data.snapshotTimestamp}
+              domain={data.domain}
+              reportingDomain={data.reportingDomain}
+              mode={data.mode}
+              reportSource={data.reportSource}
+              snapshotId={data.snapshotId}
+              ingestionStatus={data.ingestionStatus}
+            />
+
             <div className={styles.actions}>
               <button
                 className={styles.addButton}
                 onClick={handleAddFacility}
                 data-testid="add-facility-button"
               >
-                Add Location
+                Register a Location
               </button>
             </div>
 
             {data.facilities.length === 0 ? (
               <div className={styles.empty}>
                 <p>No locations registered yet.</p>
-                <p>Click "Add Location" to register your first location.</p>
+                <p>Click "Register a Location" to register your first location.</p>
               </div>
             ) : (
               <div className={styles.facilitiesList}>

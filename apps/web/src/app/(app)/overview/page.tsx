@@ -20,6 +20,7 @@ export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useProviderContext } from '@/lib/hooks/useProviderContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DisclosurePanel } from '@/components/disclosure/DisclosurePanel';
@@ -28,23 +29,27 @@ import { SimulationModeBadge } from '@/components/mock/SimulationModeBadge';
 import { apiClient } from '@/lib/api/client';
 import type { ProviderOverviewResponse } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
+import { toCqcPrsStatus } from '@/lib/cqcLanguage';
 import styles from './page.module.css';
 
 export default function OverviewPage() {
-  const searchParams = useSearchParams();
-  const providerId = searchParams.get('provider');
-  const facilityId = searchParams.get('facility');
+  useSearchParams(); // keep for Next.js dynamic rendering
+  const { providerId, facilityId } = useProviderContext();
 
   const [data, setData] = useState<ProviderOverviewResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Params may be null on first render before hydration — wait silently rather than
+    // showing an error that will flash away once the real URL params are available.
     if (!providerId || !facilityId) {
-      window.location.href = '/facilities';
+      setLoading(false);
       return;
     }
 
+    setLoading(true);
+    setError(null);
     apiClient.getProviderOverview(providerId, facilityId)
       .then((response) => {
         validateConstitutionalRequirements(response, { strict: true });
@@ -54,7 +59,7 @@ export default function OverviewPage() {
       .finally(() => setLoading(false));
   }, [providerId, facilityId]);
 
-  if (loading) {
+  if (loading || (!data && !error)) {
     return (
       <div className={styles.layout}>
         <div className={styles.loading}>Loading...</div>
@@ -116,8 +121,8 @@ export default function OverviewPage() {
                   </div>
                   <div className={styles.cardProvenance}>
                     {isRealMode
-                      ? 'Verified against CQC requirements'
-                      : 'Based on standard CQC inspection requirements'}
+                      ? `CQC report source on record`
+                      : `Calculated from Inspection Framework ${data.topicCatalogVersion} requirements`}
                   </div>
                 </div>
 
@@ -153,8 +158,8 @@ export default function OverviewPage() {
                   </div>
                   <div className={styles.cardProvenance}>
                     {isRealMode
-                      ? 'From your CQC inspection history'
-                      : 'From your practice inspection'}
+                      ? `Regulatory history`
+                      : `Generated via Assessment Rules ${data.prsLogicVersion} (practice mode)`}
                   </div>
                 </div>
               </div>
@@ -169,8 +174,8 @@ export default function OverviewPage() {
                   <dt>Location Reference</dt>
                   <dd>{data.facility?.id || 'Unknown'}</dd>
 
-                  <dt>Current CQC Rating</dt>
-                  <dd>{data.provider.prsState}</dd>
+                  <dt>Regulatory Status</dt>
+                  <dd>{toCqcPrsStatus(data.provider.prsState)}</dd>
 
                   <dt>Registered Capacity</dt>
                   <dd>{data.provider.registeredBeds}</dd>

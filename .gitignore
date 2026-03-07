@@ -7,3 +7,7 @@ coverage/
 *.tsbuildinfo
 .env
 apps/*/.env
+.claude/
+output/
+tmp/
+apps/web/failure-screenshot.png

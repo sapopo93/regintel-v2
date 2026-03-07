@@ -13,9 +13,10 @@ import { NextResponse } from 'next/server';
 const isE2EMode = process.env.E2E_TEST_MODE === 'true';
 const hasClerkSecret = Boolean(process.env.CLERK_SECRET_KEY);
 
-// Public routes must be explicitly defined to avoid auth loops on /sign-in and /sign-up
+// Public routes — Clerk skips auth enforcement (and may skip token verification)
+// NOTE: '/' is intentionally excluded so that auth() in page.tsx returns the userId
+// for signed-in users. The root page handles unauthenticated users itself (shows landing page).
 const isPublicRoute = createRouteMatcher([
-  '/',
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/api/webhooks(.*)',
@@ -27,16 +28,10 @@ const e2eBypassMiddleware = () => NextResponse.next();
 export default isE2EMode && !hasClerkSecret
   ? e2eBypassMiddleware
   : clerkMiddleware(async (auth, request) => {
-      if (isE2EMode) {
-        const host = request.headers.get('host') || '';
-        if (!host.includes('localhost') && !host.includes('127.0.0.1')) {
-          console.warn(
-            `[SECURITY WARNING] E2E_TEST_MODE=true but request is from non-localhost host: ${host}. ` +
-              'Authentication is BYPASSED. Set E2E_TEST_MODE=false in production.'
-          );
-        }
-        return;
-      }
+      // Root path: accessible to unauthenticated users (shows landing page),
+      // but NOT listed as public so Clerk still sets up auth context.
+      // This allows auth() in page.tsx to return the userId and redirect signed-in users.
+      if (request.nextUrl.pathname === '/') return;
 
       if (!isPublicRoute(request)) {
         await auth.protect();

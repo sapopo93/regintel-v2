@@ -1,0 +1,41 @@
+REGINTEL V2 - APP SUMMARY
+=========================
+
+WHAT IT IS
+RegIntel v2 helps care providers prove inspection readiness with evidence
+before inspectors arrive, without guesswork or checklist theater.
+
+WHO IT IS FOR
+Primary: UK CQC-registered care providers (small to mid-sized) preparing
+for first inspection or re-inspection.
+
+WHAT IT DOES
+- Regulation intelligence with versioned CQC regs and change detection
+- Policy mapping from provider policies to regulation clauses
+- Provider context snapshots that freeze the inspection context in time
+- Mock inspection engine with bounded, topic-driven questioning and scoring
+- Evidence management with secure uploads and proof-of-existence
+- Remediation actions tied to findings and verified closure evidence
+- Inspection confidence reports (likely pass/fail and why)
+
+HOW IT WORKS (REPO EVIDENCE)
+- UI: Next.js App Router in apps/web is a projection layer and calls the API
+- API: Express REST server in apps/api (providers, topics, mock sessions,
+  findings, evidence, audit, exports)
+- Domain logic in packages/domain (mock inspection engine, policy
+  intelligence, readiness export)
+- Auth: Clerk SignIn UI + API JWT verification + Clerk webhooks
+- Evidence storage: filesystem blob store at /var/regintel/evidence-blobs
+  with SHA-256 addressing and quarantine
+- Data store: in-memory store for most tests; PostgreSQL with RLS used in
+  tenant isolation tests; migrations exist
+
+HOW TO RUN (MINIMAL)
+- Install: pnpm install
+- Configure: copy .env.example to .env and set Clerk keys (and CQC API key)
+- Start API: pnpm api:dev (http://localhost:3001)
+- Start UI: pnpm web:dev (http://localhost:3000)
+
+SOURCES
+regintel_mvp_prd.md; apps/web/README.md; apps/api/README.md;
+docs/P0_IMPLEMENTATION_SUMMARY.md; docs/BLOB_STORAGE.md; .env.example

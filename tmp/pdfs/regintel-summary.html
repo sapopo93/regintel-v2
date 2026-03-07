@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>RegIntel v2 - App Summary</title>
+<style>
+  body { font-family: Helvetica, Arial, sans-serif; font-size: 11pt; margin: 36pt; color: #111; }
+  h1 { font-size: 18pt; margin: 0 0 12pt 0; }
+  h2 { font-size: 12pt; margin: 12pt 0 4pt 0; }
+  p { margin: 0 0 8pt 0; }
+  ul { margin: 0 0 8pt 16pt; padding: 0; }
+  li { margin: 0 0 3pt 0; }
+  .meta { font-size: 9.5pt; color: #333; }
+</style>
+</head>
+<body>
+  <h1>RegIntel v2 - App Summary</h1>
+
+  <h2>What It Is</h2>
+  <p>RegIntel v2 helps care providers prove inspection readiness with evidence before inspectors arrive, without guesswork or checklist theater.</p>
+
+  <h2>Who It Is For</h2>
+  <p>Primary: UK CQC-registered care providers (small to mid-sized) preparing for first inspection or re-inspection.</p>
+
+  <h2>What It Does</h2>
+  <ul>
+    <li>Regulation intelligence with versioned CQC regs and change detection.</li>
+    <li>Policy mapping from provider policies to specific regulation clauses.</li>
+    <li>Provider context snapshots that freeze the inspection context in time.</li>
+    <li>Mock inspection engine with bounded, topic-driven questioning and scoring.</li>
+    <li>Evidence management with secure uploads and proof-of-existence.</li>
+    <li>Remediation actions tied to findings and verified closure evidence.</li>
+    <li>Inspection confidence reports (likely pass/fail and why).</li>
+  </ul>
+
+  <h2>How It Works (Repo Evidence)</h2>
+  <ul>
+    <li>UI: Next.js App Router in <b>apps/web</b> is a projection layer and calls the backend via a type-safe API client.</li>
+    <li>API: Express REST server in <b>apps/api</b> exposes providers, topics, mock sessions, findings, evidence, audit, and export endpoints.</li>
+    <li>Domain logic: shared modules in <b>packages/domain</b> (e.g., mock inspection engine, policy intelligence, readiness export).</li>
+    <li>Auth: Clerk SignIn UI + API JWT verification + Clerk webhooks.</li>
+    <li>Evidence storage: filesystem blob store at <b>/var/regintel/evidence-blobs</b> with SHA-256 addressing and quarantine.</li>
+    <li>Data store: in-memory store for most tests; PostgreSQL with RLS used for tenant isolation tests and migrations exist.</li>
+  </ul>
+
+  <h2>How To Run (Minimal)</h2>
+  <ul>
+    <li><b>Install:</b> <code>pnpm install</code></li>
+    <li><b>Configure:</b> copy <code>.env.example</code> to <code>.env</code> and set Clerk keys (and CQC API key if needed).</li>
+    <li><b>Start API:</b> <code>pnpm api:dev</code> (defaults to http://localhost:3001)</li>
+    <li><b>Start UI:</b> <code>pnpm web:dev</code> (open http://localhost:3000)</li>
+  </ul>
+
+  <p class="meta">Sources: regintel_mvp_prd.md, apps/web/README.md, apps/api/README.md, docs/P0_IMPLEMENTATION_SUMMARY.md, docs/BLOB_STORAGE.md, .env.example</p>
+</body>
+</html>

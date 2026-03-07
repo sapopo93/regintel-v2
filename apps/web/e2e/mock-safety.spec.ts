@@ -52,17 +52,20 @@ test.describe('Mock Safety', () => {
       await page.waitForSelector('h1');
 
       const content = await page.content();
-      expect(content).toContain('READINESS (MOCK) — NOT REGULATORY HISTORY');
+      expect(content).toContain('PRACTICE INSPECTION — NOT AN OFFICIAL CQC RECORD');
 
       const frame = page.locator('[class*="frame"]').first();
       await expect(frame).toBeVisible();
     }
   });
-  test('findings page shows SYSTEM_MOCK badge', async ({ page }) => {
-    await page.goto(`${BASE_URL}/findings?provider=${providerId}&facility=${facilityId}`);
 
-    // Wait for findings to load
-    await page.waitForTimeout(1000);
+  test('findings page shows SYSTEM_MOCK badge', async ({ page }) => {
+    await page.waitForResponse(
+      r => r.url().includes('/v1/providers/') && r.url().includes('/findings'),
+      { timeout: 10000 }
+    );
+
+    await page.goto(`${BASE_URL}/findings?provider=${providerId}&facility=${facilityId}`);
 
     // Check for SYSTEM_MOCK badge
     const content = await page.content();
@@ -70,9 +73,13 @@ test.describe('Mock Safety', () => {
   });
 
   test('mock findings have visual distinction', async ({ page }) => {
-    await page.goto(`${BASE_URL}/findings?provider=${providerId}&facility=${facilityId}`);
+    const responsePromise = page.waitForResponse(
+      r => r.url().includes('/v1/providers/') && r.url().includes('/findings'),
+      { timeout: 10000 }
+    );
 
-    await page.waitForTimeout(1000);
+    await page.goto(`${BASE_URL}/findings?provider=${providerId}&facility=${facilityId}`);
+    await responsePromise;
 
     // Look for finding cards
     const findingCards = page.locator('[class*="findingCard"]');
@@ -96,9 +103,13 @@ test.describe('Mock Safety', () => {
   });
 
   test('finding detail shows origin badge', async ({ page }) => {
-    await page.goto(`${BASE_URL}/findings?provider=${providerId}&facility=${facilityId}`);
+    const responsePromise = page.waitForResponse(
+      r => r.url().includes('/v1/providers/') && r.url().includes('/findings'),
+      { timeout: 10000 }
+    );
 
-    await page.waitForTimeout(1000);
+    await page.goto(`${BASE_URL}/findings?provider=${providerId}&facility=${facilityId}`);
+    await responsePromise;
 
     // Click first finding if available
     const firstFinding = page.locator('[class*="findingCard"]').first();
@@ -106,7 +117,7 @@ test.describe('Mock Safety', () => {
     if (await firstFinding.isVisible()) {
       await firstFinding.click();
 
-      await page.waitForTimeout(500);
+      await page.waitForSelector('[class*="disclosurePanel"], [class*="summary"]', { timeout: 5000 });
 
       // Check for origin badge
       const content = await page.content();
@@ -122,8 +133,8 @@ test.describe('Mock Safety', () => {
 
     // Check for watermark text
     const content = await page.content();
-    expect(content).toMatch(/READINESS.*MOCK|watermark/i);
-    expect(content).toMatch(/NOT REGULATORY HISTORY/i);
+    expect(content).toMatch(/PRACTICE INSPECTION|watermark/i);
+    expect(content).toMatch(/NOT AN OFFICIAL CQC RECORD/i);
   });
 
   test('mock session pages have simulation context', async ({ page }) => {

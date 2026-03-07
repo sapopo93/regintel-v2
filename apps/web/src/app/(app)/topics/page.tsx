@@ -18,6 +18,7 @@ import { SimulationFrame } from '@/components/mock/SimulationFrame';
 import { apiClient } from '@/lib/api/client';
 import type { ProviderOverviewResponse, TopicsListResponse } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
+import { toCqcQuestionMode } from '@/lib/cqcLanguage';
 import styles from './page.module.css';
 
 function getQuestionModeLabel(questionMode: string): string {
@@ -120,7 +121,7 @@ export default function TopicsPage() {
                   >
                     <div className={styles.topicHeader}>
                       <h3 className={styles.topicTitle}>{topic.title}</h3>
-                      <div className={styles.topicBadge}>{getQuestionModeLabel(topic.questionMode)}</div>
+                      <div className={styles.topicBadge}>{toCqcQuestionMode(topic.questionMode)}</div>
                     </div>
                     <div className={styles.topicMeta}>
                       <span>Regulation reference: {topic.regulationSectionId}</span>

@@ -7,21 +7,21 @@ export const dynamic = "force-dynamic";
  *
  * Constitutional requirements satisfied:
  * - Version: Topic Catalog v1, PRS Logic v1
- * - Hash: Both catalog and logic hashes displayed
+ * - Hash: Both catalog and logic hashes displayed (in AdvancedPanel)
  * - Time: Snapshot timestamp
  * - Domain: CQC
  *
- * Facts only - no interpretation:
- * - Facility details
- * - Evidence upload capability
- * - Evidence list
+ * Customer view (data-testid="customer-view") uses plain CQC language only.
+ * Technical fields (raw IDs, hashes, snapshot metadata) are in AdvancedPanel.
  */
 
 import { useEffect, useState, FormEvent } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
-import { useAuth } from '@clerk/nextjs';
+
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { MetadataBar } from '@/components/constitutional/MetadataBar';
+import { AdvancedPanel } from '@/components/layout/AdvancedPanel';
 import { apiClient, getValidatedApiBaseUrl } from '@/lib/api/client';
 import type {
   DocumentAuditSummary,
@@ -31,24 +31,19 @@ import type {
   ScanStatus,
 } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
+import { toCqcIngestionStatus } from '@/lib/cqcLanguage';
 import styles from './page.module.css';
 
-function upsertEvidenceRecord(records: EvidenceRecord[], nextRecord: EvidenceRecord): EvidenceRecord[] {
-  const withoutExisting = records.filter(
-    (record) => record.evidenceRecordId !== nextRecord.evidenceRecordId
-  );
-
-  return [nextRecord, ...withoutExisting].sort(
-    (left, right) => new Date(right.uploadedAt).getTime() - new Date(left.uploadedAt).getTime()
-  );
-}
-
-function mergeDocumentAudit(records: EvidenceRecord[], audit: DocumentAuditSummary): EvidenceRecord[] {
-  return records.map((record) =>
-    record.evidenceRecordId === audit.evidenceRecordId
-      ? { ...record, documentAudit: audit }
-      : record
-  );
+function formatDate(dateStr: string): string {
+  try {
+    return new Date(dateStr).toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+  } catch {
+    return dateStr;
+  }
 }
 
 export default function FacilityDetailPage() {
@@ -59,6 +54,7 @@ export default function FacilityDetailPage() {
   // Decode URL-encoded params (colons in tenant:resource IDs get encoded as %3A)
   const facilityId = decodeURIComponent(params.facilityId as string);
   const providerId = searchParams.get('provider') ? decodeURIComponent(searchParams.get('provider')!) : null;
+  const cqcSyncing = searchParams.get('cqcSyncing') === 'true';
 
   const [facilityData, setFacilityData] = useState<FacilityDetailResponse | null>(null);
   const [evidenceData, setEvidenceData] = useState<EvidenceListResponse | null>(null);
@@ -76,8 +72,8 @@ export default function FacilityDetailPage() {
 
   // CQC report sync state
   const [syncing, setSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState<string | null>(null);
-  const [syncComplete, setSyncComplete] = useState(false);
+  const [syncSuccess, setSyncSuccess] = useState(false);
+  const [rawSyncMessage, setRawSyncMessage] = useState<string | null>(null); // raw for AdvancedPanel
 
   useEffect(() => {
     Promise.all([
@@ -225,18 +221,16 @@ export default function FacilityDetailPage() {
 
   const handleSyncReport = async () => {
     setSyncing(true);
-    setSyncMessage(null);
+    setSyncSuccess(false);
+    setRawSyncMessage(null);
 
     try {
       const response = await apiClient.syncLatestReport(facilityId);
-      setSyncMessage(`${response.message}`);
-      setSyncComplete(false);
-      setTimeout(() => {
-        setSyncMessage('CQC report imported. Your inspection rating and documents have been updated — refresh the page to see the latest data.');
-        setSyncComplete(true);
-      }, 45000);
+      setRawSyncMessage(`${response.message} Job ID: ${response.jobId}`);
+      setSyncSuccess(true);
     } catch (err: unknown) {
-      setSyncMessage(err instanceof Error ? err.message : 'Failed to sync report');
+      setRawSyncMessage(err instanceof Error ? err.message : 'Failed to sync report');
+      setSyncSuccess(false);
     } finally {
       setSyncing(false);
     }
@@ -274,7 +268,7 @@ export default function FacilityDetailPage() {
   if (loading) {
     return (
       <div className={styles.layout}>
-        <div className={styles.loading}>Loading location details...</div>
+        <div className={styles.loading}>Loading location...</div>
       </div>
     );
   }
@@ -282,12 +276,25 @@ export default function FacilityDetailPage() {
   if (error || !facilityData || !evidenceData) {
     return (
       <div className={styles.layout}>
-        <div className={styles.error}>Error: {error || 'Failed to load location details'}</div>
+        <div className={styles.error}>Error: {error || 'Failed to load location'}</div>
       </div>
     );
   }
 
   const { facility } = facilityData;
+  const ingestionStatusLabel = toCqcIngestionStatus(facilityData.ingestionStatus);
+
+  // Derive customer-facing sync status line
+  let syncStatusLine: string | null = null;
+  if (syncing) {
+    syncStatusLine = 'Retrieving latest report...';
+  } else if (syncSuccess) {
+    syncStatusLine = 'Report retrieval started. Results will appear shortly.';
+  } else if (facilityData.ingestionStatus === 'READY' && facilityData.snapshotTimestamp) {
+    syncStatusLine = `Last checked: ${formatDate(facilityData.snapshotTimestamp)}`;
+  } else if (facilityData.ingestionStatus === 'NO_SOURCE') {
+    syncStatusLine = 'No report found yet for this location.';
+  }
 
   return (
     <div className={styles.layout}>
@@ -303,7 +310,7 @@ export default function FacilityDetailPage() {
       <main className={styles.main}>
         <PageHeader
           title={facility.facilityName}
-          subtitle="CQC Registered Location"
+          subtitle={`CQC Location ID: ${facility.cqcLocationId}`}
           topicCatalogVersion={facilityData.topicCatalogVersion}
           topicCatalogHash={facilityData.topicCatalogHash}
           prsLogicVersion={facilityData.prsLogicVersion}
@@ -315,241 +322,232 @@ export default function FacilityDetailPage() {
           reportSource={facilityData.reportSource}
           snapshotId={facilityData.snapshotId}
           ingestionStatus={facilityData.ingestionStatus}
-          hasReport={Boolean(facility.lastReportScrapedAt)}
         />
 
-        <section className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>Location Details</h2>
-            {providerId && (
-              <button
-                className={styles.overviewButton}
-                onClick={() => router.push(`/overview?provider=${providerId}&facility=${facilityId}`)}
-                data-testid="continue-overview-button"
-              >
-                Go to Dashboard
-              </button>
-            )}
-          </div>
-          <div className={styles.detailsGrid}>
-            <div className={styles.detailItem}>
-              <span className={styles.detailLabel}>Address:</span>
-              <span className={styles.detailValue}>
-                {facility.addressLine1}, {facility.townCity}, {facility.postcode}
-              </span>
-            </div>
-            <div className={styles.detailItem}>
-              <span className={styles.detailLabel}>CQC Location Reference:</span>
-              <span className={styles.detailValue}>{facility.cqcLocationId}</span>
-            </div>
-            <div className={styles.detailItem}>
-              <span className={styles.detailLabel}>Type of Service:</span>
-              <span className={styles.detailValue}>{facility.serviceType}</span>
-            </div>
-            {facility.capacity != null && facility.capacity > 0 && (
-              <div className={styles.detailItem}>
-                <span className={styles.detailLabel}>Capacity:</span>
-                <span className={styles.detailValue}>{facility.capacity}</span>
+        {/* Customer view: CQC language only — no raw IDs, hashes, or tech enums */}
+        <div data-testid="customer-view">
+          <section className={styles.section}>
+            {cqcSyncing && (
+              <div className={styles.syncBanner} data-testid="cqc-sync-banner">
+                Fetching latest CQC inspection report... this may take 30–60 seconds.
+                You can upload evidence below while this runs.
               </div>
             )}
-            <div className={styles.detailItem}>
-              <span className={styles.detailLabel}>Data last updated:</span>
-              <span className={styles.detailValue}>
-                {new Date(facility.asOf).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
-              </span>
-            </div>
-          </div>
 
-          {/* Sync CQC Report Section */}
-          <div className={styles.syncSection}>
-            <button
-              className={styles.syncButton}
-              onClick={handleSyncReport}
-              disabled={syncing}
-              data-testid="sync-report-button"
-            >
-              {syncing ? 'Importing CQC data...' : 'Import Latest CQC Report'}
-            </button>
-            {syncMessage && (
-              <span className={styles.syncMessage}>
-                {syncComplete ? '✓ ' : '⏳ '}{syncMessage}
-              </span>
-            )}
-          </div>
-        </section>
-
-        <section className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>Uploaded Documents</h2>
-            <button
-              className={styles.uploadButton}
-              onClick={() => setShowUploadForm(!showUploadForm)}
-              data-testid="toggle-upload-button"
-            >
-              {showUploadForm ? 'Cancel' : 'Upload a Document'}
-            </button>
-          </div>
-
-          {lastUploadScanStatus && (
-            <div className={styles.scanStatusBanner} data-testid="scan-status-banner">
-              <span className={styles.scanStatusLabel}>Security check status:</span>
-              <span className={`${styles.scanStatusValue} ${styles[`scan${lastUploadScanStatus}`]}`}>
-                {lastUploadScanStatus}
-              </span>
-              {lastUploadScanStatus === 'PENDING' && (
-                <span className={styles.scanStatusHint}>Your document is being checked for security...</span>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Location Details</h2>
+              {providerId && (
+                <button
+                  className={styles.overviewButton}
+                  onClick={() => router.push(`/overview?provider=${providerId}&facility=${facilityId}`)}
+                  data-testid="continue-overview-button"
+                >
+                  Continue to Overview
+                </button>
               )}
             </div>
-          )}
 
-          {showUploadForm && (
-            <form onSubmit={handleUploadSubmit} className={styles.uploadForm}>
-              {uploadError && <div className={styles.error}>{uploadError}</div>}
+            <div className={styles.detailsGrid}>
+              <div className={styles.detailItem}>
+                <span className={styles.detailLabel}>Address:</span>
+                <span className={styles.detailValue}>
+                  {facility.addressLine1}, {facility.townCity}, {facility.postcode}
+                </span>
+              </div>
+              <div className={styles.detailItem}>
+                <span className={styles.detailLabel}>CQC Location ID:</span>
+                <span className={styles.detailValue}>{facility.cqcLocationId}</span>
+              </div>
+              <div className={styles.detailItem}>
+                <span className={styles.detailLabel}>Service Type:</span>
+                <span className={styles.detailValue}>{facility.serviceType}</span>
+              </div>
+              {facility.capacity && (
+                <div className={styles.detailItem}>
+                  <span className={styles.detailLabel}>Capacity:</span>
+                  <span className={styles.detailValue}>{facility.capacity}</span>
+                </div>
+              )}
+            </div>
 
-              <div className={styles.formGroup}>
-                <label htmlFor="file" className={styles.label}>
-                  File (PDF, Image, Document)
-                </label>
-                <input
-                  id="file"
-                  type="file"
-                  onChange={handleFileChange}
-                  className={styles.fileInput}
-                  disabled={uploading}
-                  data-testid="file-input"
-                  accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
-                />
-                {selectedFile && (
-                  <span className={styles.fileName}>{selectedFile.name}</span>
+            {/* CQC Report Status + Sync */}
+            <div className={styles.syncSection}>
+              <div className={styles.detailItem}>
+                <span className={styles.detailLabel}>CQC Report Status:</span>
+                <span className={styles.detailValue}>{ingestionStatusLabel}</span>
+              </div>
+              <button
+                className={styles.syncButton}
+                onClick={handleSyncReport}
+                disabled={syncing}
+                data-testid="sync-report-button"
+              >
+                {syncing ? 'Retrieving...' : 'Retrieve latest published CQC inspection'}
+              </button>
+              {syncStatusLine && (
+                <span className={styles.syncMessage}>{syncStatusLine}</span>
+              )}
+            </div>
+          </section>
+
+          <section className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Evidence</h2>
+              <button
+                className={styles.uploadButton}
+                onClick={() => setShowUploadForm(!showUploadForm)}
+                data-testid="toggle-upload-button"
+              >
+                {showUploadForm ? 'Cancel Upload' : 'Upload Evidence'}
+              </button>
+            </div>
+
+            {lastUploadScanStatus && (
+              <div className={styles.scanStatusBanner} data-testid="scan-status-banner">
+                <span className={styles.scanStatusLabel}>Last Upload Scan Status:</span>
+                <span className={`${styles.scanStatusValue} ${styles[`scan${lastUploadScanStatus}`]}`}>
+                  {lastUploadScanStatus}
+                </span>
+                {lastUploadScanStatus === 'PENDING' && (
+                  <span className={styles.scanStatusHint}>Malware scan in progress...</span>
                 )}
               </div>
+            )}
 
-              <div className={styles.formGroup}>
-                <label htmlFor="evidenceType" className={styles.label}>
-                  Document Type
-                </label>
-                <select
-                  id="evidenceType"
-                  value={evidenceType}
-                  onChange={(e) => setEvidenceType(e.target.value)}
-                  className={styles.select}
-                  disabled={uploading}
-                  data-testid="evidence-type-select"
-                >
-                  <option value="CQC_REPORT">CQC Inspection Report</option>
-                  <option value="POLICY">Policy Document</option>
-                  <option value="TRAINING">Training Record</option>
-                  <option value="AUDIT">Audit Report</option>
-                  <option value="ROTA">Staff Rota</option>
-                  <option value="SKILLS_MATRIX">Skills Matrix</option>
-                  <option value="SUPERVISION">Supervision Records</option>
-                  <option value="CERTIFICATE">Certificate</option>
-                  <option value="OTHER">Other</option>
-                </select>
-              </div>
+            {showUploadForm && (
+              <form onSubmit={handleUploadSubmit} className={styles.uploadForm}>
+                {uploadError && <div className={styles.error}>{uploadError}</div>}
 
-              <div className={styles.formGroup}>
-                <label htmlFor="description" className={styles.label}>
-                  Description (optional)
-                </label>
-                <textarea
-                  id="description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className={styles.textarea}
-                  disabled={uploading}
-                  data-testid="description-input"
-                  rows={3}
-                />
-              </div>
-
-              <button
-                type="submit"
-                className={styles.submitButton}
-                disabled={uploading || !selectedFile}
-                data-testid="primary-upload-evidence"
-              >
-                {uploading ? 'Uploading...' : 'Upload Document'}
-              </button>
-            </form>
-          )}
-
-          <div className={styles.evidenceList}>
-            {evidenceData.evidence.length === 0 ? (
-              <div className={styles.empty}>No documents uploaded yet.</div>
-            ) : (
-              evidenceData.evidence.map((record) => (
-                <div key={record.evidenceRecordId} className={styles.evidenceCard}>
-                  <div className={styles.evidenceCardHeader}>
-                    <h4 className={styles.evidenceTitle}>{record.fileName}</h4>
-                    <button
-                      className={styles.downloadButton}
-                      onClick={() => handleDownloadEvidence(record.blobHash, record.fileName)}
-                      data-testid={`download-${record.evidenceRecordId}`}
-                    >
-                      Download
-                    </button>
-                  </div>
-                  <div className={styles.evidenceDetails}>
-                    <span className={styles.evidenceDetail}>File type: {record.mimeType}</span>
-                    <span className={styles.evidenceDetail}>
-                      Uploaded: {new Date(record.uploadedAt).toLocaleDateString()}
-                    </span>
-                    <span className={styles.evidenceDetail}>Category: {record.evidenceType}</span>
-                  </div>
-                  {record.documentAudit && (
-                    <div className={styles.auditPanel}>
-                      <div className={styles.auditStatusRow}>
-                        <span
-                          className={`${styles.auditBadge} ${
-                            record.documentAudit.status === 'PENDING'
-                              ? styles.auditPending
-                              : styles[`audit${record.documentAudit.overallResult}`]
-                          }`}
-                        >
-                          {record.documentAudit.status === 'PENDING'
-                            ? 'Audit running'
-                            : record.documentAudit.overallResult?.replace(/_/g, ' ')}
-                        </span>
-                        {record.documentAudit.status === 'COMPLETED' &&
-                          typeof record.documentAudit.complianceScore === 'number' && (
-                            <span className={styles.auditScore}>
-                              Score {record.documentAudit.complianceScore}%
-                            </span>
-                          )}
-                      </div>
-                      <p className={styles.auditSummary}>
-                        {record.documentAudit.status === 'PENDING'
-                          ? 'Automatic compliance audit is in progress for this upload.'
-                          : record.documentAudit.summary}
-                      </p>
-                      {record.documentAudit.status === 'COMPLETED' && (
-                        <div className={styles.auditMetrics}>
-                          {record.documentAudit.documentType && (
-                            <span className={styles.auditMetric}>
-                              Type: {record.documentAudit.documentType}
-                            </span>
-                          )}
-                          <span className={styles.auditMetric}>
-                            Critical: {record.documentAudit.criticalFindings ?? 0}
-                          </span>
-                          <span className={styles.auditMetric}>
-                            High: {record.documentAudit.highFindings ?? 0}
-                          </span>
-                          {record.documentAudit.auditedAt && (
-                            <span className={styles.auditMetric}>
-                              Audited: {new Date(record.documentAudit.auditedAt).toLocaleString()}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                <div className={styles.formGroup}>
+                  <label htmlFor="file" className={styles.label}>
+                    File (PDF, Image, Document)
+                  </label>
+                  <input
+                    id="file"
+                    type="file"
+                    onChange={handleFileChange}
+                    className={styles.fileInput}
+                    disabled={uploading}
+                    data-testid="file-input"
+                    accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                  />
+                  {selectedFile && (
+                    <span className={styles.fileName}>{selectedFile.name}</span>
                   )}
                 </div>
-              ))
+
+                <div className={styles.formGroup}>
+                  <label htmlFor="evidenceType" className={styles.label}>
+                    Evidence Type
+                  </label>
+                  <select
+                    id="evidenceType"
+                    value={evidenceType}
+                    onChange={(e) => setEvidenceType(e.target.value)}
+                    className={styles.select}
+                    disabled={uploading}
+                    data-testid="evidence-type-select"
+                  >
+                    <option value="CQC_REPORT">CQC Inspection Report</option>
+                    <option value="POLICY">Policy Document</option>
+                    <option value="TRAINING">Training Record</option>
+                    <option value="AUDIT">Audit Report</option>
+                    <option value="ROTA">Staff Rota</option>
+                    <option value="SKILLS_MATRIX">Skills Matrix</option>
+                    <option value="SUPERVISION">Supervision Records</option>
+                    <option value="CERTIFICATE">Certificate</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label htmlFor="description" className={styles.label}>
+                    Description (optional)
+                  </label>
+                  <textarea
+                    id="description"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className={styles.textarea}
+                    disabled={uploading}
+                    data-testid="description-input"
+                    rows={3}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className={styles.submitButton}
+                  disabled={uploading || !selectedFile}
+                  data-testid="primary-upload-evidence"
+                >
+                  {uploading ? 'Uploading...' : 'Upload'}
+                </button>
+              </form>
             )}
-          </div>
-        </section>
+
+            <div className={styles.evidenceList}>
+              {evidenceData.evidence.length === 0 ? (
+                <div className={styles.empty}>No evidence uploaded yet.</div>
+              ) : (
+                evidenceData.evidence.map((record) => (
+                  <div key={record.evidenceRecordId} className={styles.evidenceCard}>
+                    <div className={styles.evidenceCardHeader}>
+                      <h4 className={styles.evidenceTitle}>{record.fileName}</h4>
+                      <button
+                        className={styles.downloadButton}
+                        onClick={() => handleDownloadEvidence(record.blobHash, record.fileName)}
+                        data-testid={`download-${record.evidenceRecordId}`}
+                      >
+                        Download
+                      </button>
+                    </div>
+                    <div className={styles.evidenceDetails}>
+                      <span className={styles.evidenceDetail}>Type: {record.mimeType}</span>
+                      <span className={styles.evidenceDetail}>
+                        Uploaded: {new Date(record.uploadedAt).toLocaleDateString()}
+                      </span>
+                      <span className={styles.evidenceDetail}>Evidence: {record.evidenceType}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+        </div>
+
+        {/* Advanced panel: technical fields for developers/audit — hidden by default */}
+        <AdvancedPanel>
+          <MetadataBar
+            topicCatalogVersion={facilityData.topicCatalogVersion}
+            topicCatalogHash={facilityData.topicCatalogHash}
+            prsLogicVersion={facilityData.prsLogicVersion}
+            prsLogicHash={facilityData.prsLogicHash}
+            snapshotTimestamp={facilityData.snapshotTimestamp}
+            domain={facilityData.domain}
+            reportingDomain={facilityData.reportingDomain}
+            mode={facilityData.mode}
+            reportSource={facilityData.reportSource}
+            snapshotId={facilityData.snapshotId}
+            ingestionStatus={facilityData.ingestionStatus}
+          />
+          <dl style={{ marginTop: '0.75rem', fontSize: '0.8rem', lineHeight: '1.6' }}>
+            <dt style={{ fontWeight: 600 }}>Provider ID</dt>
+            <dd style={{ fontFamily: 'monospace', marginLeft: 0, marginBottom: '0.25rem' }}>{facility.providerId}</dd>
+            <dt style={{ fontWeight: 600 }}>Facility ID (internal)</dt>
+            <dd style={{ fontFamily: 'monospace', marginLeft: 0, marginBottom: '0.25rem' }}>{facility.id}</dd>
+            <dt style={{ fontWeight: 600 }}>Facility Hash</dt>
+            <dd style={{ fontFamily: 'monospace', marginLeft: 0, marginBottom: '0.25rem' }}>{facility.facilityHash}</dd>
+            <dt style={{ fontWeight: 600 }}>As Of (raw)</dt>
+            <dd style={{ marginLeft: 0, marginBottom: '0.25rem' }}>{facility.asOf}</dd>
+            {rawSyncMessage && (
+              <>
+                <dt style={{ fontWeight: 600 }}>Last Sync Response</dt>
+                <dd style={{ fontFamily: 'monospace', marginLeft: 0 }}>{rawSyncMessage}</dd>
+              </>
+            )}
+          </dl>
+        </AdvancedPanel>
       </main>
     </div>
   );

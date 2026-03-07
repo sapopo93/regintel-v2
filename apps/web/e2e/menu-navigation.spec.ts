@@ -55,7 +55,6 @@ test.describe('Menu Navigation', () => {
   });
 
   test('Overview menu item calls /v1/providers/:id/overview', async ({ page }) => {
-    // Setup API response spy
     const apiCalls: string[] = [];
     page.on('request', (request) => {
       if (request.url().includes('/v1/providers')) {
@@ -63,10 +62,13 @@ test.describe('Menu Navigation', () => {
       }
     });
 
-    await page.goto(`${BASE_URL}/overview?provider=${providerId}&facility=${facilityId}`);
+    const responsePromise = page.waitForResponse(
+      r => r.url().includes(`/v1/providers/${providerId}/overview`),
+      { timeout: 10000 }
+    );
 
-    // Wait for API call
-    await page.waitForTimeout(1000);
+    await page.goto(`${BASE_URL}/overview?provider=${providerId}&facility=${facilityId}`);
+    await responsePromise;
 
     // Verify API endpoint was called
     const overviewCall = apiCalls.find(url => url.includes(`/v1/providers/${providerId}/overview`));
@@ -84,8 +86,13 @@ test.describe('Menu Navigation', () => {
       }
     });
 
+    const responsePromise = page.waitForResponse(
+      r => r.url().includes(`/v1/providers/${providerId}/topics`),
+      { timeout: 10000 }
+    );
+
     await page.goto(`${BASE_URL}/topics?provider=${providerId}&facility=${facilityId}`);
-    await page.waitForTimeout(1000);
+    await responsePromise;
 
     const topicsCall = apiCalls.find(url => url.includes(`/v1/providers/${providerId}/topics`));
     expect(topicsCall).toBeTruthy();
@@ -101,13 +108,18 @@ test.describe('Menu Navigation', () => {
       }
     });
 
+    const responsePromise = page.waitForResponse(
+      r => r.url().includes(`/v1/providers/${providerId}/mock-sessions`),
+      { timeout: 10000 }
+    );
+
     await page.goto(`${BASE_URL}/mock-session?provider=${providerId}&facility=${facilityId}`);
-    await page.waitForTimeout(1000);
+    await responsePromise;
 
     const sessionsCall = apiCalls.find(url => url.includes(`/v1/providers/${providerId}/mock-sessions`));
     expect(sessionsCall).toBeTruthy();
 
-    await expect(page.locator('h1')).toContainText('Mock Inspection Sessions');
+    await expect(page.locator('h1')).toContainText('Practice Inspections');
   });
 
   test('Findings menu item calls /v1/providers/:id/findings', async ({ page }) => {
@@ -118,8 +130,13 @@ test.describe('Menu Navigation', () => {
       }
     });
 
+    const responsePromise = page.waitForResponse(
+      r => r.url().includes(`/v1/providers/${providerId}/findings`),
+      { timeout: 10000 }
+    );
+
     await page.goto(`${BASE_URL}/findings?provider=${providerId}&facility=${facilityId}`);
-    await page.waitForTimeout(1000);
+    await responsePromise;
 
     const findingsCall = apiCalls.find(url => url.includes(`/v1/providers/${providerId}/findings`));
     expect(findingsCall).toBeTruthy();
@@ -135,8 +152,13 @@ test.describe('Menu Navigation', () => {
       }
     });
 
+    const responsePromise = page.waitForResponse(
+      r => r.url().includes(`/v1/providers/${providerId}/evidence`),
+      { timeout: 10000 }
+    );
+
     await page.goto(`${BASE_URL}/evidence?provider=${providerId}&facility=${facilityId}`);
-    await page.waitForTimeout(1000);
+    await responsePromise;
 
     const evidenceCall = apiCalls.find(url => url.includes(`/v1/providers/${providerId}/evidence`));
     expect(evidenceCall).toBeTruthy();
@@ -168,8 +190,13 @@ test.describe('Menu Navigation', () => {
       }
     });
 
+    const responsePromise = page.waitForResponse(
+      r => r.url().includes(`/v1/providers/${providerId}/audit-trail`),
+      { timeout: 10000 }
+    );
+
     await page.goto(`${BASE_URL}/audit?provider=${providerId}&facility=${facilityId}`);
-    await page.waitForTimeout(1000);
+    await responsePromise;
 
     const auditCall = apiCalls.find(url => url.includes(`/v1/providers/${providerId}/audit-trail`));
     expect(auditCall).toBeTruthy();
@@ -188,8 +215,13 @@ test.describe('Menu Navigation', () => {
     ];
 
     for (const pagePath of pages) {
+      const responsePromise = page.waitForResponse(
+        r => r.url().includes(`/v1/providers/${providerId}`),
+        { timeout: 10000 }
+      );
+
       await page.goto(`${BASE_URL}${pagePath}?provider=${providerId}&facility=${facilityId}`);
-      await page.waitForTimeout(500);
+      await responsePromise;
 
       // Check for version badges or metadata
       const content = await page.content();

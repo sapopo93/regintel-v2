@@ -29,23 +29,15 @@ test.beforeEach(async ({ page }) => {
 
 test.describe('API Integration', () => {
   test('overview page displays data from API', async ({ page }) => {
-    // Intercept API call
-    let apiCalled = false;
-    let responseData: any = null;
-
-    page.on('response', async (response) => {
-      if (response.url().includes('/v1/providers/') && response.url().includes('/overview')) {
-        apiCalled = true;
-        responseData = await response.json();
-      }
-    });
+    const responsePromise = page.waitForResponse(
+      r => r.url().includes('/v1/providers/') && r.url().includes('/overview'),
+      { timeout: 10000 }
+    );
 
     await page.goto(`${BASE_URL}/overview?provider=${providerId}&facility=${facilityId}`);
 
-    // Wait for API call
-    await page.waitForTimeout(1500);
+    const responseData = await (await responsePromise).json();
 
-    expect(apiCalled).toBe(true);
     expect(responseData).toBeTruthy();
 
     // Verify constitutional metadata
@@ -65,17 +57,14 @@ test.describe('API Integration', () => {
   });
 
   test('topics page displays data from API', async ({ page }) => {
-    let apiResponseData: any = null;
-
-    page.on('response', async (response) => {
-      if (response.url().includes('/v1/providers/') && response.url().includes('/topics') && !response.url().includes('topics/')) {
-        apiResponseData = await response.json();
-      }
-    });
+    const responsePromise = page.waitForResponse(
+      r => r.url().includes('/v1/providers/') && r.url().includes('/topics') && !r.url().includes('topics/'),
+      { timeout: 10000 }
+    );
 
     await page.goto(`${BASE_URL}/topics?provider=${providerId}&facility=${facilityId}`);
 
-    await page.waitForTimeout(1500);
+    const apiResponseData = await (await responsePromise).json();
 
     expect(apiResponseData).toBeTruthy();
     expect(apiResponseData.topics).toBeDefined();
@@ -90,17 +79,14 @@ test.describe('API Integration', () => {
   });
 
   test('findings page displays data from API', async ({ page }) => {
-    let apiResponseData: any = null;
-
-    page.on('response', async (response) => {
-      if (response.url().includes('/v1/providers/') && response.url().includes('/findings') && !response.url().includes('findings/')) {
-        apiResponseData = await response.json();
-      }
-    });
+    const responsePromise = page.waitForResponse(
+      r => r.url().includes('/v1/providers/') && r.url().includes('/findings') && !r.url().includes('findings/'),
+      { timeout: 10000 }
+    );
 
     await page.goto(`${BASE_URL}/findings?provider=${providerId}&facility=${facilityId}`);
 
-    await page.waitForTimeout(1500);
+    const apiResponseData = await (await responsePromise).json();
 
     expect(apiResponseData).toBeTruthy();
     expect(apiResponseData.findings).toBeDefined();
@@ -119,17 +105,14 @@ test.describe('API Integration', () => {
   });
 
   test('evidence page displays data from API', async ({ page }) => {
-    let apiResponseData: any = null;
-
-    page.on('response', async (response) => {
-      if (response.url().includes('/v1/providers/') && response.url().includes('/evidence')) {
-        apiResponseData = await response.json();
-      }
-    });
+    const responsePromise = page.waitForResponse(
+      r => r.url().includes('/v1/providers/') && r.url().includes('/evidence'),
+      { timeout: 10000 }
+    );
 
     await page.goto(`${BASE_URL}/evidence?provider=${providerId}&facility=${facilityId}`);
 
-    await page.waitForTimeout(1500);
+    const apiResponseData = await (await responsePromise).json();
 
     expect(apiResponseData).toBeTruthy();
     expect(apiResponseData.evidence).toBeDefined();
@@ -146,17 +129,14 @@ test.describe('API Integration', () => {
   });
 
   test('audit page displays data from API', async ({ page }) => {
-    let apiResponseData: any = null;
-
-    page.on('response', async (response) => {
-      if (response.url().includes('/v1/providers/') && response.url().includes('/audit-trail')) {
-        apiResponseData = await response.json();
-      }
-    });
+    const responsePromise = page.waitForResponse(
+      r => r.url().includes('/v1/providers/') && r.url().includes('/audit-trail'),
+      { timeout: 10000 }
+    );
 
     await page.goto(`${BASE_URL}/audit?provider=${providerId}&facility=${facilityId}`);
 
-    await page.waitForTimeout(1500);
+    const apiResponseData = await (await responsePromise).json();
 
     expect(apiResponseData).toBeTruthy();
     expect(apiResponseData.events).toBeDefined();
@@ -169,47 +149,40 @@ test.describe('API Integration', () => {
       const firstEvent = apiResponseData.events[0];
       // Event types are in the Evidence disclosure layer - reveal it first
       await page.click('button:has-text("Show Evidence")');
-      await page.waitForTimeout(500);
+      await page.waitForSelector('[class*="evidenceDetails"]', { timeout: 5000 });
       const content = await page.content();
       expect(content).toContain(firstEvent.eventType);
     }
   });
 
   test('mock sessions page displays data from API', async ({ page }) => {
-    let apiResponseData: any = null;
-
-    page.on('response', async (response) => {
-      if (response.url().includes('/v1/providers/') && response.url().includes('/mock-sessions')) {
-        apiResponseData = await response.json();
-      }
-    });
+    const responsePromise = page.waitForResponse(
+      r => r.url().includes('/v1/providers/') && r.url().includes('/mock-sessions'),
+      { timeout: 10000 }
+    );
 
     await page.goto(`${BASE_URL}/mock-session?provider=${providerId}&facility=${facilityId}`);
 
-    await page.waitForTimeout(1500);
+    const apiResponseData = await (await responsePromise).json();
 
     expect(apiResponseData).toBeTruthy();
     expect(apiResponseData.sessions).toBeDefined();
     expect(Array.isArray(apiResponseData.sessions)).toBe(true);
 
-    if (apiResponseData.sessions.length > 0) {
-      const content = await page.content();
-      expect(content).toContain(apiResponseData.sessions[0].sessionId);
-    }
+    expect(apiResponseData.sessions.length).toBeGreaterThan(0);
+    const content = await page.content();
+    expect(content).toContain(apiResponseData.sessions[0].sessionId);
   });
 
   test('exports page displays data from API', async ({ page }) => {
-    let apiResponseData: any = null;
-
-    page.on('response', async (response) => {
-      if (response.url().includes('/v1/providers/') && response.url().includes('/exports')) {
-        apiResponseData = await response.json();
-      }
-    });
+    const responsePromise = page.waitForResponse(
+      r => r.url().includes('/v1/providers/') && r.url().includes('/exports'),
+      { timeout: 10000 }
+    );
 
     await page.goto(`${BASE_URL}/exports?provider=${providerId}&facility=${facilityId}`);
 
-    await page.waitForTimeout(1500);
+    const apiResponseData = await (await responsePromise).json();
 
     expect(apiResponseData).toBeTruthy();
     expect(apiResponseData.watermark).toBeDefined();
@@ -247,17 +220,14 @@ test.describe('API Integration', () => {
   });
 
   test('no client-side calculations for risk scores', async ({ page }) => {
-    let apiResponseData: any = null;
-
-    page.on('response', async (response) => {
-      if (response.url().includes('/v1/') && response.url().includes('/findings')) {
-        apiResponseData = await response.json();
-      }
-    });
+    const responsePromise = page.waitForResponse(
+      r => r.url().includes('/v1/') && r.url().includes('/findings'),
+      { timeout: 10000 }
+    );
 
     await page.goto(`${BASE_URL}/findings?provider=${providerId}&facility=${facilityId}`);
 
-    await page.waitForTimeout(1500);
+    const apiResponseData = await (await responsePromise).json();
 
     if (apiResponseData && apiResponseData.findings && apiResponseData.findings.length > 0) {
       const finding = apiResponseData.findings[0];
@@ -276,17 +246,14 @@ test.describe('API Integration', () => {
   });
 
   test('no client-side severity calculations', async ({ page }) => {
-    let apiResponseData: any = null;
-
-    page.on('response', async (response) => {
-      if (response.url().includes('/v1/') && response.url().includes('/findings')) {
-        apiResponseData = await response.json();
-      }
-    });
+    const responsePromise = page.waitForResponse(
+      r => r.url().includes('/v1/') && r.url().includes('/findings'),
+      { timeout: 10000 }
+    );
 
     await page.goto(`${BASE_URL}/findings?provider=${providerId}&facility=${facilityId}`);
 
-    await page.waitForTimeout(1500);
+    const apiResponseData = await (await responsePromise).json();
 
     if (apiResponseData && apiResponseData.findings && apiResponseData.findings.length > 0) {
       const finding = apiResponseData.findings[0];
