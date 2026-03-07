@@ -297,16 +297,21 @@ model DocumentAudit {
   evidenceRecordId String   @map("evidence_record_id")
   documentType     String   @map("document_type")
   originalFileName String   @map("original_file_name")
-  overallResult    String   @map("overall_result")
-  complianceScore  Int      @map("compliance_score")
+  status           String   @default("PENDING")
+  overallResult    String?  @map("overall_result")
+  complianceScore  Int?     @map("compliance_score")
   criticalFindings Int      @default(0) @map("critical_findings")
   highFindings     Int      @default(0) @map("high_findings")
-  auditResultJson  Json     @map("audit_result_json")
-  auditedAt        DateTime @default(now()) @map("audited_at") @db.Timestamptz
+  auditResultJson  Json?    @map("audit_result_json")
+  failureReason    String?  @map("failure_reason")
+  auditedAt        DateTime? @map("audited_at") @db.Timestamptz
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime @default(now()) @map("updated_at") @db.Timestamptz
 
   @@index([tenantId, facilityId])
+  @@index([tenantId, status])
   @@index([tenantId, documentType])
   @@index([facilityId, auditedAt])
+  @@unique([tenantId, evidenceRecordId])
   @@map("document_audits")
 }

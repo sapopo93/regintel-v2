@@ -58,13 +58,16 @@ import { handleClerkWebhook } from './webhooks/clerk';
 import { blobStorage } from './blob-storage';
 import { scanBlob } from './malware-scanner';
 import {
+  createDocumentAuditStatusSummary,
   createPendingDocumentAuditSummary,
+  detectDocumentType,
   getDocumentAuditByEvidenceRecordId,
   listDocumentAuditSummariesByEvidenceRecordIds,
-  runDocumentAuditForEvidence,
+  saveDocumentAuditFailure,
+  savePendingDocumentAudit,
   type DocumentAuditSummary,
 } from './document-auditor';
-import { startAuditWorker, type DocumentAuditJobData } from './audit-worker';
+import type { DocumentAuditJobData } from './audit-worker';
 
 //  Memory safety helpers 
 const MAP_CAP = 500;
@@ -1787,22 +1790,53 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         fileName,
         description,
       });
+      const documentType = detectDocumentType(record.fileName, record.mimeType, record.evidenceType);
+      let documentAuditSummary = createPendingDocumentAuditSummary(record.id, {
+        documentType,
+        originalFileName: record.fileName,
+      });
 
-    // Enqueue audit job - processed async by worker (avoids OOM in API process)
-    documentAuditQueue.add({
-      tenantId: ctx.tenantId,
-      facilityId,
-      facilityName: facility.facilityName || 'Unknown facility',
-      providerId: facility.providerId,
-      evidenceRecordId: record.id,
-      blobHash: record.blobHash,
-      fileName: record.fileName,
-      mimeType: record.mimeType,
-    } as DocumentAuditJobData).then(job => {
-      console.log(`[AUDIT] Queued job ${job.id} for evidence ${record.id}`);
-    }).catch(err => {
-      console.error('[AUDIT] Failed to enqueue:', err);
-    });
+      await savePendingDocumentAudit({
+        tenantId: ctx.tenantId,
+        facilityId,
+        providerId: facility.providerId,
+        evidenceRecordId: record.id,
+        fileName: record.fileName,
+        documentType,
+      });
+
+      try {
+        const job = await documentAuditQueue.add({
+          tenantId: ctx.tenantId,
+          facilityId,
+          facilityName: facility.facilityName || 'Unknown facility',
+          providerId: facility.providerId,
+          evidenceRecordId: record.id,
+          blobHash: record.blobHash,
+          fileName: record.fileName,
+          mimeType: record.mimeType,
+          evidenceType: record.evidenceType,
+        } as DocumentAuditJobData);
+        console.log(`[AUDIT] Queued job ${job.id} for evidence ${record.id}`);
+      } catch (error) {
+        const failureReason = 'Document audit could not be queued. Review manually or retry.';
+        console.error('[AUDIT] Failed to enqueue:', error);
+        await saveDocumentAuditFailure({
+          tenantId: ctx.tenantId,
+          facilityId,
+          providerId: facility.providerId,
+          evidenceRecordId: record.id,
+          fileName: record.fileName,
+          documentType,
+          status: 'FAILED',
+          failureReason,
+        });
+        documentAuditSummary = createDocumentAuditStatusSummary('FAILED', record.id, {
+          documentType,
+          originalFileName: record.fileName,
+          failureReason,
+        });
+      }
 
       await store.appendAuditEvent(ctx, facility.providerId, 'EVIDENCE_RECORDED', {
         facilityId,
@@ -1836,7 +1870,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       sendWithMetadata(
         res,
         {
-          record: mapEvidenceRecord(record, createPendingDocumentAuditSummary(record.id)),
+          record: mapEvidenceRecord(record, documentAuditSummary),
           processingJobId: processJob.id,
           processingStatus: 'PENDING',
         },

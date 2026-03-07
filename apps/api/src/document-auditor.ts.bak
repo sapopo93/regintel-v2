@@ -1,0 +1,224 @@
+import fs from 'fs';
+import Anthropic from '@anthropic-ai/sdk';
+
+export interface SAFStatementResult {
+  statementId: string;
+  statementName: string;
+  rating: 'MET' | 'PARTIALLY_MET' | 'NOT_MET' | 'NOT_APPLICABLE';
+  evidence: string;
+}
+
+export interface AuditFinding {
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  category: string;
+  description: string;
+  regulatoryReference: string;
+  safStatement: string;
+}
+
+export interface AuditCorrection {
+  finding: string;
+  correction: string;
+  policyReference: string;
+  priority: 'IMMEDIATE' | 'THIS_WEEK' | 'THIS_MONTH';
+  exampleWording?: string;
+}
+
+export interface DocumentAuditResult {
+  documentType: string;
+  auditDate: string;
+  overallResult: 'PASS' | 'NEEDS_IMPROVEMENT' | 'CRITICAL_GAPS';
+  complianceScore: number;
+  safStatements: SAFStatementResult[];
+  findings: AuditFinding[];
+  corrections: AuditCorrection[];
+  summary: string;
+}
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+export function detectDocumentType(fileName: string, mimeType: string): string {
+  void mimeType;
+  const name = fileName.toLowerCase();
+
+  if (name.includes('mar') || name.includes('medication') || name.includes('medic')) {
+    return 'MAR_CHART';
+  }
+
+  if (
+    name.includes('sign') ||
+    name.includes('rota') ||
+    name.includes('attendance') ||
+    name.includes('timesheet')
+  ) {
+    return 'SIGN_IN_OUT';
+  }
+
+  if (name.includes('care plan') || name.includes('care-plan') || name.includes('careplan')) {
+    return 'CARE_PLAN';
+  }
+
+  if (name.includes('incident') || name.includes('accident')) {
+    return 'INCIDENT_LOG';
+  }
+
+  if (name.includes('training') || name.includes('matrix') || name.includes('competency')) {
+    return 'TRAINING_MATRIX';
+  }
+
+  return 'OTHER';
+}
+
+export async function extractDocumentContent(filePath: string, mimeType: string): Promise<string> {
+  try {
+    const fileBuffer = fs.readFileSync(filePath);
+    const base64 = fileBuffer.toString('base64');
+    if (!mimeType.startsWith('image/') && mimeType !== 'application/pdf') {
+      return '';
+    }
+
+    const response = await anthropic.messages.create({
+      model: 'claude-opus-4-5-20251101',
+      max_tokens: 4000,
+      messages: [
+        {
+          role: 'user',
+          content: mimeType.startsWith('image/')
+            ? [
+                {
+                  type: 'image',
+                  source: { type: 'base64', media_type: mimeType, data: base64 },
+                },
+                {
+                  type: 'text',
+                  text: 'Extract ALL text from this document exactly as written. Preserve all dates, names, times, medication names, signatures (mark as [SIGNED] or [UNSIGNED]). Return plain text only.',
+                },
+              ]
+            : [
+                {
+                  type: 'document',
+                  source: { type: 'base64', media_type: 'application/pdf', data: base64 },
+                },
+                {
+                  type: 'text',
+                  text: 'Extract ALL text from this document exactly as written.',
+                },
+              ],
+        },
+      ],
+    });
+
+    return response.content
+      .filter((block) => block.type === 'text')
+      .map((block) => block.text)
+      .join('\n');
+  } catch (error) {
+    console.error('[AUDITOR] extraction failed', error);
+    return '';
+  }
+}
+
+export async function auditDocument(
+  documentType: string,
+  extractedContent: string,
+  facilityName: string
+): Promise<DocumentAuditResult> {
+  const fallbackResult: DocumentAuditResult = {
+    documentType,
+    auditDate: new Date().toISOString(),
+    overallResult: 'NEEDS_IMPROVEMENT',
+    complianceScore: 0,
+    safStatements: [],
+    findings: [],
+    corrections: [],
+    summary: 'Document type not recognised or content could not be extracted.',
+  };
+
+  if (documentType === 'OTHER' || !extractedContent.trim()) {
+    return fallbackResult;
+  }
+
+  let systemPrompt = '';
+  if (documentType === 'MAR_CHART') {
+    systemPrompt = `You are a CQC compliance specialist auditing a Medication Administration Record (MAR) chart for UK residential care home: ${facilityName}. Audit against SAF 34 quality statements S2 (Safe systems), S5 (Medicines optimisation), E2 (Evidence-based care), E6 (Consent). Check for: unsigned entries, missed doses without reason codes, PRN outcomes not recorded, controlled drugs without two signatures, missing allergy section, missing resident photo, incorrect date range, unsigned dose changes, improperly discontinued medications. Return ONLY a valid JSON object matching this exact structure, no markdown, no explanation: { documentType, auditDate, overallResult, complianceScore, safStatements: [{statementId, statementName, rating, evidence}], findings: [{severity, category, description, regulatoryReference, safStatement}], corrections: [{finding, correction, policyReference, priority, exampleWording}], summary }`;
+  } else if (documentType === 'SIGN_IN_OUT') {
+    systemPrompt = `You are a CQC compliance specialist auditing staff sign in/out records for UK care home: ${facilityName}. Audit against S3 (Safe staffing), W2 (Capable leaders), W5 (Governance). Check for: missing signatures, shift gaps, unverified agency staff, excessive consecutive hours over 12, missing break records, missing handover signatures, missing manager sign-off. Return ONLY valid JSON matching the same structure.`;
+  } else if (documentType === 'CARE_PLAN') {
+    systemPrompt = `You are a CQC compliance specialist auditing a care plan for UK care home: ${facilityName}. Audit against E1 (Assessing needs), E2 (Evidence-based care), C2 (Treating as individuals), R1 (Person-centred care). Check for: missing risk assessments, outdated reviews over 3 months old, missing consent records, missing preferences and wishes, missing communication needs, unsigned sections. Return ONLY valid JSON.`;
+  } else if (documentType === 'INCIDENT_LOG') {
+    systemPrompt = `You are a CQC compliance specialist auditing incident and accident logs for UK care home: ${facilityName}. Audit against S2 (Safe systems), S6 (Learning from incidents), W5 (Governance), E6 (Safeguarding and consent). Check for: missing incident dates or times, missing witness statements, unclear harm severity, absent immediate actions, missing escalation to safeguarding/GP/family, no manager review, missing lessons learned and follow-up actions. Return ONLY valid JSON matching the same structure.`;
+  } else if (documentType === 'TRAINING_MATRIX') {
+    systemPrompt = `You are a CQC compliance specialist auditing a staff training and competency matrix for UK care home: ${facilityName}. Audit against S3 (Safe staffing), W3 (Workforce capability), W5 (Governance). Check for: expired mandatory training, missing competency sign-offs, missing induction records, no refresher cycle dates, agency staff training gaps, no manager verification, and roles assigned without required qualifications. Return ONLY valid JSON matching the same structure.`;
+  } else {
+    return fallbackResult;
+  }
+
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-opus-4-5-20251101',
+      max_tokens: 4000,
+      system: systemPrompt,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: extractedContent,
+            },
+          ],
+        },
+      ],
+    });
+
+    const rawText = response.content
+      .filter((block) => block.type === 'text')
+      .map((block) => block.text)
+      .join('\n')
+      .trim();
+
+    if (!rawText) {
+      return fallbackResult;
+    }
+
+    let parsed: DocumentAuditResult | null = null;
+    try {
+      parsed = JSON.parse(rawText) as DocumentAuditResult;
+    } catch {
+      const firstBrace = rawText.indexOf('{');
+      const lastBrace = rawText.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        parsed = JSON.parse(rawText.slice(firstBrace, lastBrace + 1)) as DocumentAuditResult;
+      }
+    }
+
+    if (!parsed) {
+      return fallbackResult;
+    }
+
+    return {
+      documentType: parsed.documentType || documentType,
+      auditDate: parsed.auditDate || new Date().toISOString(),
+      overallResult:
+        parsed.overallResult === 'PASS' ||
+        parsed.overallResult === 'NEEDS_IMPROVEMENT' ||
+        parsed.overallResult === 'CRITICAL_GAPS'
+          ? parsed.overallResult
+          : 'NEEDS_IMPROVEMENT',
+      complianceScore:
+        typeof parsed.complianceScore === 'number' && Number.isFinite(parsed.complianceScore)
+          ? parsed.complianceScore
+          : 0,
+      safStatements: Array.isArray(parsed.safStatements) ? parsed.safStatements : [],
+      findings: Array.isArray(parsed.findings) ? parsed.findings : [],
+      corrections: Array.isArray(parsed.corrections) ? parsed.corrections : [],
+      summary:
+        typeof parsed.summary === 'string' && parsed.summary.trim()
+          ? parsed.summary
+          : fallbackResult.summary,
+    };
+  } catch (error) {
+    console.error('[AUDITOR] audit failed', error);
+    return fallbackResult;
+  }
+}

@@ -20,6 +20,7 @@ export interface DocumentAuditJobData {
   blobHash: string;
   fileName: string;
   mimeType: string;
+  evidenceType?: string;
 }
 
 const POLL_MS = 2000;
@@ -48,6 +49,7 @@ async function processPendingAudits() {
           blobHash: data.blobHash,
           fileName: data.fileName,
           mimeType: data.mimeType,
+          evidenceType: data.evidenceType,
         });
       }
     );
@@ -62,11 +64,18 @@ async function processPendingAudits() {
 let _timer: ReturnType<typeof setInterval> | null = null;
 
 export function stopAuditWorker(): void {
-  if (_timer) { clearInterval(_timer); _timer = null; console.log("[AUDIT-WORKER] Worker stopped"); }
+  if (_timer !== null) {
+    clearInterval(_timer);
+    _timer = null;
+    console.log('[AUDIT-WORKER] Worker stopped');
+  }
 }
 
 export function startAuditWorker() {
-  if (_timer) { console.log("[AUDIT-WORKER] Already running, skipping duplicate start"); return; }
+  if (_timer) {
+    console.log('[AUDIT-WORKER] Already running, skipping duplicate start');
+    return;
+  }
   console.log('[AUDIT-WORKER] Worker started, polling every', POLL_MS, 'ms');
-  setInterval(processPendingAudits, POLL_MS);
+  _timer = setInterval(processPendingAudits, POLL_MS);
 }

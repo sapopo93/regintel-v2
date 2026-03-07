@@ -16,6 +16,7 @@ export const dynamic = "force-dynamic";
  */
 
 import { useEffect, useState, FormEvent } from 'react';
+import { useAuth } from '@clerk/nextjs';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 
 import { Sidebar } from '@/components/layout/Sidebar';
@@ -92,7 +93,7 @@ export default function FacilityDetailPage() {
 
   useEffect(() => {
     const pendingAuditIds = evidenceData?.evidence
-      .filter((record) => record.documentAudit?.status === 'PENDING')
+      .filter((record) => record.documentAudit === undefined || record.documentAudit === null || record.documentAudit?.status === 'PENDING')
       .map((record) => record.evidenceRecordId) ?? [];
 
     if (pendingAuditIds.length === 0) {
@@ -113,7 +114,7 @@ export default function FacilityDetailPage() {
       }
 
       const completedAudits = results.filter(
-        (audit): audit is DocumentAuditSummary => audit !== null && audit.status === 'COMPLETED'
+        (audit): audit is DocumentAuditSummary => audit !== null && (audit as DocumentAuditSummary).status === 'COMPLETED'
       );
 
       if (completedAudits.length === 0) {
