@@ -87,7 +87,12 @@ describe('cqc-scraper', () => {
     ]);
 
     const fetchMock: typeof globalThis.fetch = async (input) => {
-      const url = typeof input === 'string' ? input : input.url;
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
       const body = pages.get(url);
       return new Response(body ?? 'Not found', { status: body ? 200 : 404 });
     };

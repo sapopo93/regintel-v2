@@ -392,6 +392,7 @@ export function generateActionVerificationView(input: {
 
   const entries: ActionVerificationEntry[] = input.actions.map((action) => {
     const finding = input.findings.find((f) => f.id === action.findingId);
+    const targetCompletionDate = action.targetCompletionDate ?? null;
 
     const createdDate = new Date(action.createdAt);
     const daysOpen = Math.floor(
@@ -399,8 +400,8 @@ export function generateActionVerificationView(input: {
     );
 
     const overdue =
-      action.targetCompletionDate !== null &&
-      new Date(action.targetCompletionDate) < now &&
+      targetCompletionDate !== null &&
+      new Date(targetCompletionDate) < now &&
       action.status !== ActionStatus.VERIFIED_CLOSED;
 
     return {
@@ -410,7 +411,7 @@ export function generateActionVerificationView(input: {
       actionDescription: action.description,
       status: action.status,
       createdAt: action.createdAt,
-      targetCompletionDate: action.targetCompletionDate,
+      targetCompletionDate,
       completedAt: action.completedAt ?? null,
       verifiedAt: action.verifiedAt ?? null,
       daysOpen,
