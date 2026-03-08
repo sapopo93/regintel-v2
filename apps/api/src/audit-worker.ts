@@ -20,6 +20,7 @@ export interface DocumentAuditJobData {
   providerId: string;
   evidenceRecordId: string;
   blobHash: string;
+  storagePath?: string;
   fileName: string;
   mimeType: string;
   evidenceType?: string;
@@ -40,6 +41,7 @@ async function processPendingAudits() {
     provider_id: string;
     facility_name: string;
     blob_hash: string;
+    storage_path: string | null;
     file_name: string;
     mime_type: string;
     evidence_type: string | null;
@@ -55,6 +57,7 @@ async function processPendingAudits() {
         da.original_file_name  AS file_name,
         da.document_type       AS evidence_type,
         eb.content_hash        AS blob_hash,
+        eb.storage_path        AS storage_path,
         eb.content_type        AS mime_type
       FROM document_audits da
       JOIN evidence_records er ON er.id::text = da.evidence_record_id
@@ -83,6 +86,7 @@ async function processPendingAudits() {
       providerId: row.provider_id,
       evidenceRecordId: row.evidence_record_id,
       blobHash: row.blob_hash,
+      storagePath: row.storage_path ?? undefined,
       fileName: row.file_name,
       mimeType: row.mime_type,
       evidenceType: row.evidence_type ?? undefined,

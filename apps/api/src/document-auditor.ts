@@ -809,6 +809,7 @@ export async function runDocumentAuditForEvidence(params: {
   providerId: string;
   evidenceRecordId: string;
   blobHash: string;
+  storagePath?: string;
   fileName: string;
   mimeType: string;
   evidenceType?: string;
@@ -818,7 +819,7 @@ export async function runDocumentAuditForEvidence(params: {
   try {
     const result = await auditDocument(
       documentType,
-      getBlobPath(params.blobHash),
+      params.storagePath || getBlobPath(params.blobHash),
       params.facilityName,
       params.mimeType,
       params.fileName
