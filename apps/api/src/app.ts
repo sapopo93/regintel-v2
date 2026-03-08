@@ -42,8 +42,22 @@ import {
   isWebsiteReportNewer,
 } from '@regintel/domain/cqc-scraper';
 import { EvidenceType, getAllRequiredEvidenceTypes } from '@regintel/domain/evidence-types';
-import { getQualityStatementCoverage } from '@regintel/domain/saf34';
+import { getQualityStatementCoverage, SAF_34_QUALITY_STATEMENTS } from '@regintel/domain/saf34';
 import { fetchCqcLocation } from '@regintel/domain/cqc-client';
+import {
+  generateInspectorEvidencePack,
+  serializeInspectorPackMarkdown,
+  type EvidenceInput,
+} from '@regintel/domain/inspector-evidence-pack';
+import { fetchCqcLocations, fetchCqcLocationDetail, getNoteworthy } from '@regintel/domain/cqc-changes-client';
+import {
+  generateAlerts,
+  deduplicateAlerts,
+  capAlerts,
+  alertDeduplicationKey,
+  type CqcReportForIntelligence,
+  type ProviderCoverageForIntelligence,
+} from '@regintel/domain/cqc-intelligence';
 import { buildConstitutionalMetadata, type ReportContext } from './metadata';
 import { authMiddleware } from './auth';
 import {
@@ -467,12 +481,14 @@ const zExportFormat = z.enum([
   'BLUE_OCEAN',
   'BLUE_OCEAN_BOARD',
   'BLUE_OCEAN_AUDIT',
+  'INSPECTOR_PACK',
 ]);
 
-type ExportFormat = 'CSV' | 'PDF' | 'BLUE_OCEAN' | 'BLUE_OCEAN_BOARD' | 'BLUE_OCEAN_AUDIT';
+type ExportFormat = 'CSV' | 'PDF' | 'BLUE_OCEAN' | 'BLUE_OCEAN_BOARD' | 'BLUE_OCEAN_AUDIT' | 'INSPECTOR_PACK';
 
 function normalizeExportFormat(format: unknown): ExportFormat {
   if (format === 'CSV' || format === 'PDF') return format;
+  if (format === 'INSPECTOR_PACK') return 'INSPECTOR_PACK';
   if (format === 'BLUE_OCEAN_AUDIT') return 'BLUE_OCEAN_AUDIT';
   if (format === 'BLUE_OCEAN_BOARD' || format === 'BLUE_OCEAN') return 'BLUE_OCEAN_BOARD';
   return 'PDF';
@@ -481,7 +497,7 @@ function normalizeExportFormat(format: unknown): ExportFormat {
 function getExportExtension(format: ExportFormat): string {
   if (format === 'CSV') return 'csv';
   if (format === 'PDF') return 'pdf';
-  return 'md';
+  return 'md'; // BLUE_OCEAN_*, INSPECTOR_PACK all use markdown
 }
 
 function getBlueOceanFilename(exportId: string, format: ExportFormat): string {
@@ -2486,8 +2502,8 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     const latestExport = exports[0]; // Already sorted by most recent
 
     const availableFormats = reportContext?.mode === 'REAL'
-      ? ['BLUE_OCEAN_BOARD', 'BLUE_OCEAN_AUDIT']
-      : ['CSV', 'PDF', 'BLUE_OCEAN_BOARD', 'BLUE_OCEAN_AUDIT'];
+      ? ['BLUE_OCEAN_BOARD', 'BLUE_OCEAN_AUDIT', 'INSPECTOR_PACK']
+      : ['CSV', 'PDF', 'BLUE_OCEAN_BOARD', 'BLUE_OCEAN_AUDIT', 'INSPECTOR_PACK'];
 
     sendWithMetadata(res, {
       providerId,
@@ -2527,6 +2543,94 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
 
     const safeFormat = normalizeExportFormat(format);
     const facilityReportContext = await resolveReportContextForFacility(ctx, providerId, facilityId);
+
+    // ── INSPECTOR_PACK: facility-level evidence pack (works in both REAL and MOCK modes) ──
+    if (safeFormat === 'INSPECTOR_PACK') {
+      const facility = await store.getFacilityById(ctx, facilityId);
+      if (!facility) {
+        sendError(res, 404, 'Facility not found', facilityReportContext);
+        return;
+      }
+
+      const metadata = buildConstitutionalMetadata(facilityReportContext);
+      const evidenceRecords = await store.listEvidenceByFacility(ctx, facilityId);
+      const auditSummaries = await listDocumentAuditSummariesByEvidenceRecordIds(
+        ctx.tenantId,
+        evidenceRecords.map((r) => r.id)
+      );
+
+      const evidenceInputs: EvidenceInput[] = evidenceRecords.map((record) => {
+        const audit = auditSummaries.get(record.id);
+        return {
+          evidenceId: record.id,
+          fileName: record.fileName,
+          evidenceType: record.evidenceType,
+          description: record.description,
+          uploadedAt: record.uploadedAt,
+          expiresAt: record.expiresAt ?? null,
+          audit: audit
+            ? {
+                status: audit.status,
+                overallResult: audit.overallResult,
+                complianceScore: audit.complianceScore,
+                safStatements: audit.result?.safStatements,
+              }
+            : null,
+        };
+      });
+
+      const pack = generateInspectorEvidencePack({
+        facilityName: facility.facilityName,
+        facilityId: facility.id,
+        inspectionStatus: facility.inspectionStatus,
+        evidenceInputs,
+        metadata: {
+          topicCatalogVersion: metadata.topicCatalogVersion,
+          topicCatalogHash: metadata.topicCatalogHash,
+          prsLogicProfilesVersion: metadata.prsLogicVersion,
+          prsLogicProfilesHash: metadata.prsLogicHash,
+        },
+        watermark: facilityReportContext.mode === 'REAL' ? null : 'PRACTICE — NOT AN OFFICIAL CQC RECORD',
+      });
+
+      const content = serializeInspectorPackMarkdown(pack);
+
+      const exportRecord = await store.createExport(ctx, {
+        providerId,
+        facilityId,
+        sessionId: facilityReportContext.reportSource.id,
+        format: 'INSPECTOR_PACK',
+        content,
+        reportingDomain: facilityReportContext.reportingDomain,
+        mode: facilityReportContext.mode,
+        reportSource: facilityReportContext.reportSource,
+        snapshotId: facilityReportContext.snapshotId,
+      });
+
+      // Track usage event for billing hooks
+      await store.createUsageEvent(ctx, {
+        providerId,
+        eventType: 'INSPECTOR_PACK_GENERATED',
+        resourceId: exportRecord.id,
+        metadata: { facilityId, facilityName: facility.facilityName },
+      });
+
+      await store.appendAuditEvent(ctx, providerId, 'EXPORT_GENERATED', {
+        exportId: exportRecord.id,
+        format: 'INSPECTOR_PACK',
+        facilityId,
+      });
+
+      const fileExtension = getExportExtension(safeFormat);
+      const downloadUrl = `${req.protocol}://${req.get('host')}/v1/exports/${exportRecord.id}.${fileExtension}`;
+
+      sendWithMetadata(res, {
+        exportId: exportRecord.id,
+        downloadUrl,
+        expiresAt: exportRecord.expiresAt,
+      }, facilityReportContext);
+      return;
+    }
 
     if (facilityReportContext.mode === 'REAL') {
       if (safeFormat !== 'BLUE_OCEAN_BOARD' && safeFormat !== 'BLUE_OCEAN_AUDIT') {
@@ -2835,15 +2939,19 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       !exportRecord ||
       (exportRecord.format !== 'BLUE_OCEAN' &&
         exportRecord.format !== 'BLUE_OCEAN_BOARD' &&
-        exportRecord.format !== 'BLUE_OCEAN_AUDIT')
+        exportRecord.format !== 'BLUE_OCEAN_AUDIT' &&
+        exportRecord.format !== 'INSPECTOR_PACK')
     ) {
       sendError(res, 404, 'Export not found');
       return;
     }
     res.setHeader('Content-Type', 'text/markdown');
+    const filename = exportRecord.format === 'INSPECTOR_PACK'
+      ? `${exportRecord.id}.inspector-pack.md`
+      : getBlueOceanFilename(exportRecord.id, exportRecord.format);
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="${getBlueOceanFilename(exportRecord.id, exportRecord.format)}"`
+      `attachment; filename="${filename}"`
     );
     res.send(exportRecord.content);
   });
@@ -3332,7 +3440,269 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     }
   }
 
-//  Global Express error handler 
+  // ── CQC Intelligence Endpoints (Feature 1) ──────────────────────────
+
+  app.get('/v1/providers/:providerId/cqc-intelligence', async (req, res) => {
+    const ctx = getContext(req);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId }).strip(),
+    });
+    if (!parsed) return;
+    const { providerId } = parsed.params as { providerId: string };
+
+    const alerts = await store.listCqcAlerts(ctx, providerId);
+
+    // Sort: severity DESC (HIGH first), then date DESC
+    const severityOrder: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+    const sorted = [...alerts].sort((a, b) => {
+      const sevDiff = (severityOrder[a.severity] ?? 3) - (severityOrder[b.severity] ?? 3);
+      if (sevDiff !== 0) return sevDiff;
+      return b.reportDate.localeCompare(a.reportDate);
+    });
+
+    const riskCount = sorted.filter((a) => a.intelligenceType === 'RISK_SIGNAL').length;
+    const outstandingCount = sorted.filter((a) => a.intelligenceType === 'OUTSTANDING_SIGNAL').length;
+
+    sendWithMetadata(res, {
+      alerts: sorted.map((a) => ({
+        id: a.id,
+        intelligenceType: a.intelligenceType,
+        sourceLocationName: a.sourceLocationName,
+        sourceServiceType: a.sourceServiceType,
+        reportDate: a.reportDate,
+        keyQuestion: a.keyQuestion,
+        qualityStatementId: a.qualityStatementId,
+        qualityStatementTitle: a.qualityStatementTitle,
+        findingText: a.findingText,
+        providerCoveragePercent: a.providerCoveragePercent,
+        severity: a.severity,
+        createdAt: a.createdAt,
+      })),
+      summary: { riskCount, outstandingCount },
+    });
+  });
+
+  app.post('/v1/providers/:providerId/cqc-intelligence/:alertId/dismiss', async (req, res) => {
+    const ctx = getContext(req);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId, alertId: z.string().min(1) }).strip(),
+    });
+    if (!parsed) return;
+    const { alertId } = parsed.params as { alertId: string };
+
+    const alert = await store.getCqcAlertById(ctx, alertId);
+    if (!alert) {
+      sendError(res, 404, 'Alert not found');
+      return;
+    }
+
+    await store.dismissCqcAlert(ctx, alertId);
+    sendWithMetadata(res, { dismissed: true });
+  });
+
+  app.post('/v1/cqc-intelligence/poll', async (req, res) => {
+    const ctx = getContext(req);
+
+    // Get all providers for this tenant
+    const providers = await store.listProviders(ctx);
+    if (providers.length === 0) {
+      sendError(res, 404, 'No providers found');
+      return;
+    }
+
+    // Use first provider (single-provider assumption for now)
+    const provider = providers[0];
+    const providerId = provider.providerId;
+
+    // Debounce: check last poll time
+    const pollState = await store.getPollState(ctx, providerId);
+    if (pollState) {
+      const lastPolledAt = new Date(pollState.lastPolledAt);
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      if (lastPolledAt > oneHourAgo) {
+        const retryAfter = Math.ceil((lastPolledAt.getTime() + 60 * 60 * 1000 - Date.now()) / 1000);
+        res.setHeader('Retry-After', String(retryAfter));
+        sendError(res, 429, `Poll debounced. Last polled at ${pollState.lastPolledAt}. Retry after ${retryAfter}s.`);
+        return;
+      }
+    }
+
+    // Get all facilities to extract service types
+    const facilities = await store.listFacilitiesByProvider(ctx, providerId);
+    const serviceTypes = new Set(facilities.map((f) => f.serviceType.toLowerCase()));
+    const facilityIds = facilities.map((f) => f.id);
+
+    // Map service types to CQC search filters
+    // CQC API supports: careHome=Y for residential care
+    const serviceFilter = 'careHome=Y'; // Default filter — most providers are care homes
+
+    // Fetch a sample of CQC locations matching service type
+    const locationsResult = await fetchCqcLocations({
+      serviceFilter,
+      apiKey: process.env.CQC_API_KEY,
+      samplePages: 2,
+      perPage: 20,
+    });
+
+    if (!locationsResult.success) {
+      console.error('[CQC Intelligence] Location search failed:', locationsResult.error);
+      sendError(res, 502, `CQC API error: ${locationsResult.error}`);
+      return;
+    }
+
+    // Get existing alert keys for deduplication
+    const existingAlerts = await store.listCqcAlerts(ctx, providerId);
+    const existingKeys = new Set(existingAlerts.map((a) =>
+      `${a.sourceLocationId}:${a.qualityStatementId}:${a.reportDate}`
+    ));
+
+    // Compute provider's SAF34 coverage
+    const perQualityStatement: Record<string, number> = {};
+    const perKeyQuestion: Record<string, number> = {};
+    for (const qs of SAF_34_QUALITY_STATEMENTS) {
+      perQualityStatement[qs.id] = 0; // Default to 0% — real coverage would come from evidence mapping
+    }
+
+    const coverage: ProviderCoverageForIntelligence = {
+      perQualityStatement,
+      perKeyQuestion: perKeyQuestion as any,
+    };
+
+    let totalAlertsGenerated = 0;
+    let locationsProcessed = 0;
+    let locationsSkipped = 0;
+    const allNewAlerts: any[] = [];
+
+    // Batch cap: process at most 15 locations per poll
+    const locationSample = locationsResult.locations.slice(0, 15);
+
+    for (const loc of locationSample) {
+      try {
+        // Fetch location detail to check ratings
+        const detailResult = await fetchCqcLocationDetail(loc.locationId, {
+          apiKey: process.env.CQC_API_KEY,
+        });
+
+        if (!detailResult.success) {
+          locationsSkipped++;
+          continue;
+        }
+
+        // Only process locations with noteworthy ratings (Outstanding, RI, Inadequate)
+        const noteworthy = getNoteworthy(detailResult.detail);
+        if (noteworthy.length === 0) {
+          locationsSkipped++;
+          continue;
+        }
+
+        // Scrape the full report for findings text
+        const scrapeResult = await scrapeLatestReport(loc.locationId, {
+          timeoutMs: 10000,
+        });
+
+        if (!scrapeResult.success) {
+          // Still generate alerts from ratings alone (without findings text)
+          locationsProcessed++;
+          const report = scrapeResult.report;
+          // Build key question ratings from detail
+          const kqRatings: Record<string, string> = {};
+          for (const n of noteworthy) {
+            const kqKey = n.keyQuestion.toLowerCase().replace('_', '');
+            // Map WELL_LED → wellLed
+            const key = n.keyQuestion === 'WELL_LED' ? 'wellLed' : kqKey;
+            kqRatings[key] = n.rating;
+          }
+
+          const reportForIntelligence: CqcReportForIntelligence = {
+            locationId: loc.locationId,
+            locationName: detailResult.detail.locationName || loc.locationName,
+            serviceType: detailResult.detail.type,
+            reportDate: detailResult.detail.lastInspection?.date || new Date().toISOString(),
+            keyQuestionRatings: kqRatings,
+            keyQuestionFindings: {},
+          };
+
+          const alerts = generateAlerts({
+            tenantId: ctx.tenantId,
+            providerId,
+            facilityIds,
+            report: reportForIntelligence,
+            coverage,
+          });
+
+          const deduped = deduplicateAlerts(alerts, existingKeys);
+          allNewAlerts.push(...deduped);
+          for (const alert of deduped) {
+            existingKeys.add(alertDeduplicationKey(alert));
+          }
+          continue;
+        }
+
+        locationsProcessed++;
+        const report = scrapeResult.report;
+
+        const reportForIntelligence: CqcReportForIntelligence = {
+          locationId: loc.locationId,
+          locationName: detailResult.detail.locationName || loc.locationName,
+          serviceType: detailResult.detail.type,
+          reportDate: report.reportDate || detailResult.detail.lastInspection?.date || new Date().toISOString(),
+          keyQuestionRatings: report.keyQuestionRatings as any,
+          keyQuestionFindings: report.keyQuestionFindings as any,
+        };
+
+        const alerts = generateAlerts({
+          tenantId: ctx.tenantId,
+          providerId,
+          facilityIds,
+          report: reportForIntelligence,
+          coverage,
+        });
+
+        const deduped = deduplicateAlerts(alerts, existingKeys);
+        allNewAlerts.push(...deduped);
+
+        // Update existing keys to avoid duplicates from later locations in this batch
+        for (const alert of deduped) {
+          existingKeys.add(alertDeduplicationKey(alert));
+        }
+      } catch (err) {
+        console.error(`[CQC Intelligence] Error processing ${loc.locationId}:`, err);
+        locationsSkipped++;
+      }
+    }
+
+    // Cap at 20 alerts
+    const capped = capAlerts(allNewAlerts, 20);
+
+    // Persist alerts
+    for (const alert of capped) {
+      await store.createCqcAlert(ctx, {
+        ...alert,
+        facilityIds: JSON.stringify(alert.facilityIds),
+      });
+    }
+    totalAlertsGenerated = capped.length;
+
+    // Track usage event
+    if (totalAlertsGenerated > 0) {
+      await store.createUsageEvent(ctx, {
+        providerId,
+        eventType: 'INTELLIGENCE_POLL',
+        metadata: { alertsGenerated: totalAlertsGenerated, locationsProcessed },
+      });
+    }
+
+    // Update poll state
+    await store.updatePollState(ctx, providerId, new Date().toISOString());
+
+    sendWithMetadata(res, {
+      alertsGenerated: totalAlertsGenerated,
+      locationsProcessed,
+      locationsSkipped,
+    });
+  });
+
+//  Global Express error handler
 app.use((err: any, _req: any, res: any, _next: any) => {
   console.error('[API] Unhandled route error:', err?.message || err);
   if (!res.headersSent) {

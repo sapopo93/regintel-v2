@@ -19,6 +19,9 @@ import {
   type EvidenceRecordRecord,
   type ExportRecord,
   type AuditEventRecord,
+  type CqcIntelligenceAlertRecord,
+  type CqcPollStateRecord,
+  type UsageEventRecord,
 } from './store';
 import { scopeKey, unscopeKey } from '@regintel/security/tenant';
 
@@ -254,6 +257,7 @@ export class PrismaStore extends InMemoryStore {
           description: row.description ?? undefined,
           uploadedAt: row.uploadedAt,
           createdBy: row.createdBy,
+          expiresAt: row.expiresAt ?? undefined,
         };
         evidenceRecordsStore.write(ctx, unscopedId, record);
 
@@ -322,11 +326,55 @@ export class PrismaStore extends InMemoryStore {
         auditsStore.writeByKey(ctx, providerId, events);
       }
 
+      // --- Hydrate CQC Intelligence Alerts ---
+      const dbCqcAlerts = await (prisma as any).cqcIntelligenceAlertV2.findMany();
+      const cqcAlertsStore = (this as any).cqcAlerts;
+      const cqcAlertsByProvider = (this as any).cqcAlertsByProvider as Map<string, string[]>;
+      for (const row of dbCqcAlerts) {
+        const ctx: TenantContext = { tenantId: row.tenantId, actorId: 'SYSTEM' };
+        const record: CqcIntelligenceAlertRecord = {
+          id: row.id,
+          tenantId: row.tenantId,
+          providerId: row.providerId,
+          facilityIds: JSON.parse(row.facilityIds),
+          intelligenceType: row.intelligenceType as 'RISK_SIGNAL' | 'OUTSTANDING_SIGNAL',
+          sourceLocationId: row.sourceLocationId,
+          sourceLocationName: row.sourceLocationName,
+          sourceServiceType: row.sourceServiceType,
+          reportDate: row.reportDate,
+          keyQuestion: row.keyQuestion,
+          qualityStatementId: row.qualityStatementId,
+          qualityStatementTitle: row.qualityStatementTitle,
+          findingText: row.findingText,
+          providerCoveragePercent: row.providerCoverage,
+          severity: row.severity as 'HIGH' | 'MEDIUM' | 'LOW',
+          createdAt: row.createdAt,
+          dismissedAt: row.dismissedAt ?? null,
+        };
+        cqcAlertsStore.writeByKey(ctx, row.id, record);
+        const list = cqcAlertsByProvider.get(row.providerId) ?? [];
+        if (!list.includes(row.id)) list.push(row.id);
+        cqcAlertsByProvider.set(row.providerId, list);
+      }
+
+      // --- Hydrate CQC Intelligence Poll State ---
+      const dbPollStates = await (prisma as any).cqcIntelligencePollStateV2.findMany();
+      const cqcPollStateStore = (this as any).cqcPollState;
+      for (const row of dbPollStates) {
+        const ctx: TenantContext = { tenantId: row.tenantId, actorId: 'SYSTEM' };
+        cqcPollStateStore.writeByKey(ctx, row.id, {
+          tenantId: row.tenantId,
+          providerId: row.providerId,
+          lastPolledAt: row.lastPolledAt,
+        });
+      }
+
       console.log(
         `[PrismaStore] Hydrated ${dbProviders.length} providers, ${dbFacilities.length} facilities, ` +
         `${dbSessions.length} sessions, ${dbFindings.length} findings, ${dbBlobs.length} blobs, ` +
         `${dbEvidenceRecords.length} evidence records, ${dbExports.length} exports, ` +
-        `${dbAuditEvents.length} audit events`
+        `${dbAuditEvents.length} audit events, ${dbCqcAlerts.length} CQC alerts, ` +
+        `${dbPollStates.length} poll states`
       );
     } catch (err) {
       console.error('[PrismaStore] Hydration failed:', err);
@@ -668,6 +716,7 @@ export class PrismaStore extends InMemoryStore {
       description: record.description ?? null,
       uploadedAt: record.uploadedAt,
       createdBy: record.createdBy,
+      expiresAt: record.expiresAt ?? null,
     };
 
     (prisma as any).evidenceRecordV2
@@ -745,5 +794,86 @@ export class PrismaStore extends InMemoryStore {
       .catch((err: unknown) =>
         console.error('[PrismaStore] Failed to sync provider stats:', err)
       );
+  }
+
+  // ── CQC Intelligence overrides ──
+
+  override createCqcAlert(ctx: TenantContext, alert: CqcIntelligenceAlertRecord): void {
+    super.createCqcAlert(ctx, alert);
+    (prisma as any).cqcIntelligenceAlertV2
+      .create({
+        data: {
+          id: alert.id,
+          tenantId: alert.tenantId,
+          providerId: alert.providerId,
+          facilityIds: alert.facilityIds,
+          intelligenceType: alert.intelligenceType,
+          sourceLocationId: alert.sourceLocationId,
+          sourceLocationName: alert.sourceLocationName,
+          sourceServiceType: alert.sourceServiceType,
+          reportDate: alert.reportDate,
+          keyQuestion: alert.keyQuestion,
+          qualityStatementId: alert.qualityStatementId,
+          qualityStatementTitle: alert.qualityStatementTitle,
+          findingText: alert.findingText,
+          providerCoverage: alert.providerCoveragePercent,
+          severity: alert.severity,
+          createdAt: alert.createdAt,
+          dismissedAt: alert.dismissedAt,
+        },
+      })
+      .catch((err: unknown) =>
+        console.error('[PrismaStore] Failed to persist CQC alert:', err)
+      );
+  }
+
+  override dismissCqcAlert(ctx: TenantContext, alertId: string): void {
+    super.dismissCqcAlert(ctx, alertId);
+    const now = new Date().toISOString();
+    (prisma as any).cqcIntelligenceAlertV2
+      .update({
+        where: { id: alertId },
+        data: { dismissedAt: now },
+      })
+      .catch((err: unknown) =>
+        console.error('[PrismaStore] Failed to dismiss CQC alert:', err)
+      );
+  }
+
+  override updatePollState(ctx: TenantContext, providerId: string, lastPolledAt: string): void {
+    super.updatePollState(ctx, providerId, lastPolledAt);
+    const id = `${ctx.tenantId}:${providerId}`;
+    (prisma as any).cqcIntelligencePollStateV2
+      .upsert({
+        where: { id },
+        create: { id, tenantId: ctx.tenantId, providerId, lastPolledAt },
+        update: { lastPolledAt },
+      })
+      .catch((err: unknown) =>
+        console.error('[PrismaStore] Failed to persist poll state:', err)
+      );
+  }
+
+  override createUsageEvent(
+    ctx: TenantContext,
+    input: Parameters<InMemoryStore['createUsageEvent']>[1]
+  ): UsageEventRecord {
+    const record = super.createUsageEvent(ctx, input);
+    (prisma as any).usageEventV2
+      .create({
+        data: {
+          id: record.id,
+          tenantId: record.tenantId,
+          providerId: record.providerId,
+          eventType: record.eventType,
+          resourceId: record.resourceId,
+          createdAt: record.createdAt,
+          metadata: record.metadata as any,
+        },
+      })
+      .catch((err: unknown) =>
+        console.error('[PrismaStore] Failed to persist usage event:', err)
+      );
+    return record;
   }
 }

@@ -260,7 +260,8 @@ export type ExportFormat =
   | 'PDF'
   | 'BLUE_OCEAN'
   | 'BLUE_OCEAN_BOARD'
-  | 'BLUE_OCEAN_AUDIT';
+  | 'BLUE_OCEAN_AUDIT'
+  | 'INSPECTOR_PACK';
 
 /**
  * Export generation request
@@ -667,4 +668,39 @@ export interface BulkOnboardResponse extends ConstitutionalMetadata {
     error?: string;
   }>;
   backgroundJobsQueued: number;
+}
+
+/**
+ * CQC Intelligence (Feature 1)
+ */
+export type IntelligenceType = 'RISK_SIGNAL' | 'OUTSTANDING_SIGNAL';
+export type AlertSeverity = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface CqcIntelligenceAlert {
+  id: string;
+  intelligenceType: IntelligenceType;
+  sourceLocationName: string;
+  sourceServiceType: string;
+  reportDate: string;
+  keyQuestion: string;
+  qualityStatementId: string;
+  qualityStatementTitle: string;
+  findingText: string;
+  providerCoveragePercent: number;
+  severity: AlertSeverity;
+  createdAt: string;
+}
+
+export interface CqcIntelligenceResponse extends ConstitutionalMetadata {
+  alerts: CqcIntelligenceAlert[];
+  summary: {
+    riskCount: number;
+    outstandingCount: number;
+  };
+}
+
+export interface CqcPollResponse extends ConstitutionalMetadata {
+  alertsGenerated: number;
+  locationsProcessed: number;
+  locationsSkipped: number;
 }

@@ -63,6 +63,7 @@ export interface EvidenceRecordRecord {
   description?: string;
   uploadedAt: string;
   createdBy: string;
+  expiresAt?: string;
 }
 
 export interface MockSessionRecord {
@@ -120,7 +121,7 @@ export interface ExportRecord {
   providerId: string;
   facilityId: string;
   sessionId: string;
-  format: 'CSV' | 'PDF' | 'BLUE_OCEAN' | 'BLUE_OCEAN_BOARD' | 'BLUE_OCEAN_AUDIT';
+  format: 'CSV' | 'PDF' | 'BLUE_OCEAN' | 'BLUE_OCEAN_BOARD' | 'BLUE_OCEAN_AUDIT' | 'INSPECTOR_PACK';
   content: string;
   reportingDomain: 'MOCK_SIMULATION' | 'REGULATORY_HISTORY';
   mode: 'MOCK' | 'REAL';
@@ -132,6 +133,43 @@ export interface ExportRecord {
   snapshotId: string;
   generatedAt: string;
   expiresAt: string;
+}
+
+export interface CqcIntelligenceAlertRecord {
+  id: string;
+  tenantId: string;
+  providerId: string;
+  facilityIds: string; // JSON array
+  intelligenceType: string;
+  sourceLocationId: string;
+  sourceLocationName: string;
+  sourceServiceType: string;
+  reportDate: string;
+  keyQuestion: string;
+  qualityStatementId: string;
+  qualityStatementTitle: string;
+  findingText: string;
+  providerCoveragePercent: number;
+  severity: string;
+  createdAt: string;
+  dismissedAt: string | null;
+}
+
+export interface CqcPollStateRecord {
+  id: string;
+  tenantId: string;
+  providerId: string;
+  lastPolledAt: string;
+}
+
+export interface UsageEventRecord {
+  id: string;
+  tenantId: string;
+  providerId: string;
+  eventType: string;
+  resourceId: string | null;
+  createdAt: string;
+  metadata: Record<string, unknown> | null;
 }
 
 export interface AuditEventRecord {
@@ -159,6 +197,11 @@ export class InMemoryStore {
   private findings = new TenantIsolatedStore<FindingRecord>();
   private exports = new TenantIsolatedStore<ExportRecord>();
   private audits = new TenantIsolatedStore<AuditEventRecord[]>();
+
+  private cqcAlerts = new TenantIsolatedStore<CqcIntelligenceAlertRecord>();
+  private cqcPollState = new TenantIsolatedStore<CqcPollStateRecord>();
+  private usageEvents = new TenantIsolatedStore<UsageEventRecord>();
+  private cqcAlertsByProvider = new Map<string, string[]>();
 
   private counters = new Map<string, Record<string, number>>();
   private facilityIndex = new Map<string, string>();
@@ -693,6 +736,7 @@ export class InMemoryStore {
     evidenceType: string;
     fileName: string;
     description?: string;
+    expiresAt?: string;
   }): EvidenceRecordRecord {
     const blob = this.getEvidenceBlob(ctx, input.blobHash);
     if (!blob) {
@@ -716,6 +760,7 @@ export class InMemoryStore {
       description: input.description,
       uploadedAt: now,
       createdBy: ctx.actorId,
+      expiresAt: input.expiresAt,
     };
 
     this.evidenceRecords.write(ctx, id, record);
@@ -856,7 +901,7 @@ export class InMemoryStore {
     providerId: string;
     facilityId: string;
     sessionId: string;
-    format: 'CSV' | 'PDF' | 'BLUE_OCEAN' | 'BLUE_OCEAN_BOARD' | 'BLUE_OCEAN_AUDIT';
+    format: 'CSV' | 'PDF' | 'BLUE_OCEAN' | 'BLUE_OCEAN_BOARD' | 'BLUE_OCEAN_AUDIT' | 'INSPECTOR_PACK';
     content: string;
     reportingDomain: 'MOCK_SIMULATION' | 'REGULATORY_HISTORY';
     mode: 'MOCK' | 'REAL';
@@ -939,6 +984,82 @@ export class InMemoryStore {
 
     const updated = [...events, record];
     this.audits.writeByKey(ctx, providerId, updated);
+    return record;
+  }
+
+  // ── CQC Intelligence ─────────────────────────────────────────────
+
+  createCqcAlert(ctx: TenantContext, alert: CqcIntelligenceAlertRecord): void {
+    this.cqcAlerts.writeByKey(ctx, alert.id, alert);
+    const list = this.cqcAlertsByProvider.get(alert.providerId) ?? [];
+    list.push(alert.id);
+    this.cqcAlertsByProvider.set(alert.providerId, list);
+  }
+
+  listCqcAlerts(ctx: TenantContext, providerId: string): CqcIntelligenceAlertRecord[] {
+    const ids = this.cqcAlertsByProvider.get(providerId) ?? [];
+    const now = new Date();
+    const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
+
+    return ids
+      .map((id) => this.cqcAlerts.readByKey(ctx, id))
+      .filter((record): record is CqcIntelligenceAlertRecord => Boolean(record))
+      .filter((record) => !record.dismissedAt) // exclude dismissed
+      .filter((record) => {
+        // auto-archive: exclude older than 90 days
+        const createdAt = new Date(record.createdAt);
+        return (now.getTime() - createdAt.getTime()) <= ninetyDaysMs;
+      });
+  }
+
+  dismissCqcAlert(ctx: TenantContext, alertId: string): void {
+    const alert = this.cqcAlerts.readByKey(ctx, alertId);
+    if (alert) {
+      this.cqcAlerts.writeByKey(ctx, alertId, {
+        ...alert,
+        dismissedAt: new Date().toISOString(),
+      });
+    }
+  }
+
+  getCqcAlertById(ctx: TenantContext, alertId: string): CqcIntelligenceAlertRecord | undefined {
+    return this.cqcAlerts.readByKey(ctx, alertId);
+  }
+
+  getPollState(ctx: TenantContext, providerId: string): CqcPollStateRecord | undefined {
+    const id = `${ctx.tenantId}:${providerId}`;
+    return this.cqcPollState.readByKey(ctx, id);
+  }
+
+  updatePollState(ctx: TenantContext, providerId: string, lastPolledAt: string): void {
+    const id = `${ctx.tenantId}:${providerId}`;
+    this.cqcPollState.writeByKey(ctx, id, {
+      id,
+      tenantId: ctx.tenantId,
+      providerId,
+      lastPolledAt,
+    });
+  }
+
+  // ── Usage Events ──────────────────────────────────────────────────
+
+  createUsageEvent(ctx: TenantContext, input: {
+    providerId: string;
+    eventType: string;
+    resourceId?: string;
+    metadata?: Record<string, unknown>;
+  }): UsageEventRecord {
+    const id = scopeKey(ctx, `usage-${this.nextSequence(ctx, 'usage')}`);
+    const record: UsageEventRecord = {
+      id,
+      tenantId: ctx.tenantId,
+      providerId: input.providerId,
+      eventType: input.eventType,
+      resourceId: input.resourceId ?? null,
+      createdAt: new Date().toISOString(),
+      metadata: input.metadata ?? null,
+    };
+    this.usageEvents.write(ctx, id, record);
     return record;
   }
 }

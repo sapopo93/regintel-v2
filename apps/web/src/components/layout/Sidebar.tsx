@@ -92,7 +92,9 @@ export function Sidebar({
           } else if (
             providerId &&
             item.id !== 'providers' &&
-            item.id !== 'facilities'
+            item.id !== 'facilities' &&
+            item.id !== 'dashboard' &&
+            item.id !== 'intelligence'
           ) {
             // Without a facility context, route users back to facility selection.
             const facilitiesQuery = new URLSearchParams();

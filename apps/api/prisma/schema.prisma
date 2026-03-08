@@ -363,6 +363,7 @@ model EvidenceRecordV2 {
   description  String?
   uploadedAt   String  @map("uploaded_at")
   createdBy    String  @map("created_by")
+  expiresAt    String? @map("expires_at")
 
   @@index([tenantId])
   @@index([facilityId])
@@ -404,4 +405,58 @@ model AuditEventV2 {
   @@index([tenantId])
   @@index([providerId, timestamp])
   @@map("audit_events_v2")
+}
+
+// ── CQC Intelligence (Feature 1) ──
+
+model CqcIntelligenceAlertV2 {
+  id                    String   @id @map("id")
+  tenantId              String   @map("tenant_id")
+  providerId            String   @map("provider_id")
+  facilityIds           String   @map("facility_ids")  // JSON array
+  intelligenceType      String   @map("intelligence_type")  // RISK_SIGNAL | OUTSTANDING_SIGNAL
+  sourceLocationId      String   @map("source_location_id")
+  sourceLocationName    String   @map("source_location_name")
+  sourceServiceType     String   @map("source_service_type")
+  reportDate            String   @map("report_date")
+  keyQuestion           String   @map("key_question")
+  qualityStatementId    String   @map("quality_statement_id")
+  qualityStatementTitle String   @map("quality_statement_title")
+  findingText           String   @map("finding_text")
+  providerCoverage      Float    @map("provider_coverage_percent")
+  severity              String   @map("severity")
+  createdAt             String   @map("created_at")
+  dismissedAt           String?  @map("dismissed_at")
+
+  @@index([tenantId])
+  @@index([providerId])
+  @@index([tenantId, providerId, sourceLocationId, qualityStatementId, reportDate])
+  @@map("cqc_intelligence_alerts_v2")
+}
+
+model CqcIntelligencePollStateV2 {
+  id            String   @id @map("id")       // tenantId:providerId
+  tenantId      String   @map("tenant_id")
+  providerId    String   @map("provider_id")
+  lastPolledAt  String   @map("last_polled_at")
+
+  @@index([tenantId])
+  @@map("cqc_intelligence_poll_state_v2")
+}
+
+// ── Usage Events (billing hooks for future pricing) ──
+
+model UsageEventV2 {
+  id            String   @id @map("id")
+  tenantId      String   @map("tenant_id")
+  providerId    String   @map("provider_id")
+  eventType     String   @map("event_type")     // INSPECTOR_PACK_GENERATED | INTELLIGENCE_ALERT_VIEWED | INTELLIGENCE_POLL
+  resourceId    String?  @map("resource_id")     // export ID, alert ID, etc.
+  createdAt     String   @map("created_at")
+  metadata      Json?    @map("metadata")
+
+  @@index([tenantId])
+  @@index([tenantId, providerId, eventType])
+  @@index([tenantId, createdAt])
+  @@map("usage_events_v2")
 }

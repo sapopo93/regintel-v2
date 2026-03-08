@@ -42,6 +42,11 @@ import type {
   BulkOnboardRequest,
   BulkOnboardResponse,
   Saf34CoverageResponse,
+  ProviderDashboardResponse,
+  ExpiringEvidenceResponse,
+  ReadinessJourneyResponse,
+  CqcIntelligenceResponse,
+  CqcPollResponse,
 } from './types';
 
 /**
@@ -545,6 +550,62 @@ export class ApiClient {
         method: 'POST',
         body: JSON.stringify(request),
       }
+    );
+  }
+
+  /**
+   * Get provider dashboard (compliance command centre)
+   */
+  async getProviderDashboard(providerId: string): Promise<ProviderDashboardResponse> {
+    return this.fetch<ProviderDashboardResponse>(
+      `/v1/providers/${providerId}/dashboard`
+    );
+  }
+
+  /**
+   * Get expiring evidence across all facilities
+   */
+  async getExpiringEvidence(providerId: string, days: number = 30): Promise<ExpiringEvidenceResponse> {
+    return this.fetch<ExpiringEvidenceResponse>(
+      `/v1/providers/${providerId}/expiring-evidence?days=${days}`
+    );
+  }
+
+  /**
+   * Get readiness journey for a facility
+   */
+  async getReadinessJourney(facilityId: string): Promise<ReadinessJourneyResponse> {
+    return this.fetch<ReadinessJourneyResponse>(
+      `/v1/facilities/${facilityId}/readiness-journey`
+    );
+  }
+
+  /**
+   * Get CQC intelligence alerts for a provider
+   */
+  async getCqcIntelligence(providerId: string): Promise<CqcIntelligenceResponse> {
+    return this.fetch<CqcIntelligenceResponse>(
+      `/v1/providers/${providerId}/cqc-intelligence`
+    );
+  }
+
+  /**
+   * Dismiss a CQC intelligence alert
+   */
+  async dismissCqcAlert(providerId: string, alertId: string): Promise<ConstitutionalMetadata & { dismissed: boolean }> {
+    return this.fetch<ConstitutionalMetadata & { dismissed: boolean }>(
+      `/v1/providers/${providerId}/cqc-intelligence/${alertId}/dismiss`,
+      { method: 'POST' }
+    );
+  }
+
+  /**
+   * Trigger CQC intelligence poll cycle (FOUNDER only)
+   */
+  async pollCqcIntelligence(): Promise<CqcPollResponse> {
+    return this.fetch<CqcPollResponse>(
+      `/v1/cqc-intelligence/poll`,
+      { method: 'POST' }
     );
   }
 }

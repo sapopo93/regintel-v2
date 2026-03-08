@@ -49,12 +49,14 @@ export const DOMAINS = {
 // Sidebar navigation items
 export const SIDEBAR_NAVIGATION = [
   { id: 'providers', label: 'Providers', href: '/providers' },
+  { id: 'dashboard', label: 'Dashboard', href: '/dashboard' },
   { id: 'overview', label: 'Overview', href: '/overview' },
   { id: 'topics', label: 'Inspection Areas', href: '/topics' },
   { id: 'mock-session', label: 'Practice Inspection', href: '/mock-session' },
   { id: 'findings', label: 'Findings', href: '/findings' },
   { id: 'facilities', label: 'Locations', href: '/facilities' },
   { id: 'evidence', label: 'Evidence', href: '/evidence' },
+  { id: 'intelligence', label: 'CQC Intelligence', href: '/intelligence' },
   { id: 'exports', label: 'Exports', href: '/exports' },
   { id: 'results', label: 'Results', href: '/results' },
   { id: 'audit', label: 'Audit Trail', href: '/audit' },

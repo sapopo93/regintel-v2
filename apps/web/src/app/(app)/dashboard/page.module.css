@@ -1,0 +1,331 @@
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.main {
+  margin-left: var(--sidebar-width);
+  padding: var(--space-8);
+  flex: 1;
+  background-color: var(--color-white);
+}
+
+.loading,
+.error {
+  padding: var(--space-8);
+  text-align: center;
+  font-size: var(--text-lg);
+  color: var(--color-slate-600);
+}
+
+.error {
+  color: var(--color-charcoal);
+  font-weight: var(--font-semibold);
+}
+
+/* Totals Section */
+
+.totalsSection {
+  margin-bottom: var(--space-8);
+}
+
+.totalsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.totalCard {
+  padding: var(--space-4);
+  background-color: var(--color-white);
+  border: 1px solid var(--color-slate-200);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  text-align: center;
+}
+
+.totalLabel {
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  color: var(--color-slate-600);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-2);
+}
+
+.totalValue {
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--color-charcoal);
+}
+
+.readinessTextRed {
+  color: #dc2626;
+}
+
+.readinessTextAmber {
+  color: #d97706;
+}
+
+.readinessTextGreen {
+  color: #16a34a;
+}
+
+.severityCritical {
+  color: #dc2626;
+}
+
+.severityHigh {
+  color: #ea580c;
+}
+
+.severityMedium {
+  color: #d97706;
+}
+
+.severityLow {
+  color: var(--color-slate-600);
+}
+
+.attentionBanner {
+  padding: var(--space-3) var(--space-4);
+  background-color: #fffbeb;
+  border: 1px solid #d97706;
+  border-radius: var(--radius-md);
+  color: #92400e;
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+}
+
+/* Expiring Evidence Section */
+
+.expiringSection {
+  margin-bottom: var(--space-8);
+}
+
+.sectionTitle {
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--color-charcoal);
+  margin-bottom: var(--space-4);
+}
+
+.expiringList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.expiringItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--color-white);
+  border: 1px solid var(--color-slate-200);
+  border-radius: var(--radius-sm);
+}
+
+.expiringOverdue {
+  border-color: #fca5a5;
+  background-color: #fef2f2;
+}
+
+.expiringDetails {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.expiringFileName {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-charcoal);
+}
+
+.expiringMeta {
+  font-size: var(--text-xs);
+  color: var(--color-slate-600);
+}
+
+.expiringStatus {
+  flex-shrink: 0;
+  margin-left: var(--space-4);
+}
+
+.overdueTag {
+  display: inline-block;
+  padding: 2px 8px;
+  background-color: #dc2626;
+  color: var(--color-white);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  border-radius: var(--radius-sm);
+}
+
+.expiryTag {
+  display: inline-block;
+  padding: 2px 8px;
+  background-color: #d97706;
+  color: var(--color-white);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  border-radius: var(--radius-sm);
+}
+
+/* Facility Cards Section */
+
+.facilitiesSection {
+  margin-bottom: var(--space-8);
+}
+
+.facilityGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--space-6);
+}
+
+.facilityCard {
+  padding: var(--space-6);
+  border: 1px solid var(--color-slate-200);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: box-shadow 0.2s, border-color 0.2s;
+  background-color: var(--color-white);
+}
+
+.facilityCard:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-color: var(--color-slate-300);
+}
+
+.facilityCardRed {
+  background-color: #fef2f2;
+  border-color: #fca5a5;
+}
+
+.facilityCardRed:hover {
+  border-color: #f87171;
+}
+
+.facilityCardAmber {
+  background-color: #fffbeb;
+  border-color: #fcd34d;
+}
+
+.facilityCardAmber:hover {
+  border-color: #f59e0b;
+}
+
+.facilityCardGreen {
+  background-color: #f0fdf4;
+  border-color: #86efac;
+}
+
+.facilityCardGreen:hover {
+  border-color: #4ade80;
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-4);
+}
+
+.facilityName {
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--color-charcoal);
+  flex: 1;
+  margin-right: var(--space-3);
+}
+
+.readinessBadge {
+  flex-shrink: 0;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-white);
+}
+
+.badgeRed {
+  background-color: #dc2626;
+}
+
+.badgeAmber {
+  background-color: #d97706;
+}
+
+.badgeGreen {
+  background-color: #16a34a;
+}
+
+.cardMetrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.metricLabel {
+  font-size: var(--text-xs);
+  color: var(--color-slate-600);
+}
+
+.metricValue {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-charcoal);
+}
+
+.attentionCallout {
+  padding: var(--space-3);
+  background-color: rgba(217, 119, 6, 0.08);
+  border: 1px solid #d97706;
+  border-radius: var(--radius-sm);
+  margin-top: var(--space-2);
+}
+
+.attentionIcon {
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  color: #92400e;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.attentionReasons {
+  margin: var(--space-2) 0 0 var(--space-4);
+  padding: 0;
+  list-style: disc;
+}
+
+.attentionReasons li {
+  font-size: var(--text-xs);
+  color: #92400e;
+  margin-bottom: var(--space-1);
+}
+
+.attentionReasons li:last-child {
+  margin-bottom: 0;
+}
+
+.empty {
+  text-align: center;
+  padding: var(--space-8);
+  color: var(--color-slate-600);
+}
+
+.empty p {
+  margin-bottom: var(--space-2);
+}

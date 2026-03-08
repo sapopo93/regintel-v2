@@ -66,6 +66,9 @@ export default function ExportsPage() {
     if (value === 'BLUE_OCEAN_AUDIT') {
       return 'Blue Ocean Report (Audit Pack — Internal)';
     }
+    if (value === 'INSPECTOR_PACK') {
+      return 'Inspector Evidence Pack';
+    }
     if (value === 'CSV') return 'CSV (Spreadsheet)';
     if (value === 'PDF') return 'PDF (Document)';
     return value;

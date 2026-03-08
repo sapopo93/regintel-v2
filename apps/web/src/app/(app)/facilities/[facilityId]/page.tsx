@@ -24,8 +24,9 @@ import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { MetadataBar } from '@/components/constitutional/MetadataBar';
+import { ReadinessChecklist } from '@/components/journey/ReadinessChecklist';
 import { apiClient, getValidatedApiBaseUrl } from '@/lib/api/client';
-import type { FacilityDetailResponse, EvidenceListResponse, ScanStatus } from '@/lib/api/types';
+import type { FacilityDetailResponse, EvidenceListResponse, ScanStatus, ReadinessJourneyResponse, DocumentAuditSummary } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
 import styles from './page.module.css';
 
@@ -48,10 +49,17 @@ export default function FacilityDetailPage() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [evidenceType, setEvidenceType] = useState('POLICY'); // Default to POLICY (most common)
   const [description, setDescription] = useState('');
+  const [expiresAt, setExpiresAt] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [lastUploadScanStatus, setLastUploadScanStatus] = useState<ScanStatus | null>(null);
   const [uploadProgress, setUploadProgress] = useState<{ completed: number; total: number; failures: string[] } | null>(null);
+
+  // Readiness journey state
+  const [journeyData, setJourneyData] = useState<ReadinessJourneyResponse | null>(null);
+
+  // Document audit state (per evidence record)
+  const [auditResults, setAuditResults] = useState<Map<string, DocumentAuditSummary>>(new Map());
 
   // CQC report sync state
   const [syncing, setSyncing] = useState(false);
@@ -72,12 +80,31 @@ export default function FacilityDetailPage() {
     Promise.all([
       apiClient.getFacility(facilityId),
       apiClient.getFacilityEvidence(facilityId),
+      apiClient.getReadinessJourney(facilityId).catch(() => null),
     ])
-      .then(([facility, evidence]) => {
+      .then(([facility, evidence, journey]) => {
         validateConstitutionalRequirements(facility, { strict: true });
         validateConstitutionalRequirements(evidence, { strict: true });
         setFacilityData(facility);
         setEvidenceData(evidence);
+        if (journey) setJourneyData(journey);
+
+        // Fetch document audits for each evidence record
+        const auditPromises = evidence.evidence.map(async (record) => {
+          try {
+            const audit = await apiClient.getDocumentAudit(record.evidenceRecordId);
+            return { id: record.evidenceRecordId, audit };
+          } catch {
+            return null;
+          }
+        });
+        Promise.all(auditPromises).then((results) => {
+          const map = new Map<string, DocumentAuditSummary>();
+          for (const r of results) {
+            if (r?.audit?.status) map.set(r.id, r.audit);
+          }
+          setAuditResults(map);
+        });
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -153,6 +180,7 @@ export default function FacilityDetailPage() {
       evidenceType,
       fileName: file.name,
       description: description.trim() || undefined,
+      expiresAt: expiresAt || undefined,
     });
   };
 
@@ -191,6 +219,7 @@ export default function FacilityDetailPage() {
       // All succeeded — reset form
       setShowUploadForm(false);
       setDescription('');
+      setExpiresAt('');
       setEvidenceType('POLICY');
     }
 
@@ -309,6 +338,19 @@ export default function FacilityDetailPage() {
           snapshotId={facilityData.snapshotId}
           ingestionStatus={facilityData.ingestionStatus}
         />
+
+        {journeyData && (
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>Readiness Journey</h2>
+            <ReadinessChecklist
+              steps={journeyData.steps}
+              completedCount={journeyData.completedCount}
+              totalCount={journeyData.totalCount}
+              progressPercent={journeyData.progressPercent}
+              nextRecommendedAction={journeyData.nextRecommendedAction}
+            />
+          </section>
+        )}
 
         <section className={styles.section}>
           {cqcSyncing && (
@@ -472,6 +514,21 @@ export default function FacilityDetailPage() {
                 />
               </div>
 
+              <div className={styles.formGroup}>
+                <label htmlFor="expiresAt" className={styles.label}>
+                  Expiry Date (optional — for certificates, training records)
+                </label>
+                <input
+                  id="expiresAt"
+                  type="date"
+                  value={expiresAt}
+                  onChange={(e) => setExpiresAt(e.target.value)}
+                  className={styles.select}
+                  disabled={uploading}
+                  data-testid="expires-at-input"
+                />
+              </div>
+
               {uploadProgress && (
                 <div className={styles.uploadProgressBar}>
                   <div className={styles.uploadProgressLabel}>
@@ -505,36 +562,83 @@ export default function FacilityDetailPage() {
             {evidenceData.evidence.length === 0 ? (
               <div className={styles.empty}>No evidence uploaded yet.</div>
             ) : (
-              evidenceData.evidence.map((record) => (
-                <div key={record.evidenceRecordId} className={styles.evidenceCard}>
-                  <div className={styles.evidenceCardHeader}>
-                    <h4 className={styles.evidenceTitle}>{record.fileName}</h4>
-                    <div className={styles.evidenceActions}>
-                      <button
-                        className={styles.downloadButton}
-                        onClick={() => handleDownloadEvidence(record.blobHash, record.fileName)}
-                        data-testid={`download-${record.evidenceRecordId}`}
-                      >
-                        Download
-                      </button>
-                      <button
-                        className={styles.removeButton}
-                        onClick={() => handleDeleteEvidence(record.evidenceRecordId, record.fileName)}
-                        data-testid={`remove-${record.evidenceRecordId}`}
-                      >
-                        Remove
-                      </button>
+              evidenceData.evidence.map((record) => {
+                const audit = auditResults.get(record.evidenceRecordId) || record.documentAudit;
+                const expiryInfo = record.expiresAt ? (() => {
+                  const daysUntil = Math.ceil((new Date(record.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                  return { daysUntil, isOverdue: daysUntil < 0 };
+                })() : null;
+
+                return (
+                  <div key={record.evidenceRecordId} className={styles.evidenceCard}>
+                    <div className={styles.evidenceCardHeader}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                        <h4 className={styles.evidenceTitle}>{record.fileName}</h4>
+                        {audit?.status === 'COMPLETED' && audit.overallResult && (
+                          <span
+                            className={styles.auditBadge}
+                            data-result={audit.overallResult}
+                            title={`Compliance: ${audit.complianceScore ?? 0}%`}
+                          >
+                            {audit.overallResult === 'PASS' ? 'Pass' : audit.overallResult === 'NEEDS_IMPROVEMENT' ? 'Needs Improvement' : 'Critical Gaps'}
+                            {audit.complianceScore != null && ` (${audit.complianceScore}%)`}
+                          </span>
+                        )}
+                        {audit?.status === 'PENDING' && (
+                          <span className={styles.auditBadgePending}>Audit pending...</span>
+                        )}
+                        {expiryInfo && (
+                          <span
+                            className={expiryInfo.isOverdue ? styles.expiryBadgeOverdue : expiryInfo.daysUntil <= 14 ? styles.expiryBadgeWarning : styles.expiryBadge}
+                          >
+                            {expiryInfo.isOverdue
+                              ? `OVERDUE: expired ${Math.abs(expiryInfo.daysUntil)} days ago`
+                              : `Expires in ${expiryInfo.daysUntil} days`}
+                          </span>
+                        )}
+                      </div>
+                      <div className={styles.evidenceActions}>
+                        <button
+                          className={styles.downloadButton}
+                          onClick={() => handleDownloadEvidence(record.blobHash, record.fileName)}
+                          data-testid={`download-${record.evidenceRecordId}`}
+                        >
+                          Download
+                        </button>
+                        <button
+                          className={styles.removeButton}
+                          onClick={() => handleDeleteEvidence(record.evidenceRecordId, record.fileName)}
+                          data-testid={`remove-${record.evidenceRecordId}`}
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
+                    <div className={styles.evidenceDetails}>
+                      <span className={styles.evidenceDetail}>Type: {record.mimeType}</span>
+                      <span className={styles.evidenceDetail}>
+                        Uploaded: {new Date(record.uploadedAt).toLocaleDateString()}
+                      </span>
+                      <span className={styles.evidenceDetail}>Evidence: {record.evidenceType}</span>
+                    </div>
+                    {audit?.status === 'COMPLETED' && audit.summary && (
+                      <div className={styles.auditSummary}>
+                        <p className={styles.auditSummaryText}>{audit.summary}</p>
+                        {(audit.criticalFindings ?? 0) > 0 && (
+                          <span className={styles.auditFindingCount} data-severity="critical">
+                            {audit.criticalFindings} critical
+                          </span>
+                        )}
+                        {(audit.highFindings ?? 0) > 0 && (
+                          <span className={styles.auditFindingCount} data-severity="high">
+                            {audit.highFindings} high
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div className={styles.evidenceDetails}>
-                    <span className={styles.evidenceDetail}>Type: {record.mimeType}</span>
-                    <span className={styles.evidenceDetail}>
-                      Uploaded: {new Date(record.uploadedAt).toLocaleDateString()}
-                    </span>
-                    <span className={styles.evidenceDetail}>Evidence: {record.evidenceType}</span>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </section>

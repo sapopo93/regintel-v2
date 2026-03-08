@@ -116,25 +116,71 @@ export default function EvidencePage() {
                 {data.evidence.length === 0 ? (
                   <div className={styles.empty}>No evidence records found</div>
                 ) : (
-                  data.evidence.map((record) => (
-                    <div key={record.evidenceRecordId} className={styles.evidenceCard}>
-                      <div className={styles.evidenceHeader}>
-                        <h3 className={styles.evidenceTitle}>{record.fileName}</h3>
-                        <div className={styles.statusBadge}>{record.evidenceType}</div>
+                  data.evidence.map((record) => {
+                    const audit = record.documentAudit;
+                    const expiryInfo = record.expiresAt ? (() => {
+                      const daysUntil = Math.ceil((new Date(record.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                      return { daysUntil, isOverdue: daysUntil < 0 };
+                    })() : null;
+
+                    return (
+                      <div key={record.evidenceRecordId} className={styles.evidenceCard}>
+                        <div className={styles.evidenceHeader}>
+                          <h3 className={styles.evidenceTitle}>{record.fileName}</h3>
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            {audit?.status === 'COMPLETED' && audit.overallResult && (
+                              <span className={`${styles.statusBadge} ${
+                                audit.overallResult === 'PASS' ? styles.auditPass :
+                                audit.overallResult === 'NEEDS_IMPROVEMENT' ? styles.auditAmber :
+                                styles.auditRed
+                              }`}>
+                                {audit.complianceScore != null ? `${audit.complianceScore}%` : audit.overallResult}
+                              </span>
+                            )}
+                            {audit?.status === 'PENDING' && (
+                              <span className={`${styles.statusBadge} ${styles.auditPending}`}>Auditing...</span>
+                            )}
+                            {expiryInfo && (
+                              <span className={`${styles.statusBadge} ${
+                                expiryInfo.isOverdue ? styles.auditRed :
+                                expiryInfo.daysUntil <= 14 ? styles.auditAmber : ''
+                              }`}>
+                                {expiryInfo.isOverdue
+                                  ? `OVERDUE (${Math.abs(expiryInfo.daysUntil)}d)`
+                                  : `Expires ${expiryInfo.daysUntil}d`}
+                              </span>
+                            )}
+                            <div className={styles.statusBadge}>{record.evidenceType}</div>
+                          </div>
+                        </div>
+
+                        <dl className={styles.evidenceMeta}>
+                          <dt>File Type</dt>
+                          <dd>{record.mimeType}</dd>
+
+                          <dt>Uploaded At</dt>
+                          <dd>{new Date(record.uploadedAt).toLocaleString()}</dd>
+
+                          <dt>File Size</dt>
+                          <dd>{formatBytes(record.sizeBytes)}</dd>
+                        </dl>
+
+                        {audit?.status === 'COMPLETED' && audit.summary && (
+                          <div className={styles.auditSummarySection}>
+                            <p className={styles.auditSummaryText}>{audit.summary}</p>
+                            <div className={styles.auditFindingCounts}>
+                              {(audit.criticalFindings ?? 0) > 0 && (
+                                <span className={styles.auditCountCritical}>{audit.criticalFindings} critical</span>
+                              )}
+                              {(audit.highFindings ?? 0) > 0 && (
+                                <span className={styles.auditCountHigh}>{audit.highFindings} high</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
-
-                      <dl className={styles.evidenceMeta}>
-                        <dt>File Type</dt>
-                        <dd>{record.mimeType}</dd>
-
-                        <dt>Uploaded At</dt>
-                        <dd>{new Date(record.uploadedAt).toLocaleString()}</dd>
-
-                        <dt>File Size</dt>
-                        <dd>{formatBytes(record.sizeBytes)}</dd>
-                      </dl>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             )}

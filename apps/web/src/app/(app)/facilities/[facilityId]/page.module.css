@@ -421,3 +421,92 @@
   border-radius: 3px;
   transition: width 0.3s ease;
 }
+
+/* Audit badge - result-based colors via data attribute */
+.auditBadge[data-result="PASS"] {
+  background: #ecfdf3;
+  color: #166534;
+}
+
+.auditBadge[data-result="NEEDS_IMPROVEMENT"] {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.auditBadge[data-result="CRITICAL_GAPS"] {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.auditBadgePending {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.auditSummaryText {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #475569;
+}
+
+.auditFindingCount {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 6px;
+  margin-right: 6px;
+}
+
+.auditFindingCount[data-severity="critical"] {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.auditFindingCount[data-severity="high"] {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+/* Expiry badges */
+.expiryBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.expiryBadgeWarning {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.expiryBadgeOverdue {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #fef2f2;
+  color: #b91c1c;
+}

@@ -45,6 +45,13 @@ Source of truth for UI routes and API endpoints. Update this file when navigatio
       ]
     },
     {
+      "route": "/dashboard",
+      "status": "LIVE",
+      "endpoints": [
+        "GET /v1/providers/:providerId/dashboard"
+      ]
+    },
+    {
       "route": "/facilities?provider=:providerId",
       "status": "LIVE",
       "endpoints": [
@@ -161,6 +168,15 @@ Source of truth for UI routes and API endpoints. Update this file when navigatio
         "GET /v1/providers/:providerId/overview?facility=:facilityId",
         "GET /v1/providers/:providerId/audit-trail"
       ]
+    },
+    {
+      "route": "/intelligence?provider=:providerId",
+      "status": "LIVE",
+      "endpoints": [
+        "GET /v1/providers/:providerId/cqc-intelligence",
+        "POST /v1/providers/:providerId/cqc-intelligence/:alertId/dismiss",
+        "POST /v1/cqc-intelligence/poll"
+      ]
     }
   ],
   "clientEndpoints": [
@@ -193,7 +209,15 @@ Source of truth for UI routes and API endpoints. Update this file when navigatio
     "/v1/facilities/:facilityId/sync-latest-report",
     "/v1/facilities/onboard-bulk",
     "/v1/providers/:providerId/saf34-coverage?facility=:facilityId",
-    "/v1/cqc/locations/${encodeURIComponent(locationId)}"
+    "/v1/cqc/locations/${encodeURIComponent(locationId)}",
+    "/v1/facilities/:facilityId/evidence/${evidenceId}",
+    "/v1/evidence/${evidenceRecordId}/document-audit",
+    "/v1/providers/:providerId/dashboard",
+    "/v1/providers/:providerId/expiring-evidence?days=${days}",
+    "/v1/facilities/:facilityId/readiness-journey",
+    "/v1/providers/:providerId/cqc-intelligence",
+    "/v1/providers/:providerId/cqc-intelligence/:alertId/dismiss",
+    "/v1/cqc-intelligence/poll"
   ]
 }
 ```
