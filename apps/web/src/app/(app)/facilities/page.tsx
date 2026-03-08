@@ -1,5 +1,6 @@
 'use client';
 
+type SidebarData = { providerName: string; snapshotDate: string; topicCatalogVersion: string; prsLogicVersion: string };
 
 /**
  * Facilities List Page
@@ -121,7 +122,7 @@ export default function FacilitiesPage() {
   };
 
   // Always render Sidebar for navigation, even during loading/error states
-  let sidebarProps: { providerName: string; snapshotDate: string; topicCatalogVersion: string; prsLogicVersion: string };
+  let sidebarProps: SidebarData;
   if (data) {
     sidebarProps = {
       providerName: data.provider?.providerName || 'Provider',
