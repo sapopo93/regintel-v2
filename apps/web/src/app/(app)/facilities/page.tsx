@@ -1,21 +1,5 @@
 'use client';
 
-type SidebarData = { providerName: string; snapshotDate: string; topicCatalogVersion: string; prsLogicVersion: string };
-
-/**
- * Facilities List Page
- *
- * Constitutional requirements satisfied:
- * - Version: Topic Catalog v1, PRS Logic v1
- * - Hash: Both catalog and logic hashes displayed
- * - Time: Snapshot timestamp
- * - Domain: CQC
- *
- * Facts only - no interpretation:
- * - Facility list with details
- * - Add new facility action
- */
-
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
@@ -25,6 +9,8 @@ import { apiClient } from '@/lib/api/client';
 import type { FacilitiesListResponse, Facility, UpdateFacilityRequest } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
 import styles from './page.module.css';
+
+type SidebarData = { providerName: string; snapshotDate: string; topicCatalogVersion: string; prsLogicVersion: string };
 
 export default function FacilitiesPage() {
   const searchParams = useSearchParams();
