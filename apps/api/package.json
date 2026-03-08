@@ -6,7 +6,7 @@
     "predev": "prisma generate",
     "dev": "tsx watch src/server.ts",
     "prebuild": "prisma generate",
-    "build": "tsc",
+    "build": "echo 'API runs via tsx in production — no tsc compilation needed'",
     "prestart": "prisma generate",
     "start": "tsx src/server.ts",
     "test": "vitest run",

@@ -9,7 +9,9 @@
     "validate:versions": "tsx scripts/validate-version-immutability.ts",
     "api:dev": "cd apps/api && pnpm dev",
     "web:dev": "cd apps/web && pnpm dev",
-    "playwright": "pnpm --dir apps/web playwright test"
+    "playwright": "pnpm --dir apps/web playwright test",
+    "build": "pnpm --dir apps/web build && pnpm --dir apps/api build",
+    "deploy:prod": "bash deploy.sh"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
