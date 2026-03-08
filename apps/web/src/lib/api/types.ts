@@ -132,14 +132,13 @@ export interface EvidenceRecord {
   providerId: string;
   facilityId: string;
   blobHash: string;
-  mime?: string;
-  size?: number;
   mimeType: string;
   sizeBytes: number;
   evidenceType: string;
   fileName: string;
   description?: string;
   uploadedAt: string;
+  expiresAt?: string;
   documentAudit?: DocumentAuditSummary;
 }
 
@@ -488,6 +487,7 @@ export interface CreateFacilityEvidenceRequest {
   evidenceType: string;
   fileName: string;
   description?: string;
+  expiresAt?: string;
 }
 
 export interface CreateFacilityEvidenceResponse extends ConstitutionalMetadata {
@@ -564,6 +564,81 @@ export interface Saf34CoverageResponse extends ConstitutionalMetadata {
     total: number;
     covered: number;
     percentage: number;
+  };
+}
+
+/**
+ * Provider dashboard (Feature 1: Compliance Command Centre)
+ */
+export interface FacilitySummary {
+  facilityId: string;
+  facilityName: string;
+  readinessScore: number;
+  evidenceCoverage: number;
+  evidenceCount: number;
+  findingsBySeverity: { critical: number; high: number; medium: number; low: number };
+  lastEvidenceUploadDate: string | null;
+  lastMockSessionDate: string | null;
+  completedMockSessions: number;
+  needsAttention: boolean;
+  attentionReasons: string[];
+}
+
+export interface ProviderDashboardResponse extends ConstitutionalMetadata {
+  providerId: string;
+  providerName: string;
+  facilities: FacilitySummary[];
+  totals: {
+    facilities: number;
+    averageReadiness: number;
+    totalFindings: { critical: number; high: number; medium: number; low: number };
+    facilitiesNeedingAttention: number;
+  };
+  expiringEvidence: ExpiringEvidenceItem[];
+}
+
+/**
+ * Evidence Intelligence (Feature 2: Expiry Tracking)
+ */
+export interface ExpiringEvidenceItem {
+  evidenceRecordId: string;
+  facilityId: string;
+  facilityName: string;
+  fileName: string;
+  evidenceType: string;
+  expiresAt: string;
+  daysUntilExpiry: number;
+  isOverdue: boolean;
+}
+
+export interface ExpiringEvidenceResponse extends ConstitutionalMetadata {
+  items: ExpiringEvidenceItem[];
+  totalCount: number;
+}
+
+/**
+ * Readiness Journey (Feature 3: Guided Onboarding)
+ */
+export interface ReadinessStep {
+  id: string;
+  label: string;
+  description: string;
+  status: 'complete' | 'in-progress' | 'not-started';
+  actionLabel?: string;
+  actionHref?: string;
+}
+
+export interface ReadinessJourneyResponse extends ConstitutionalMetadata {
+  facilityId: string;
+  facilityName: string;
+  steps: ReadinessStep[];
+  completedCount: number;
+  totalCount: number;
+  progressPercent: number;
+  nextRecommendedAction?: {
+    label: string;
+    href: string;
+    reason: string;
   };
 }
 

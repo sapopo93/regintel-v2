@@ -15,6 +15,7 @@ Requires `pnpm` (not npm/yarn).
 ```bash
 pnpm install                      # Install dependencies
 pnpm test                         # Run all tests via Vitest (excludes apps/api — see below)
+pnpm build                        # Build both web and api apps
 pnpm gate                         # Run phase gate validation for current phase
 pnpm gate --strict                # CI mode: SKIP treated as failure
 pnpm validate:versions            # Validate version immutability rules
@@ -69,7 +70,7 @@ Test names follow the pattern `<phase>:<gate>`. Run all gates with `pnpm gate` (
 
 ## Environment Variables
 
-The root `.env` file contains all required variables. Authentication is migrating from legacy tokens to Clerk:
+Copy `.env.example` to `.env` and fill in values. Key variable groups:
 
 ```bash
 # Clerk Authentication (production auth — see docs/CLERK_SETUP.md)
@@ -77,27 +78,45 @@ NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_xxx
 CLERK_SECRET_KEY=sk_test_xxx
 CLERK_WEBHOOK_SECRET=whsec_xxx
 
-# Legacy tokens (DEPRECATED — still used by E2E tests and dev)
-FOUNDER_TOKEN=demo-founder-token-12345
-PROVIDER_TOKEN=demo-provider-token-12345
+# Clerk test tokens (E2E/dev — bypasses real Clerk auth)
+CLERK_TEST_TOKEN=changeme-test-token
+CLERK_TEST_USER_ID=clerk-test-user
+CLERK_TEST_ROLE=FOUNDER
+CLERK_TEST_TENANT_ID=demo
 
 # API
 NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
-ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
 TENANT_ID=demo
 PORT=3001
 
-# Database (required for integration tests and API)
+# Database (Postgres — required for API and integration tests)
 DATABASE_URL=<your-postgres-connection-string>
+TEST_DB_ADMIN_URL=<your-test-admin-connection-string>
+TEST_DB_APP_URL=<your-test-app-connection-string>
+
+# Redis (BullMQ job queues — falls back to in-memory if unavailable)
+REDIS_URL=redis://localhost:6379
+FORCE_IN_MEMORY_QUEUE=false
 
 # CQC API (optional — unauthenticated works with lower rate limits)
 CQC_API_KEY=your-cqc-api-key-here
 
-# Blob Storage
+# Evidence Blob Storage
 BLOB_STORAGE_PATH=/var/regintel/evidence-blobs
 
-# E2E test mode — bypasses Clerk middleware when true
-E2E_TEST_MODE=true
+# ClamAV virus scanning
+CLAMAV_ENABLED=true
+CLAMD_SOCKET=/var/run/clamav/clamd.ctl
+
+# Tesseract OCR
+TESSERACT_ENABLED=true
+TESSERACT_LANG=eng
+
+# AI (Gemini — advisory only, never authoritative)
+GEMINI_API_KEY=your-key
+GEMINI_MODEL_ID=gemini-2.0-flash
+AI_CONFIDENCE_THRESHOLD=0.7
+ENABLE_AI_INSIGHTS=true
 ```
 
 ## Architecture
@@ -232,6 +251,14 @@ Key endpoint groups:
 ### Database (apps/api/prisma/schema.prisma)
 
 Prisma ORM with PostgreSQL. Key models: `ProviderContextSnapshot`, `MockInspectionSession`, `SessionEvent`, `DraftFinding`, `Finding`, `EvidenceBlob`, `EvidenceRecord`, `AuditEvent`. RLS enforced at DB layer.
+
+### Infrastructure Dependencies
+
+- **PostgreSQL** — Primary data store with RLS
+- **Redis + BullMQ** — Background job queues (falls back to in-memory via `FORCE_IN_MEMORY_QUEUE=true`)
+- **ClamAV** — Virus scanning for evidence blob uploads (optional, controlled by `CLAMAV_ENABLED`)
+- **Tesseract** — OCR for evidence document processing (optional, controlled by `TESSERACT_ENABLED`)
+- **Gemini AI** — Advisory AI insights (never authoritative, controlled by `ENABLE_AI_INSIGHTS`)
 
 ## Key Files
 

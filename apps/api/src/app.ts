@@ -611,14 +611,13 @@ function mapEvidenceRecord(record: EvidenceRecordRecord, documentAudit?: Documen
     providerId: record.providerId,
     facilityId: record.facilityId,
     blobHash: record.blobHash,
-    mime: record.mimeType,
-    size: record.sizeBytes,
     mimeType: record.mimeType,
     sizeBytes: record.sizeBytes,
     evidenceType: record.evidenceType,
     fileName: record.fileName,
     description: record.description,
     uploadedAt: record.uploadedAt,
+    ...(record.expiresAt ? { expiresAt: record.expiresAt } : {}),
     ...(documentAudit ? { documentAudit } : {}),
   };
 }
@@ -1006,6 +1005,362 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       openFindings,
     }, reportContext);
   });
+
+  /**
+   * GET /v1/providers/:providerId/dashboard
+   *
+   * Provider-level compliance command centre.
+   * Aggregates readiness data across all facilities.
+   */
+  app.get('/v1/providers/:providerId/dashboard', asyncRoute(async (req, res) => {
+    const ctx = getContext(req);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId }).strip(),
+    });
+    if (!parsed) return;
+    const { providerId } = parsed.params as { providerId: string };
+
+    const provider = await store.getProviderById(ctx, providerId);
+    if (!provider) {
+      sendError(res, 404, 'Provider not found');
+      return;
+    }
+
+    const facilities = await store.listFacilitiesByProvider(ctx, providerId);
+    const allFindings = await store.listFindingsByProvider(ctx, providerId);
+    const allSessions = await store.listSessionsByProvider(ctx, providerId);
+    const totalExpectedDocuments = getAllRequiredEvidenceTypes().length;
+
+    const facilitySummaries = await Promise.all(facilities.map(async (facility) => {
+      const evidence = await store.listEvidenceByFacility(ctx, facility.id);
+      const facilityFindings = allFindings.filter(f => f.facilityId === facility.id);
+      const facilitySessions = allSessions.filter(s => s.facilityId === facility.id);
+      const completedSessions = facilitySessions.filter(s => s.status === 'COMPLETED');
+
+      const evidenceCount = evidence.length;
+      const evidenceCoverage = totalExpectedDocuments > 0
+        ? Math.min(100, Math.round((evidenceCount / totalExpectedDocuments) * 100))
+        : evidenceCount > 0 ? 100 : 0;
+
+      const findingsBySeverity = {
+        critical: facilityFindings.filter(f => f.severity === 'CRITICAL').length,
+        high: facilityFindings.filter(f => f.severity === 'HIGH').length,
+        medium: facilityFindings.filter(f => f.severity === 'MEDIUM').length,
+        low: facilityFindings.filter(f => f.severity === 'LOW').length,
+      };
+
+      const lastEvidenceUpload = evidence.length > 0
+        ? evidence.reduce((latest, e) => e.uploadedAt > latest ? e.uploadedAt : latest, evidence[0].uploadedAt)
+        : null;
+
+      const lastMockSession = completedSessions.length > 0
+        ? completedSessions.reduce((latest, s) => {
+            const d = s.completedAt ?? s.createdAt;
+            return d > latest ? d : latest;
+          }, completedSessions[0].completedAt ?? completedSessions[0].createdAt)
+        : null;
+
+      // Readiness score: weighted combination of evidence coverage and mock completion
+      const mockCoverage = TOPICS.length > 0
+        ? Math.round((completedSessions.length / TOPICS.length) * 100)
+        : 0;
+      const readinessScore = Math.round(evidenceCoverage * 0.6 + mockCoverage * 0.4);
+
+      const attentionReasons: string[] = [];
+      if (findingsBySeverity.critical > 0) attentionReasons.push('Has critical findings');
+      if (lastEvidenceUpload) {
+        const daysSinceUpload = Math.floor((Date.now() - new Date(lastEvidenceUpload).getTime()) / (1000 * 60 * 60 * 24));
+        if (daysSinceUpload > 14) attentionReasons.push(`No evidence uploads in ${daysSinceUpload} days`);
+      } else {
+        attentionReasons.push('No evidence uploaded');
+      }
+      const inProgressSessions = facilitySessions.filter(s => s.status === 'IN_PROGRESS');
+      if (inProgressSessions.length > 0) attentionReasons.push('Incomplete practice inspections');
+
+      return {
+        facilityId: facility.id,
+        facilityName: facility.facilityName,
+        readinessScore,
+        evidenceCoverage,
+        evidenceCount,
+        findingsBySeverity,
+        lastEvidenceUploadDate: lastEvidenceUpload,
+        lastMockSessionDate: lastMockSession,
+        completedMockSessions: completedSessions.length,
+        needsAttention: attentionReasons.length > 0,
+        attentionReasons,
+      };
+    }));
+
+    // Sort worst-first
+    facilitySummaries.sort((a, b) => a.readinessScore - b.readinessScore);
+
+    const totalFindings = {
+      critical: facilitySummaries.reduce((sum, f) => sum + f.findingsBySeverity.critical, 0),
+      high: facilitySummaries.reduce((sum, f) => sum + f.findingsBySeverity.high, 0),
+      medium: facilitySummaries.reduce((sum, f) => sum + f.findingsBySeverity.medium, 0),
+      low: facilitySummaries.reduce((sum, f) => sum + f.findingsBySeverity.low, 0),
+    };
+
+    const averageReadiness = facilitySummaries.length > 0
+      ? Math.round(facilitySummaries.reduce((sum, f) => sum + f.readinessScore, 0) / facilitySummaries.length)
+      : 0;
+
+    // Collect expiring evidence across all facilities
+    const now = Date.now();
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+    const expiringEvidence: Array<{
+      evidenceRecordId: string;
+      facilityId: string;
+      facilityName: string;
+      fileName: string;
+      evidenceType: string;
+      expiresAt: string;
+      daysUntilExpiry: number;
+      isOverdue: boolean;
+    }> = [];
+
+    for (const facility of facilities) {
+      const evidence = await store.listEvidenceByFacility(ctx, facility.id);
+      for (const record of evidence) {
+        if (record.expiresAt) {
+          const expiresTime = new Date(record.expiresAt).getTime();
+          const daysUntilExpiry = Math.ceil((expiresTime - now) / (1000 * 60 * 60 * 24));
+          if (daysUntilExpiry <= 30) {
+            expiringEvidence.push({
+              evidenceRecordId: record.id,
+              facilityId: facility.id,
+              facilityName: facility.facilityName,
+              fileName: record.fileName,
+              evidenceType: record.evidenceType,
+              expiresAt: record.expiresAt,
+              daysUntilExpiry,
+              isOverdue: daysUntilExpiry < 0,
+            });
+          }
+        }
+      }
+    }
+    expiringEvidence.sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry);
+
+    sendWithMetadata(res, {
+      providerId: provider.providerId,
+      providerName: provider.providerName,
+      facilities: facilitySummaries,
+      totals: {
+        facilities: facilitySummaries.length,
+        averageReadiness,
+        totalFindings,
+        facilitiesNeedingAttention: facilitySummaries.filter(f => f.needsAttention).length,
+      },
+      expiringEvidence,
+    });
+  }));
+
+  /**
+   * GET /v1/providers/:providerId/expiring-evidence
+   *
+   * Returns evidence expiring within N days across all facilities.
+   */
+  app.get('/v1/providers/:providerId/expiring-evidence', asyncRoute(async (req, res) => {
+    const ctx = getContext(req);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId }).strip(),
+      query: z.object({ days: zOptionalQueryString }).strip(),
+    });
+    if (!parsed) return;
+    const { providerId } = parsed.params as { providerId: string };
+    const daysParam = parsed.query.days as string | undefined;
+    const days = daysParam ? parseInt(daysParam, 10) : 30;
+
+    const provider = await store.getProviderById(ctx, providerId);
+    if (!provider) {
+      sendError(res, 404, 'Provider not found');
+      return;
+    }
+
+    const facilities = await store.listFacilitiesByProvider(ctx, providerId);
+    const now = Date.now();
+    const items: Array<{
+      evidenceRecordId: string;
+      facilityId: string;
+      facilityName: string;
+      fileName: string;
+      evidenceType: string;
+      expiresAt: string;
+      daysUntilExpiry: number;
+      isOverdue: boolean;
+    }> = [];
+
+    for (const facility of facilities) {
+      const evidence = await store.listEvidenceByFacility(ctx, facility.id);
+      for (const record of evidence) {
+        if (record.expiresAt) {
+          const expiresTime = new Date(record.expiresAt).getTime();
+          const daysUntilExpiry = Math.ceil((expiresTime - now) / (1000 * 60 * 60 * 24));
+          if (daysUntilExpiry <= days) {
+            items.push({
+              evidenceRecordId: record.id,
+              facilityId: facility.id,
+              facilityName: facility.facilityName,
+              fileName: record.fileName,
+              evidenceType: record.evidenceType,
+              expiresAt: record.expiresAt,
+              daysUntilExpiry,
+              isOverdue: daysUntilExpiry < 0,
+            });
+          }
+        }
+      }
+    }
+
+    items.sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry);
+    sendWithMetadata(res, { items, totalCount: items.length });
+  }));
+
+  /**
+   * GET /v1/facilities/:facilityId/readiness-journey
+   *
+   * Returns the guided readiness checklist for a facility.
+   * All steps are derived from existing data — nothing stored.
+   */
+  app.get('/v1/facilities/:facilityId/readiness-journey', asyncRoute(async (req, res) => {
+    const ctx = getContext(req);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ facilityId: zFacilityId }).strip(),
+    });
+    if (!parsed) return;
+    const { facilityId } = parsed.params as { facilityId: string };
+
+    const facility = await store.getFacilityById(ctx, facilityId);
+    if (!facility) {
+      sendError(res, 404, 'Facility not found');
+      return;
+    }
+
+    const provider = await store.getProviderById(ctx, facility.providerId);
+    const evidence = await store.listEvidenceByFacility(ctx, facilityId);
+    const sessions = (await store.listSessionsByProvider(ctx, facility.providerId))
+      .filter(s => s.facilityId === facilityId);
+    const findings = (await store.listFindingsByProvider(ctx, facility.providerId))
+      .filter(f => f.facilityId === facilityId);
+    const exports = (await store.listExportsByProvider(ctx, facility.providerId, facilityId));
+
+    // Collect audit summaries for document audit step
+    const evidenceIds = evidence.map(e => e.id);
+    const auditSummaries = await listDocumentAuditSummariesByEvidenceRecordIds(ctx.tenantId, evidenceIds);
+    const completedAudits = Array.from(auditSummaries.values()).filter(a => a.status === 'COMPLETED');
+
+    const hasCqcReport = evidence.some(e => e.evidenceType === EvidenceType.CQC_REPORT);
+    const completedSessions = sessions.filter(s => s.status === 'COMPLETED');
+    const criticalFindings = findings.filter(f => f.severity === 'CRITICAL');
+    const totalExpectedDocuments = getAllRequiredEvidenceTypes().length;
+    const evidenceCoverage = totalExpectedDocuments > 0
+      ? Math.min(100, Math.round((evidence.length / totalExpectedDocuments) * 100))
+      : evidence.length > 0 ? 100 : 0;
+    const hasBlueOcean = exports.some(e => e.format === 'BLUE_OCEAN_BOARD' || e.format === 'BLUE_OCEAN_AUDIT');
+
+    const providerId = facility.providerId;
+    const facilityQuery = `provider=${encodeURIComponent(providerId)}&facility=${encodeURIComponent(facilityId)}`;
+
+    const steps = [
+      {
+        id: 'registered',
+        label: 'Location registered',
+        description: 'Location has been added to the system',
+        status: 'complete' as const,
+      },
+      {
+        id: 'cqc-synced',
+        label: 'CQC report synced',
+        description: 'Latest CQC inspection report has been imported',
+        status: hasCqcReport ? 'complete' as const : 'not-started' as const,
+        actionLabel: hasCqcReport ? undefined : 'Sync CQC Report',
+        actionHref: hasCqcReport ? undefined : `/facilities/${encodeURIComponent(facilityId)}?${facilityQuery}`,
+      },
+      {
+        id: 'first-evidence',
+        label: 'First evidence uploaded',
+        description: 'At least one policy, training record, or audit has been uploaded',
+        status: evidence.length > 0 ? 'complete' as const : 'not-started' as const,
+        actionLabel: evidence.length > 0 ? undefined : 'Upload Evidence',
+        actionHref: evidence.length > 0 ? undefined : `/facilities/${encodeURIComponent(facilityId)}?${facilityQuery}`,
+      },
+      {
+        id: 'evidence-critical-mass',
+        label: '3+ evidence documents uploaded',
+        description: 'Enough evidence for meaningful AI audit analysis',
+        status: evidence.length >= 3 ? 'complete' as const : evidence.length > 0 ? 'in-progress' as const : 'not-started' as const,
+        actionLabel: evidence.length < 3 ? 'Upload More Evidence' : undefined,
+        actionHref: evidence.length < 3 ? `/facilities/${encodeURIComponent(facilityId)}?${facilityQuery}` : undefined,
+      },
+      {
+        id: 'first-audit',
+        label: 'First document audit complete',
+        description: 'AI has reviewed at least one uploaded document',
+        status: completedAudits.length > 0 ? 'complete' as const : evidence.length > 0 ? 'in-progress' as const : 'not-started' as const,
+      },
+      {
+        id: 'first-mock',
+        label: 'First practice inspection completed',
+        description: 'A mock inspection session has been completed for this location',
+        status: completedSessions.length > 0 ? 'complete' as const : sessions.length > 0 ? 'in-progress' as const : 'not-started' as const,
+        actionLabel: completedSessions.length === 0 ? 'Start Practice Inspection' : undefined,
+        actionHref: completedSessions.length === 0 ? `/mock-session?${facilityQuery}` : undefined,
+      },
+      {
+        id: 'critical-addressed',
+        label: 'All critical findings addressed',
+        description: 'No unresolved critical-severity findings remain',
+        status: criticalFindings.length === 0 && completedSessions.length > 0
+          ? 'complete' as const
+          : criticalFindings.length > 0 ? 'in-progress' as const : 'not-started' as const,
+        actionLabel: criticalFindings.length > 0 ? 'View Findings' : undefined,
+        actionHref: criticalFindings.length > 0 ? `/findings?${facilityQuery}` : undefined,
+      },
+      {
+        id: 'coverage-50',
+        label: 'Evidence coverage reaches 50%',
+        description: 'Half of required evidence types have been uploaded',
+        status: evidenceCoverage >= 50 ? 'complete' as const : evidenceCoverage > 0 ? 'in-progress' as const : 'not-started' as const,
+      },
+      {
+        id: 'coverage-80',
+        label: 'Evidence coverage reaches 80%',
+        description: 'Strong evidence base — approaching inspection readiness',
+        status: evidenceCoverage >= 80 ? 'complete' as const : evidenceCoverage >= 50 ? 'in-progress' as const : 'not-started' as const,
+      },
+      {
+        id: 'blue-ocean',
+        label: 'Blue Ocean report generated',
+        description: 'Full analyst-grade compliance report has been produced',
+        status: hasBlueOcean ? 'complete' as const : completedSessions.length > 0 ? 'not-started' as const : 'not-started' as const,
+        actionLabel: !hasBlueOcean && completedSessions.length > 0 ? 'Generate Report' : undefined,
+        actionHref: !hasBlueOcean && completedSessions.length > 0 ? `/exports?${facilityQuery}` : undefined,
+      },
+    ];
+
+    const completedCount = steps.filter(s => s.status === 'complete').length;
+    const progressPercent = Math.round((completedCount / steps.length) * 100);
+
+    // Find next recommended action
+    const nextStep = steps.find(s => s.status !== 'complete' && s.actionLabel);
+    const nextRecommendedAction = nextStep ? {
+      label: nextStep.actionLabel!,
+      href: nextStep.actionHref!,
+      reason: nextStep.description,
+    } : undefined;
+
+    sendWithMetadata(res, {
+      facilityId: facility.id,
+      facilityName: facility.facilityName,
+      steps,
+      completedCount,
+      totalCount: steps.length,
+      progressPercent,
+      nextRecommendedAction,
+    });
+  }));
 
   app.get('/v1/providers/:providerId/topics', async (req, res) => {
     const ctx = getContext(req);
@@ -1943,16 +2298,18 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
           evidenceType: zEvidenceType,
           fileName: z.string().trim().min(1),
           description: z.string().trim().min(1).optional(),
+          expiresAt: z.string().trim().min(1).optional(),
         })
         .strip(),
     });
     if (!parsed) return;
     const { facilityId } = parsed.params as { facilityId: string };
-    const { blobHash, evidenceType, fileName, description } = parsed.body as {
+    const { blobHash, evidenceType, fileName, description, expiresAt } = parsed.body as {
       blobHash: string;
       evidenceType: EvidenceType;
       fileName: string;
       description?: string;
+      expiresAt?: string;
     };
 
     const facility = await store.getFacilityById(ctx, facilityId);
@@ -1969,6 +2326,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         evidenceType,
         fileName,
         description,
+        expiresAt,
       });
       const documentType = detectDocumentType(record.fileName, record.mimeType, record.evidenceType);
       let documentAuditSummary = createPendingDocumentAuditSummary(record.id, {
@@ -2975,10 +3333,10 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
   }
 
 //  Global Express error handler 
-app.use((err: any, req: any, res: any, _next: any) => {
+app.use((err: any, _req: any, res: any, _next: any) => {
   console.error('[API] Unhandled route error:', err?.message || err);
   if (!res.headersSent) {
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ ...buildConstitutionalMetadata(), error: 'Internal server error' });
   }
 });
 
