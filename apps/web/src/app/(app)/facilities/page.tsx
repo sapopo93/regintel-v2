@@ -20,6 +20,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { MetadataBar } from '@/components/constitutional/MetadataBar';
 import { apiClient } from '@/lib/api/client';
 import type { FacilitiesListResponse } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';

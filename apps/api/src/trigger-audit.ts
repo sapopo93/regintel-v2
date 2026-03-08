@@ -1,25 +1,58 @@
-import { auditDocument } from './document-auditor';
-import { PrismaClient } from './node_modules/.prisma/client';
+import 'dotenv/config';
+import { PrismaClient } from '@prisma/client';
+import { runDocumentAuditForEvidence } from './document-auditor';
 
 const prisma = new PrismaClient();
 
 async function run() {
-  const evidenceRecordId = 'fa7eb7e8-cb05-4c1d-ae55-36fafde5e903';
-  const tenantId = 'user_3AIES1GCDtCTHiWtOVORHxazY1s';
-  const facilityId = 'user_3AIES1GCDtCTHiWtOVORHxazY1s:facility-2';
-  const providerId = 'user_3AIES1GCDtCTHiWtOVORHxazY1s:provider-1';
+  const evidenceRecordId = process.argv[2];
+  if (!evidenceRecordId) {
+    throw new Error('Usage: tsx src/trigger-audit.ts <evidence-record-id>');
+  }
 
-  console.log('[TRIGGER] Starting audit for', evidenceRecordId);
-  const result = await auditDocument({ evidenceRecordId, tenantId, facilityId, providerId, prisma });
-  console.log('[RESULT]', JSON.stringify({ 
-    overallResult: result.overallResult, 
-    complianceScore: result.complianceScore,
-    findings: result.findings.length,
-    summary: result.summary
-  }, null, 2));
+  const record = await prisma.evidenceRecord.findUnique({
+    where: { id: evidenceRecordId },
+    include: { blob: true },
+  });
+
+  if (!record) {
+    throw new Error(`Evidence record not found: ${evidenceRecordId}`);
+  }
+
+  const metadata = (record.metadata ?? {}) as Record<string, unknown>;
+  const facilityId = typeof metadata.facilityId === 'string' ? metadata.facilityId : '';
+  const providerId = typeof metadata.providerId === 'string' ? metadata.providerId : '';
+  const fileName = typeof metadata.fileName === 'string' ? metadata.fileName : record.title;
+  const mimeType = typeof metadata.mimeType === 'string'
+    ? metadata.mimeType
+    : (record.blob?.contentType ?? 'application/octet-stream');
+
+  if (!facilityId || !providerId) {
+    throw new Error('Evidence record metadata is missing facilityId or providerId.');
+  }
+
+  const facility = await prisma.facility.findUnique({
+    where: { id: facilityId },
+  });
+
+  const summary = await runDocumentAuditForEvidence({
+    tenantId: record.tenantId,
+    facilityId,
+    facilityName: facility?.facilityName ?? 'Unknown facility',
+    providerId,
+    evidenceRecordId: record.id,
+    blobHash: record.contentHash,
+    fileName,
+    mimeType,
+    evidenceType: record.evidenceType,
+  });
+
+  console.log('[RESULT]', JSON.stringify(summary, null, 2));
   await prisma.$disconnect();
 }
 
-run().catch(e => { console.error(e); process.exit(1); });
-// dummy export to make it a module
-export {};
+run().catch(async (error) => {
+  console.error(error);
+  await prisma.$disconnect();
+  process.exit(1);
+});

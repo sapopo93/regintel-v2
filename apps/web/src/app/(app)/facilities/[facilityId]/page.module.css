@@ -202,6 +202,16 @@
   color: #9a3412;
 }
 
+.auditFAILED {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.auditSKIPPED {
+  background: #f1f5f9;
+  color: #334155;
+}
+
 .auditPASS {
   background: #ecfdf3;
   color: #166534;

@@ -58,6 +58,7 @@ export function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname();
   const { providerId, facilityId } = useProviderContext();
+  const resolvedFacilityId = facilityId || defaultFacilityId;
   const rawStatus = status?.trim() || '';
   const statusLabel = toCqcPrsStatus(rawStatus || undefined);
   const formattedDate = formatSnapshotDate(snapshotDate);

@@ -399,7 +399,11 @@ export function createDocumentAuditStatusSummary(
 }
 
 function mapDocumentAuditRow(row: Record<string, unknown>): StoredDocumentAudit {
-  const status = normalizeAuditStatus(row.status);
+  const inferredStatus =
+    row.status === null || row.status === undefined || asText(row.status).length === 0
+      ? (row.audit_result_json || row.overall_result ? 'COMPLETED' : 'PENDING')
+      : row.status;
+  const status = normalizeAuditStatus(inferredStatus);
   const documentType = asText(row.document_type) || 'OTHER';
   const baseRecord = {
     status,

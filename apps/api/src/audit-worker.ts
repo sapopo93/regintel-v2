@@ -1,3 +1,5 @@
+import { PrismaClient } from '@prisma/client';
+const prisma = new PrismaClient();
 /**
  * audit-worker.ts
  * Background worker - drains the DOCUMENT_AUDIT queue so the API
@@ -28,34 +30,66 @@ let busy = false;
 
 async function processPendingAudits() {
   if (busy) return;
-  const jobIds = consumeWaitingJobs(QUEUE_NAMES.DOCUMENT_AUDIT);
-  if (jobIds.length === 0) return;
 
-  busy = true;
-  const jobId = jobIds[0];
-  console.log(`[AUDIT-WORKER] Processing job ${jobId}`);
+  // DB-first: find evidence records that have no document_audit row yet
+  // This survives API restarts unlike the in-memory queue
+  let pendingRows: Array<{
+    evidence_record_id: string;
+    tenant_id: string;
+    facility_id: string;
+    provider_id: string;
+    facility_name: string;
+    blob_hash: string;
+    file_name: string;
+    mime_type: string;
+    evidence_type: string | null;
+  }> = [];
 
   try {
-    await processInMemoryJob<DocumentAuditJobData, void>(
-      QUEUE_NAMES.DOCUMENT_AUDIT,
-      jobId,
-      async (data) => {
-        await runDocumentAuditForEvidence({
-          tenantId: data.tenantId,
-          facilityId: data.facilityId,
-          facilityName: data.facilityName,
-          providerId: data.providerId,
-          evidenceRecordId: data.evidenceRecordId,
-          blobHash: data.blobHash,
-          fileName: data.fileName,
-          mimeType: data.mimeType,
-          evidenceType: data.evidenceType,
-        });
-      }
-    );
-    console.log(`[AUDIT-WORKER] Completed job ${jobId}`);
+    pendingRows = await (prisma as any).$queryRaw`
+      SELECT
+        da.evidence_record_id,
+        da.tenant_id,
+        da.facility_id,
+        da.provider_id,
+        da.original_file_name  AS file_name,
+        da.document_type       AS evidence_type,
+        eb.content_hash        AS blob_hash,
+        eb.content_type        AS mime_type
+      FROM document_audits da
+      JOIN evidence_records er ON er.id::text = da.evidence_record_id
+      JOIN evidence_blobs eb ON eb.content_hash = er.content_hash
+      WHERE da.status = 'PENDING'
+      ORDER BY da.created_at ASC
+      LIMIT 3
+    `;
   } catch (err) {
-    console.error(`[AUDIT-WORKER] Failed job ${jobId}:`, err);
+    console.error('[AUDIT-WORKER] DB query failed:', err);
+    return;
+  }
+
+  if (pendingRows.length === 0) return;
+
+  busy = true;
+  const row = pendingRows[0];
+  const jobId = row.evidence_record_id;
+  console.log(`[AUDIT-WORKER] Processing evidence record ${jobId} (${row.file_name})`);
+
+  try {
+    await runDocumentAuditForEvidence({
+      tenantId: row.tenant_id,
+      facilityId: row.facility_id,
+      facilityName: row.facility_name,
+      providerId: row.provider_id,
+      evidenceRecordId: row.evidence_record_id,
+      blobHash: row.blob_hash,
+      fileName: row.file_name,
+      mimeType: row.mime_type,
+      evidenceType: row.evidence_type ?? undefined,
+    });
+    console.log(`[AUDIT-WORKER] Completed \${jobId}`);
+  } catch (err) {
+    console.error(`[AUDIT-WORKER] Failed \${jobId}:`, err);
   } finally {
     busy = false;
   }

@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import LandingPage from '@/components/marketing/LandingPage';
 
 /**
  * Root page - shows landing page or redirects authenticated users

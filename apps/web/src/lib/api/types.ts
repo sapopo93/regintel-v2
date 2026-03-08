@@ -173,7 +173,7 @@ export interface DocumentAuditResult {
 }
 
 export interface DocumentAuditSummary {
-  status: 'PENDING' | 'COMPLETED';
+  status: 'PENDING' | 'COMPLETED' | 'FAILED' | 'SKIPPED';
   evidenceRecordId: string;
   documentType?: string;
   originalFileName?: string;
@@ -183,6 +183,7 @@ export interface DocumentAuditSummary {
   highFindings?: number;
   summary?: string;
   auditedAt?: string;
+  failureReason?: string;
   result?: DocumentAuditResult;
 }
 

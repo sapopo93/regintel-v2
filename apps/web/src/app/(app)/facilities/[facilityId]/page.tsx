@@ -25,6 +25,7 @@ import { MetadataBar } from '@/components/constitutional/MetadataBar';
 import { AdvancedPanel } from '@/components/layout/AdvancedPanel';
 import { apiClient, getValidatedApiBaseUrl } from '@/lib/api/client';
 import type {
+  DocumentAuditResponse,
   DocumentAuditSummary,
   EvidenceListResponse,
   EvidenceRecord,
@@ -44,6 +45,60 @@ function formatDate(dateStr: string): string {
     });
   } catch {
     return dateStr;
+  }
+}
+
+function upsertEvidenceRecord(records: EvidenceRecord[], record: EvidenceRecord): EvidenceRecord[] {
+  const existingIndex = records.findIndex(
+    (current) => current.evidenceRecordId === record.evidenceRecordId
+  );
+
+  if (existingIndex === -1) {
+    return [...records, record];
+  }
+
+  return records.map((current, index) => (
+    index === existingIndex ? record : current
+  ));
+}
+
+function mergeDocumentAudit(records: EvidenceRecord[], audit: DocumentAuditSummary): EvidenceRecord[] {
+  return records.map((record) => (
+    record.evidenceRecordId === audit.evidenceRecordId
+      ? { ...record, documentAudit: audit }
+      : record
+  ));
+}
+
+function getAuditBadgeClassName(audit: DocumentAuditSummary): string {
+  if (audit.status === 'PENDING') return styles.auditPending;
+  if (audit.status === 'FAILED') return styles.auditFAILED;
+  if (audit.status === 'SKIPPED') return styles.auditSKIPPED;
+
+  switch (audit.overallResult) {
+    case 'PASS':
+      return styles.auditPASS;
+    case 'CRITICAL_GAPS':
+      return styles.auditCRITICAL_GAPS;
+    case 'NEEDS_IMPROVEMENT':
+    default:
+      return styles.auditNEEDS_IMPROVEMENT;
+  }
+}
+
+function getAuditStatusLabel(audit: DocumentAuditSummary): string {
+  if (audit.status === 'PENDING') return 'Document audit pending';
+  if (audit.status === 'FAILED') return 'Document audit failed';
+  if (audit.status === 'SKIPPED') return 'Document audit skipped';
+
+  switch (audit.overallResult) {
+    case 'PASS':
+      return 'Audit passed';
+    case 'CRITICAL_GAPS':
+      return 'Critical gaps found';
+    case 'NEEDS_IMPROVEMENT':
+    default:
+      return 'Needs improvement';
   }
 }
 
@@ -93,7 +148,7 @@ export default function FacilityDetailPage() {
 
   useEffect(() => {
     const pendingAuditIds = evidenceData?.evidence
-      .filter((record) => record.documentAudit === undefined || record.documentAudit === null || record.documentAudit?.status === 'PENDING')
+      .filter((record) => record.documentAudit?.status === 'PENDING')
       .map((record) => record.evidenceRecordId) ?? [];
 
     if (pendingAuditIds.length === 0) {
@@ -113,11 +168,11 @@ export default function FacilityDetailPage() {
         return;
       }
 
-      const completedAudits = results.filter(
-        (audit): audit is DocumentAuditSummary => audit !== null && (audit as DocumentAuditSummary).status === 'COMPLETED'
+      const resolvedAudits = results.filter(
+        (audit): audit is DocumentAuditResponse => audit !== null && audit.status !== 'PENDING'
       );
 
-      if (completedAudits.length === 0) {
+      if (resolvedAudits.length === 0) {
         return;
       }
 
@@ -128,7 +183,7 @@ export default function FacilityDetailPage() {
 
         return {
           ...current,
-          evidence: completedAudits.reduce(
+          evidence: resolvedAudits.reduce(
             (records, audit) => mergeDocumentAudit(records, audit),
             current.evidence
           ),
@@ -510,6 +565,47 @@ export default function FacilityDetailPage() {
                       </span>
                       <span className={styles.evidenceDetail}>Evidence: {record.evidenceType}</span>
                     </div>
+                    {record.documentAudit && (
+                      <div className={styles.auditPanel}>
+                        <div className={styles.auditStatusRow}>
+                          <span className={`${styles.auditBadge} ${getAuditBadgeClassName(record.documentAudit)}`}>
+                            {getAuditStatusLabel(record.documentAudit)}
+                          </span>
+                          {typeof record.documentAudit.complianceScore === 'number' && (
+                            <span className={styles.auditScore}>
+                              Compliance score {record.documentAudit.complianceScore}%
+                            </span>
+                          )}
+                        </div>
+                        {(record.documentAudit.failureReason || record.documentAudit.summary) && (
+                          <p className={styles.auditSummary}>
+                            {record.documentAudit.failureReason || record.documentAudit.summary}
+                          </p>
+                        )}
+                        <div className={styles.auditMetrics}>
+                          {typeof record.documentAudit.criticalFindings === 'number' && (
+                            <span className={styles.auditMetric}>
+                              Critical findings: {record.documentAudit.criticalFindings}
+                            </span>
+                          )}
+                          {typeof record.documentAudit.highFindings === 'number' && (
+                            <span className={styles.auditMetric}>
+                              High findings: {record.documentAudit.highFindings}
+                            </span>
+                          )}
+                          {record.documentAudit.documentType && (
+                            <span className={styles.auditMetric}>
+                              Audit type: {record.documentAudit.documentType}
+                            </span>
+                          )}
+                          {record.documentAudit.auditedAt && (
+                            <span className={styles.auditMetric}>
+                              Updated: {formatDate(record.documentAudit.auditedAt)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))
               )}

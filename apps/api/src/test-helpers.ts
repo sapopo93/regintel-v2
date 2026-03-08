@@ -90,6 +90,7 @@ export async function withTenant<T>(
 export async function cleanupTestDatabase(pool: Pool): Promise<void> {
   const client = await pool.connect();
   try {
+    await client.query('TRUNCATE document_audits CASCADE');
     await client.query('TRUNCATE audit_events CASCADE');
     await client.query('TRUNCATE evidence_records CASCADE');
     await client.query('TRUNCATE evidence_blobs CASCADE');
