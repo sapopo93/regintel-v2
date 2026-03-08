@@ -138,6 +138,19 @@ export interface AuditEvent {
   payloadHash: string;
   previousEventHash?: string;
   eventHash: string;
+  payload?: Record<string, unknown>;
+}
+
+/**
+ * Update facility request (partial)
+ */
+export interface UpdateFacilityRequest {
+  facilityName?: string;
+  addressLine1?: string;
+  townCity?: string;
+  postcode?: string;
+  serviceType?: string;
+  capacity?: number;
 }
 
 /**
@@ -453,6 +466,35 @@ export interface SyncReportResponse extends ConstitutionalMetadata {
   jobId: string;
   status: string;
   message: string;
+}
+
+/**
+ * SAF 34 Coverage types
+ */
+export interface Saf34QualityStatementCoverage {
+  id: string;
+  keyQuestion: string;
+  title: string;
+  covered: boolean;
+  matchingTopicIds: string[];
+}
+
+export interface Saf34KeyQuestionSummary {
+  keyQuestion: string;
+  label: string;
+  total: number;
+  covered: number;
+  percentage: number;
+}
+
+export interface Saf34CoverageResponse extends ConstitutionalMetadata {
+  statements: Saf34QualityStatementCoverage[];
+  keyQuestions: Saf34KeyQuestionSummary[];
+  overall: {
+    total: number;
+    covered: number;
+    percentage: number;
+  };
 }
 
 /**

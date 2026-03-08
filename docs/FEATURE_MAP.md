@@ -146,6 +146,15 @@ Source of truth for UI routes and API endpoints. Update this file when navigatio
       ]
     },
     {
+      "route": "/results?provider=:providerId&facility=:facilityId",
+      "status": "LIVE",
+      "endpoints": [
+        "GET /v1/providers/:providerId/overview?facility=:facilityId",
+        "GET /v1/providers/:providerId/findings?facility=:facilityId",
+        "GET /v1/providers/:providerId/saf34-coverage?facility=:facilityId"
+      ]
+    },
+    {
       "route": "/audit?provider=:providerId&facility=:facilityId",
       "status": "LIVE",
       "endpoints": [
@@ -183,6 +192,7 @@ Source of truth for UI routes and API endpoints. Update this file when navigatio
     "/v1/providers/:providerId/mock-sessions/:sessionId/ai-insights",
     "/v1/facilities/:facilityId/sync-latest-report",
     "/v1/facilities/onboard-bulk",
+    "/v1/providers/:providerId/saf34-coverage?facility=:facilityId",
     "/v1/cqc/locations/${encodeURIComponent(locationId)}"
   ]
 }

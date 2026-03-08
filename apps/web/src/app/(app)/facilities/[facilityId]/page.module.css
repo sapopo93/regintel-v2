@@ -234,6 +234,11 @@
   align-items: flex-start;
 }
 
+.evidenceActions {
+  display: flex;
+  gap: 8px;
+}
+
 .downloadButton {
   border: 1px solid #d9dde3;
   background: transparent;
@@ -242,4 +247,76 @@
   border-radius: 6px;
   cursor: pointer;
   font-size: 12px;
+}
+
+.removeButton {
+  border: 1px solid #fca5a5;
+  background: transparent;
+  color: #b91c1c;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.removeButton:hover {
+  background: #fef2f2;
+  border-color: #f87171;
+}
+
+/* Bulk upload file list */
+.fileList {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.fileListItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #f4f6f8;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.fileRemoveButton {
+  border: none;
+  background: transparent;
+  color: #b91c1c;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.fileRemoveButton:hover {
+  background: #fef2f2;
+}
+
+/* Upload progress */
+.uploadProgressBar {
+  display: grid;
+  gap: 6px;
+}
+
+.uploadProgressLabel {
+  font-size: 13px;
+  color: #5a6470;
+}
+
+.uploadProgressTrack {
+  height: 6px;
+  background: #e6e8ec;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.uploadProgressFill {
+  height: 100%;
+  background: #1b1a17;
+  border-radius: 3px;
+  transition: width 0.3s ease;
 }

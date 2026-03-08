@@ -18,6 +18,7 @@ export const dynamic = "force-dynamic";
  */
 
 import { useEffect, useRef, useState, FormEvent } from 'react';
+import type { Route } from 'next';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 
 import { Sidebar } from '@/components/layout/Sidebar';
@@ -44,12 +45,13 @@ export default function FacilityDetailPage() {
 
   // Evidence upload state
   const [showUploadForm, setShowUploadForm] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [evidenceType, setEvidenceType] = useState('POLICY'); // Default to POLICY (most common)
   const [description, setDescription] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [lastUploadScanStatus, setLastUploadScanStatus] = useState<ScanStatus | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{ completed: number; total: number; failures: string[] } | null>(null);
 
   // CQC report sync state
   const [syncing, setSyncing] = useState(false);
@@ -100,7 +102,10 @@ export default function FacilityDetailPage() {
         if (hasCqcReport) {
           setEvidenceData(evidence);
           const base = `/facilities/${encodeURIComponent(facilityId)}`;
-          router.replace(providerId ? `${base}?provider=${encodeURIComponent(providerId)}` : base);
+          const nextRoute = (
+            providerId ? `${base}?provider=${encodeURIComponent(providerId)}` : base
+          ) as Route;
+          router.replace(nextRoute);
           return;
         }
       } catch { /* ignore polling errors */ }
@@ -114,64 +119,84 @@ export default function FacilityDetailPage() {
   }, [cqcSyncing, facilityId, providerId, router]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null;
-    setSelectedFile(file);
+    const files = e.target.files;
+    if (!files) return;
+    setSelectedFiles(Array.from(files));
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadSingleFile = async (file: File): Promise<void> => {
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        resolve(result.split(',')[1]);
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(file);
+    });
+
+    const mimeType = file.type || 'application/pdf';
+    const blobResponse = await apiClient.createEvidenceBlob({
+      contentBase64: base64,
+      mimeType,
+    });
+
+    setLastUploadScanStatus(blobResponse.scanStatus);
+
+    await apiClient.createFacilityEvidence({
+      facilityId,
+      blobHash: blobResponse.blobHash,
+      evidenceType,
+      fileName: file.name,
+      description: description.trim() || undefined,
+    });
   };
 
   const handleUploadSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setUploadError(null);
 
-    if (!selectedFile) {
-      setUploadError('Please select a file');
+    if (selectedFiles.length === 0) {
+      setUploadError('Please select at least one file');
       return;
     }
 
     setUploading(true);
+    const failures: string[] = [];
+    setUploadProgress({ completed: 0, total: selectedFiles.length, failures: [] });
 
+    for (let i = 0; i < selectedFiles.length; i++) {
+      try {
+        await uploadSingleFile(selectedFiles[i]);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        failures.push(`${selectedFiles[i].name}: ${msg}`);
+      }
+      setUploadProgress({ completed: i + 1, total: selectedFiles.length, failures: [...failures] });
+    }
+
+    // Reload evidence list
     try {
-      // Read file as base64 using Promise wrapper
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result as string;
-          resolve(result.split(',')[1]);
-        };
-        reader.onerror = () => reject(new Error('Failed to read file'));
-        reader.readAsDataURL(selectedFile);
-      });
-
-      const mimeType = selectedFile.type || 'application/pdf';
-      const blobResponse = await apiClient.createEvidenceBlob({
-        contentBase64: base64,
-        mimeType,
-      });
-
-      // Show scan status from blob upload
-      setLastUploadScanStatus(blobResponse.scanStatus);
-
-      await apiClient.createFacilityEvidence({
-        facilityId,
-        blobHash: blobResponse.blobHash,
-        evidenceType,
-        fileName: selectedFile.name,
-        description: description.trim() || undefined,
-      });
-
-      // Reload evidence list
       const evidence = await apiClient.getFacilityEvidence(facilityId);
       setEvidenceData(evidence);
+    } catch { /* ignore reload failure */ }
 
-      // Reset form
+    if (failures.length > 0) {
+      setUploadError(`${failures.length} file(s) failed:\n${failures.join('\n')}`);
+    } else {
+      // All succeeded — reset form
       setShowUploadForm(false);
-      setSelectedFile(null);
       setDescription('');
-      setEvidenceType('POLICY'); // Reset to default
-    } catch (err: unknown) {
-      setUploadError(err instanceof Error ? err.message : 'Failed to upload evidence');
-    } finally {
-      setUploading(false);
+      setEvidenceType('POLICY');
     }
+
+    setSelectedFiles([]);
+    setUploadProgress(null);
+    setUploading(false);
   };
 
   const handleSyncReport = async () => {
@@ -185,6 +210,19 @@ export default function FacilityDetailPage() {
       setSyncMessage(err instanceof Error ? err.message : 'Failed to sync report');
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleDeleteEvidence = async (evidenceRecordId: string, fileName: string) => {
+    if (!confirm(`Remove "${fileName}" from the evidence list? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      await apiClient.deleteEvidence(facilityId, evidenceRecordId);
+      const evidence = await apiClient.getFacilityEvidence(facilityId);
+      setEvidenceData(evidence);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to remove evidence');
     }
   };
 
@@ -364,19 +402,34 @@ export default function FacilityDetailPage() {
 
               <div className={styles.formGroup}>
                 <label htmlFor="file" className={styles.label}>
-                  File (PDF, Image, Document)
+                  Files (PDF, Image, Document) — select multiple
                 </label>
                 <input
                   id="file"
                   type="file"
+                  multiple
                   onChange={handleFileChange}
                   className={styles.fileInput}
                   disabled={uploading}
                   data-testid="file-input"
                   accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
                 />
-                {selectedFile && (
-                  <span className={styles.fileName}>{selectedFile.name}</span>
+                {selectedFiles.length > 0 && (
+                  <div className={styles.fileList}>
+                    {selectedFiles.map((file, i) => (
+                      <div key={`${file.name}-${i}`} className={styles.fileListItem}>
+                        <span className={styles.fileName}>{file.name}</span>
+                        <button
+                          type="button"
+                          className={styles.fileRemoveButton}
+                          onClick={() => handleRemoveFile(i)}
+                          disabled={uploading}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
 
@@ -419,13 +472,31 @@ export default function FacilityDetailPage() {
                 />
               </div>
 
+              {uploadProgress && (
+                <div className={styles.uploadProgressBar}>
+                  <div className={styles.uploadProgressLabel}>
+                    Uploading {uploadProgress.completed}/{uploadProgress.total}...
+                  </div>
+                  <div className={styles.uploadProgressTrack}>
+                    <div
+                      className={styles.uploadProgressFill}
+                      style={{ width: `${Math.round((uploadProgress.completed / uploadProgress.total) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
               <button
                 type="submit"
                 className={styles.submitButton}
-                disabled={uploading || !selectedFile}
+                disabled={uploading || selectedFiles.length === 0}
                 data-testid="primary-upload-evidence"
               >
-                {uploading ? 'Uploading...' : 'Upload'}
+                {uploading
+                  ? `Uploading (${uploadProgress?.completed ?? 0}/${uploadProgress?.total ?? 0})...`
+                  : selectedFiles.length > 1
+                    ? `Upload ${selectedFiles.length} Files`
+                    : 'Upload'}
               </button>
             </form>
           )}
@@ -438,13 +509,22 @@ export default function FacilityDetailPage() {
                 <div key={record.evidenceRecordId} className={styles.evidenceCard}>
                   <div className={styles.evidenceCardHeader}>
                     <h4 className={styles.evidenceTitle}>{record.fileName}</h4>
-                    <button
-                      className={styles.downloadButton}
-                      onClick={() => handleDownloadEvidence(record.blobHash, record.fileName)}
-                      data-testid={`download-${record.evidenceRecordId}`}
-                    >
-                      Download
-                    </button>
+                    <div className={styles.evidenceActions}>
+                      <button
+                        className={styles.downloadButton}
+                        onClick={() => handleDownloadEvidence(record.blobHash, record.fileName)}
+                        data-testid={`download-${record.evidenceRecordId}`}
+                      >
+                        Download
+                      </button>
+                      <button
+                        className={styles.removeButton}
+                        onClick={() => handleDeleteEvidence(record.evidenceRecordId, record.fileName)}
+                        data-testid={`remove-${record.evidenceRecordId}`}
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </div>
                   <div className={styles.evidenceDetails}>
                     <span className={styles.evidenceDetail}>Type: {record.mimeType}</span>

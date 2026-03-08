@@ -56,6 +56,7 @@ export const SIDEBAR_NAVIGATION = [
   { id: 'facilities', label: 'Locations', href: '/facilities' },
   { id: 'evidence', label: 'Evidence', href: '/evidence' },
   { id: 'exports', label: 'Exports', href: '/exports' },
+  { id: 'results', label: 'Results', href: '/results' },
   { id: 'audit', label: 'Audit Trail', href: '/audit' },
 ] as const;
 
