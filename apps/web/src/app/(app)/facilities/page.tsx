@@ -122,19 +122,22 @@ export default function FacilitiesPage() {
   };
 
   // Always render Sidebar for navigation, even during loading/error states
-  const sidebarProps = data
-    ? {
-        providerName: data.provider?.providerName || 'Provider',
-        snapshotDate: data.provider?.asOf || data.snapshotTimestamp,
-        topicCatalogVersion: data.topicCatalogVersion,
-        prsLogicVersion: data.prsLogicVersion,
-      }
-    : {
-        providerName: 'Loading...',
-        snapshotDate: new Date().toISOString(),
-        topicCatalogVersion: 'v1',
-        prsLogicVersion: 'v1',
-      };
+  let sidebarProps;
+  if (data) {
+    sidebarProps = {
+      providerName: data.provider?.providerName || 'Provider',
+      snapshotDate: data.provider?.asOf || data.snapshotTimestamp,
+      topicCatalogVersion: data.topicCatalogVersion,
+      prsLogicVersion: data.prsLogicVersion,
+    };
+  } else {
+    sidebarProps = {
+      providerName: 'Loading...',
+      snapshotDate: new Date().toISOString(),
+      topicCatalogVersion: 'v1',
+      prsLogicVersion: 'v1',
+    };
+  }
 
   return (
     <div className={styles.layout}>
