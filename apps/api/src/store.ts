@@ -1,10 +1,7 @@
-import { createHash, randomUUID } from 'node:crypto';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { createHash } from 'node:crypto';
 import { createFacility } from '@regintel/domain/facility';
 import { computeBlobHash } from '@regintel/domain/evidence';
 import { TenantIsolatedStore, scopeKey, unscopeKey } from '@regintel/security/tenant';
-
-const prisma = new PrismaClient();
 
 export interface ProviderRecord {
   providerId: string;
@@ -41,9 +38,9 @@ export interface FacilityRecord {
   latestRating?: string;
   latestRatingDate?: string;
   inspectionStatus: 'NEVER_INSPECTED' | 'INSPECTED' | 'PENDING_FIRST_INSPECTION';
-  lastReportScrapedAt: string | null;
-  lastScrapedReportDate: string | null;
-  lastScrapedReportUrl: string | null;
+  lastReportScrapedAt?: string | null;
+  lastScrapedReportDate?: string;
+  lastScrapedReportUrl?: string;
 }
 
 export interface EvidenceBlobRecord {
@@ -145,14 +142,15 @@ export interface AuditEventRecord {
   payloadHash: string;
   previousEventHash?: string;
   eventHash: string;
+  payload?: Record<string, unknown>;
 }
 
-interface TenantContext {
+export interface TenantContext {
   tenantId: string;
   actorId: string;
 }
 
-export class PrismaStore {
+export class InMemoryStore {
   private providers = new TenantIsolatedStore<ProviderRecord>();
   private facilities = new TenantIsolatedStore<FacilityRecord>();
   private evidenceBlobs = new TenantIsolatedStore<EvidenceBlobRecord>();
@@ -160,6 +158,7 @@ export class PrismaStore {
   private sessions = new TenantIsolatedStore<MockSessionRecord>();
   private findings = new TenantIsolatedStore<FindingRecord>();
   private exports = new TenantIsolatedStore<ExportRecord>();
+  private audits = new TenantIsolatedStore<AuditEventRecord[]>();
 
   private counters = new Map<string, Record<string, number>>();
   private facilityIndex = new Map<string, string>();
@@ -167,24 +166,6 @@ export class PrismaStore {
   private evidenceByFacility = new Map<string, string[]>();
   private sessionsByProvider = new Map<string, string[]>();
   private findingsByProvider = new Map<string, string[]>();
-  private hydratePromise: Promise<void> | null = null;
-
-  constructor() {}
-
-  async waitForReady(): Promise<void> {
-    await this.hydrate();
-  }
-
-  private toUuid(value: string): string {
-    const hash = createHash('sha256').update(value).digest('hex');
-    return [
-      hash.slice(0, 8),
-      hash.slice(8, 12),
-      hash.slice(12, 16),
-      hash.slice(16, 20),
-      hash.slice(20, 32),
-    ].join('-');
-  }
 
   private nextSequence(ctx: TenantContext, key: string): number {
     const tenantCounters = this.counters.get(ctx.tenantId) ?? {};
@@ -194,346 +175,99 @@ export class PrismaStore {
     return nextValue;
   }
 
-  private mapProviderRecord(row: {
-    id: string;
-    tenantId: string;
-    providerName: string;
-    orgRef: string | null;
-    asOf: string;
-    prsState: string;
-    registeredBeds: number;
-    serviceTypes: string[];
-    createdAt: string;
-    createdBy: string;
-  }): ProviderRecord {
-    return {
-      providerId: row.id,
-      tenantId: row.tenantId,
-      providerName: row.providerName,
-      orgRef: row.orgRef ?? undefined,
-      asOf: row.asOf,
-      prsState: row.prsState,
-      registeredBeds: row.registeredBeds,
-      serviceTypes: row.serviceTypes,
-      createdAt: row.createdAt,
-      createdBy: row.createdBy,
+  /**
+   * Initialize demo data for development
+   * Creates a demo provider if it doesn't exist
+   */
+  seedDemoProvider(ctx: TenantContext): ProviderRecord | null {
+    const demoId = 'provider-1';
+    const scopedId = scopeKey(ctx, demoId);
+
+    // Check if demo provider already exists
+    const existing = this.providers.read(ctx, demoId);
+    if (existing) {
+      return existing;
+    }
+
+    // Create demo provider with fixed ID
+    const now = new Date().toISOString();
+    const record: ProviderRecord = {
+      providerId: scopedId,
+      tenantId: ctx.tenantId,
+      providerName: 'Demo Care Provider',
+      orgRef: 'DEMO-ORG-001',
+      asOf: now,
+      prsState: 'STABLE',
+      registeredBeds: 50,
+      serviceTypes: ['residential', 'nursing'],
+      createdAt: now,
+      createdBy: 'SYSTEM',
     };
+
+    this.providers.write(ctx, demoId, record);
+    this.appendAuditEvent(ctx, scopedId, 'PROVIDER_CREATED', {
+      providerId: scopedId,
+      source: 'SEED_DATA'
+    });
+
+    return record;
   }
 
-  private mapFacilityRecord(row: {
-    id: string;
-    tenantId: string;
+  createProvider(ctx: TenantContext, input: { providerName: string; orgRef?: string }): ProviderRecord {
+    const id = `provider-${this.nextSequence(ctx, 'provider')}`;
+    const providerId = scopeKey(ctx, id);
+    const now = new Date().toISOString();
+
+    const record: ProviderRecord = {
+      providerId,
+      tenantId: ctx.tenantId,
+      providerName: input.providerName,
+      orgRef: input.orgRef,
+      asOf: now,
+      prsState: 'ESTABLISHED',
+      registeredBeds: 0,
+      serviceTypes: [],
+      createdAt: now,
+      createdBy: ctx.actorId,
+    };
+
+    this.providers.write(ctx, id, record);
+    return record;
+  }
+
+  listProviders(ctx: TenantContext): ProviderRecord[] {
+    return this.providers.listKeys(ctx)
+      .map((key) => this.providers.read(ctx, key))
+      .filter((record): record is ProviderRecord => Boolean(record));
+  }
+
+  getProviderById(ctx: TenantContext, providerId: string): ProviderRecord | undefined {
+    return this.providers.readByKey(ctx, providerId);
+  }
+
+  createFacility(ctx: TenantContext, input: {
     providerId: string;
     facilityName: string;
     addressLine1: string;
     townCity: string;
     postcode: string;
-    address: string;
     cqcLocationId: string;
     serviceType: string;
-    capacity: number | null;
-    facilityHash: string;
-    dataSource: string;
-    cqcSyncedAt: string | null;
-    latestRating: string | null;
-    latestRatingDate: string | null;
-    inspectionStatus: string;
-    lastReportScrapedAt: string | null;
-    lastScrapedReportDate: string | null;
-    lastScrapedReportUrl: string | null;
-    createdAt: string;
-    createdBy: string;
-    asOf: string;
+    capacity?: number;
   }): FacilityRecord {
-    return {
-      id: row.id,
-      tenantId: row.tenantId,
-      providerId: row.providerId,
-      facilityName: row.facilityName,
-      addressLine1: row.addressLine1,
-      townCity: row.townCity,
-      postcode: row.postcode,
-      address: row.address,
-      cqcLocationId: row.cqcLocationId,
-      serviceType: row.serviceType,
-      capacity: row.capacity ?? undefined,
-      facilityHash: row.facilityHash,
-      createdAt: row.createdAt,
-      createdBy: row.createdBy,
-      asOf: row.asOf,
-      dataSource: row.dataSource as 'CQC_API' | 'MANUAL',
-      cqcSyncedAt: row.cqcSyncedAt,
-      latestRating: row.latestRating ?? undefined,
-      latestRatingDate: row.latestRatingDate ?? undefined,
-      inspectionStatus: row.inspectionStatus as
-        | 'NEVER_INSPECTED'
-        | 'INSPECTED'
-        | 'PENDING_FIRST_INSPECTION',
-      lastReportScrapedAt: row.lastReportScrapedAt,
-      lastScrapedReportDate: row.lastScrapedReportDate,
-      lastScrapedReportUrl: row.lastScrapedReportUrl,
-    };
-  }
-
-  private getEvidenceMetadata(metadata: unknown): {
-    tenantId?: string;
-    providerId?: string;
-    facilityId?: string;
-    fileName?: string;
-    mimeType?: string;
-    sizeBytes?: number;
-    createdBy?: string;
-  } {
-    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
-      return {};
-    }
-
-    const meta = metadata as Record<string, unknown>;
-    return {
-      tenantId: typeof meta.tenantId === 'string' ? meta.tenantId : undefined,
-      providerId: typeof meta.providerId === 'string' ? meta.providerId : undefined,
-      facilityId: typeof meta.facilityId === 'string' ? meta.facilityId : undefined,
-      fileName: typeof meta.fileName === 'string' ? meta.fileName : undefined,
-      mimeType: typeof meta.mimeType === 'string' ? meta.mimeType : undefined,
-      sizeBytes: typeof meta.sizeBytes === 'number' ? meta.sizeBytes : undefined,
-      createdBy: typeof meta.createdBy === 'string' ? meta.createdBy : undefined,
-    };
-  }
-
-  private mapEvidenceRecord(
-    row: {
-      id: string;
-      tenantId: string;
-      contentHash: string;
-      evidenceType: string;
-      title: string;
-      description: string | null;
-      collectedAt: Date;
-      metadata: unknown;
-      createdBy: string;
-    },
-    tenantFallback?: string
-  ): EvidenceRecordRecord {
-    const metadata = this.getEvidenceMetadata(row.metadata);
-
-    return {
-      id: row.id,
-      tenantId: metadata.tenantId ?? tenantFallback ?? row.tenantId,
-      providerId: metadata.providerId ?? '',
-      facilityId: metadata.facilityId ?? '',
-      blobHash: row.contentHash,
-      mimeType: metadata.mimeType ?? 'application/octet-stream',
-      sizeBytes: metadata.sizeBytes ?? 0,
-      evidenceType: row.evidenceType,
-      fileName: metadata.fileName ?? row.title,
-      description: row.description ?? undefined,
-      uploadedAt: row.collectedAt.toISOString(),
-      createdBy: metadata.createdBy ?? row.createdBy,
-    };
-  }
-
-  private mapAuditEvent(row: {
-    id: string;
-    eventType: string;
-    timestamp: Date;
-    actor: string;
-    payloadHash: string;
-    previousEventHash: string | null;
-    eventHash: string;
-  }): AuditEventRecord {
-    return {
-      eventId: row.id,
-      eventType: row.eventType,
-      timestamp: row.timestamp.toISOString(),
-      userId: row.actor,
-      payloadHash: row.payloadHash,
-      previousEventHash: row.previousEventHash ?? undefined,
-      eventHash: row.eventHash,
-    };
-  }
-
-  private async syncProviderAggregates(ctx: TenantContext, providerId: string): Promise<void> {
-    const facilities = await prisma.facility.findMany({
-      where: { tenantId: ctx.tenantId, providerId },
-    });
-
-    const serviceTypes = Array.from(new Set(facilities.map((facility) => facility.serviceType)));
-    const registeredBeds = facilities.reduce((total, facility) => total + (facility.capacity ?? 0), 0);
-
-    await prisma.provider.update({
-      where: { id: providerId },
-      data: {
-        serviceTypes,
-        registeredBeds,
-        asOf: new Date().toISOString(),
-      },
-    });
-  }
-
-  async hydrate(): Promise<void> {
-    if (!this.hydratePromise) {
-      this.hydratePromise = this.performHydrate();
-    }
-    await this.hydratePromise;
-  }
-
-  private async performHydrate(): Promise<void> {
-    const [dbProviders, dbFacilities] = await Promise.all([
-      prisma.provider.findMany(),
-      prisma.facility.findMany(),
-    ]);
-
-    for (const row of dbProviders) {
-      const ctx: TenantContext = { tenantId: row.tenantId, actorId: row.createdBy };
-      const unscopedId = unscopeKey(ctx, row.id);
-      if (!unscopedId) {
-        continue;
-      }
-
-      this.providers.write(ctx, unscopedId, this.mapProviderRecord(row));
-
-      const providerMatch = unscopedId.match(/^provider-(\d+)$/);
-      if (providerMatch) {
-        const sequence = Number.parseInt(providerMatch[1], 10);
-        const tenantCounters = this.counters.get(row.tenantId) ?? {};
-        tenantCounters.provider = Math.max(tenantCounters.provider ?? 0, sequence);
-        this.counters.set(row.tenantId, tenantCounters);
-      }
-    }
-
-    for (const row of dbFacilities) {
-      const ctx: TenantContext = { tenantId: row.tenantId, actorId: row.createdBy };
-      const unscopedId = unscopeKey(ctx, row.id);
-      if (!unscopedId) {
-        continue;
-      }
-
-      this.facilities.write(ctx, unscopedId, this.mapFacilityRecord(row));
-      this.facilityIndex.set(`${row.providerId}::${row.cqcLocationId.trim().toUpperCase()}`, row.id);
-
-      const providerFacilities = this.facilitiesByProvider.get(row.providerId) ?? [];
-      if (!providerFacilities.includes(row.id)) {
-        providerFacilities.push(row.id);
-        this.facilitiesByProvider.set(row.providerId, providerFacilities);
-      }
-
-      const facilityMatch = unscopedId.match(/^facility-(\d+)$/);
-      if (facilityMatch) {
-        const sequence = Number.parseInt(facilityMatch[1], 10);
-        const tenantCounters = this.counters.get(row.tenantId) ?? {};
-        tenantCounters.facility = Math.max(tenantCounters.facility ?? 0, sequence);
-        this.counters.set(row.tenantId, tenantCounters);
-      }
-    }
-
-    console.log(`[PrismaStore] Hydrated ${dbProviders.length} providers, ${dbFacilities.length} facilities`);
-  }
-
-  async seedDemoProvider(ctx: TenantContext): Promise<ProviderRecord | null> {
-    const demoId = 'provider-1';
-    const scopedId = scopeKey(ctx, demoId);
-
-    const existing = await prisma.provider.findUnique({ where: { id: scopedId } });
-
-    const now = new Date().toISOString();
-    const row = await prisma.provider.upsert({
-      where: { id: scopedId },
-      create: {
-        id: scopedId,
-        tenantId: ctx.tenantId,
-        providerName: 'Demo Care Provider',
-        orgRef: 'DEMO-ORG-001',
-        asOf: now,
-        prsState: 'STABLE',
-        registeredBeds: 50,
-        serviceTypes: ['residential', 'nursing'],
-        createdAt: now,
-        createdBy: 'SYSTEM',
-      },
-      update: {},
-    });
-
-    const record = this.mapProviderRecord(row);
-    this.providers.write(ctx, demoId, record);
-
-    if (!existing) {
-      await this.appendAuditEvent(ctx, scopedId, 'PROVIDER_CREATED', {
-        providerId: scopedId,
-        source: 'SEED_DATA',
-      });
-    }
-
-    return record;
-  }
-
-  async createProvider(
-    ctx: TenantContext,
-    input: { providerName: string; orgRef?: string }
-  ): Promise<ProviderRecord> {
-    const id = `provider-${this.nextSequence(ctx, 'provider')}`;
-    const providerId = scopeKey(ctx, id);
-    const now = new Date().toISOString();
-
-    const row = await prisma.provider.create({
-      data: {
-        id: providerId,
-        tenantId: ctx.tenantId,
-        providerName: input.providerName,
-        orgRef: input.orgRef ?? null,
-        asOf: now,
-        prsState: 'ESTABLISHED',
-        registeredBeds: 0,
-        serviceTypes: [],
-        createdAt: now,
-        createdBy: ctx.actorId,
-      },
-    });
-
-    const record = this.mapProviderRecord(row);
-    this.providers.write(ctx, id, record);
-    return record;
-  }
-
-  async listProviders(ctx: TenantContext): Promise<ProviderRecord[]> {
-    const rows = await prisma.provider.findMany({ where: { tenantId: ctx.tenantId } });
-    return rows.map((row) => this.mapProviderRecord(row));
-  }
-
-  async getProviderById(ctx: TenantContext, providerId: string): Promise<ProviderRecord | undefined> {
-    const row = await prisma.provider.findUnique({ where: { id: providerId } });
-    if (!row || row.tenantId !== ctx.tenantId) {
-      return undefined;
-    }
-    return this.mapProviderRecord(row);
-  }
-
-  async createFacility(
-    ctx: TenantContext,
-    input: {
-      providerId: string;
-      facilityName: string;
-      addressLine1: string;
-      townCity: string;
-      postcode: string;
-      cqcLocationId: string;
-      serviceType: string;
-      capacity?: number;
-    }
-  ): Promise<FacilityRecord> {
-    const provider = await this.getProviderById(ctx, input.providerId);
+    const provider = this.getProviderById(ctx, input.providerId);
     if (!provider) {
       throw new Error('Provider not found');
     }
 
     const normalizedCqc = input.cqcLocationId.trim().toUpperCase();
-    const existing = await this.getFacilityByCqcLocationId(ctx, input.providerId, normalizedCqc);
-    if (existing) {
+    const indexKey = `${input.providerId}::${normalizedCqc}`;
+    if (this.facilityIndex.has(indexKey)) {
       throw new Error('Facility with this CQC Location ID already exists for provider');
     }
 
     const id = `facility-${this.nextSequence(ctx, 'facility')}`;
     const address = `${input.addressLine1.trim()}, ${input.townCity.trim()}, ${input.postcode.trim()}`;
-
     const domainFacility = createFacility({
       id,
       tenantId: ctx.tenantId,
@@ -546,86 +280,101 @@ export class PrismaStore {
       createdBy: ctx.actorId,
     });
 
-    const row = await prisma.facility.create({
-      data: {
-        id: domainFacility.id,
-        tenantId: domainFacility.tenantId,
-        providerId: domainFacility.providerId,
-        facilityName: domainFacility.facilityName,
-        addressLine1: input.addressLine1,
-        townCity: input.townCity,
-        postcode: input.postcode,
-        address: domainFacility.address,
-        cqcLocationId: domainFacility.cqcLocationId,
-        serviceType: domainFacility.serviceType,
-        capacity: domainFacility.capacity ?? null,
-        facilityHash: domainFacility.facilityHash,
-        dataSource: 'MANUAL',
-        cqcSyncedAt: null,
-        latestRating: null,
-        latestRatingDate: null,
-        inspectionStatus: 'PENDING_FIRST_INSPECTION',
-        lastReportScrapedAt: null,
-        lastScrapedReportDate: null,
-        lastScrapedReportUrl: null,
-        createdAt: domainFacility.createdAt,
-        createdBy: domainFacility.createdBy,
-        asOf: domainFacility.createdAt,
-      },
-    });
+    const record: FacilityRecord = {
+      id: domainFacility.id,
+      tenantId: domainFacility.tenantId,
+      providerId: domainFacility.providerId,
+      facilityName: domainFacility.facilityName,
+      addressLine1: input.addressLine1,
+      townCity: input.townCity,
+      postcode: input.postcode,
+      address: domainFacility.address,
+      cqcLocationId: domainFacility.cqcLocationId,
+      serviceType: domainFacility.serviceType,
+      capacity: domainFacility.capacity,
+      facilityHash: domainFacility.facilityHash,
+      createdAt: domainFacility.createdAt,
+      createdBy: domainFacility.createdBy,
+      asOf: domainFacility.createdAt,
+      // Default to manual data source for legacy createFacility
+      dataSource: 'MANUAL',
+      cqcSyncedAt: null,
+      inspectionStatus: 'PENDING_FIRST_INSPECTION',
+    };
 
-    await this.syncProviderAggregates(ctx, input.providerId);
-
-    const record = this.mapFacilityRecord(row);
     this.facilities.write(ctx, id, record);
-    this.facilityIndex.set(`${record.providerId}::${record.cqcLocationId}`, record.id);
+    this.facilityIndex.set(indexKey, record.id);
 
-    const list = this.facilitiesByProvider.get(record.providerId) ?? [];
-    if (!list.includes(record.id)) {
-      list.push(record.id);
-      this.facilitiesByProvider.set(record.providerId, list);
+    const facilityList = this.facilitiesByProvider.get(record.providerId) ?? [];
+    facilityList.push(record.id);
+    this.facilitiesByProvider.set(record.providerId, facilityList);
+
+    const providerKey = unscopeKey(ctx, record.providerId);
+    if (providerKey) {
+      const providerRecord = this.providers.read(ctx, providerKey);
+      if (providerRecord) {
+        const updatedServiceTypes = providerRecord.serviceTypes.includes(record.serviceType)
+          ? providerRecord.serviceTypes
+          : [...providerRecord.serviceTypes, record.serviceType];
+        const updatedBeds = facilityList
+          .map((facilityId) => this.facilities.readByKey(ctx, facilityId))
+          .filter((facility): facility is FacilityRecord => Boolean(facility))
+          .reduce((total, facility) => total + (facility.capacity ?? 0), 0);
+
+        this.providers.write(ctx, providerKey, {
+          ...providerRecord,
+          serviceTypes: updatedServiceTypes,
+          registeredBeds: updatedBeds,
+        });
+      }
     }
 
     return record;
   }
 
-  async listFacilitiesByProvider(ctx: TenantContext, providerId: string): Promise<FacilityRecord[]> {
-    const rows = await prisma.facility.findMany({ where: { tenantId: ctx.tenantId, providerId } });
-    return rows.map((row) => this.mapFacilityRecord(row));
+  listFacilitiesByProvider(ctx: TenantContext, providerId: string): FacilityRecord[] {
+    const ids = this.facilitiesByProvider.get(providerId) ?? [];
+    return ids.map((id) => this.facilities.readByKey(ctx, id))
+      .filter((record): record is FacilityRecord => Boolean(record));
   }
 
-  async listFacilities(ctx: TenantContext): Promise<FacilityRecord[]> {
-    const rows = await prisma.facility.findMany({ where: { tenantId: ctx.tenantId } });
-    return rows.map((row) => this.mapFacilityRecord(row));
+  listFacilities(ctx: TenantContext): FacilityRecord[] {
+    return this.facilities.listKeys(ctx)
+      .map((key) => this.facilities.read(ctx, key))
+      .filter((record): record is FacilityRecord => Boolean(record));
   }
 
-  async getFacilityById(ctx: TenantContext, facilityId: string): Promise<FacilityRecord | undefined> {
-    const row = await prisma.facility.findUnique({ where: { id: facilityId } });
-    if (!row || row.tenantId !== ctx.tenantId) {
-      return undefined;
-    }
-    return this.mapFacilityRecord(row);
+  getFacilityById(ctx: TenantContext, facilityId: string): FacilityRecord | undefined {
+    return this.facilities.readByKey(ctx, facilityId);
   }
 
-  async getFacilityByCqcLocationId(
+  /**
+   * Finds a facility by provider and CQC Location ID.
+   * Used for idempotent onboarding (check if facility already exists).
+   */
+  getFacilityByCqcLocationId(
     ctx: TenantContext,
     providerId: string,
     cqcLocationId: string
-  ): Promise<FacilityRecord | undefined> {
+  ): FacilityRecord | undefined {
     const normalizedCqc = cqcLocationId.trim().toUpperCase();
+    const indexKey = `${providerId}::${normalizedCqc}`;
+    const facilityId = this.facilityIndex.get(indexKey);
 
-    const row = await prisma.facility.findFirst({
-      where: {
-        tenantId: ctx.tenantId,
-        providerId,
-        cqcLocationId: normalizedCqc,
-      },
-    });
+    if (!facilityId) {
+      return undefined;
+    }
 
-    return row ? this.mapFacilityRecord(row) : undefined;
+    return this.facilities.readByKey(ctx, facilityId);
   }
 
-  async upsertFacility(
+  /**
+   * Upserts a facility: creates if new, updates if exists.
+   * Used by the onboarding flow to support re-onboarding (syncing CQC data).
+   *
+   * Returns the facility record and a flag indicating if it was newly created.
+   */
+  upsertFacility(
     ctx: TenantContext,
     input: {
       providerId: string;
@@ -642,32 +391,39 @@ export class PrismaStore {
       latestRatingDate?: string;
       inspectionStatus?: 'NEVER_INSPECTED' | 'INSPECTED' | 'PENDING_FIRST_INSPECTION';
       lastReportScrapedAt?: string | null;
-      lastScrapedReportDate?: string | null;
-      lastScrapedReportUrl?: string | null;
+      lastScrapedReportDate?: string;
+      lastScrapedReportUrl?: string;
     }
-  ): Promise<{ facility: FacilityRecord; isNew: boolean }> {
-    const provider = await this.getProviderById(ctx, input.providerId);
+  ): { facility: FacilityRecord; isNew: boolean } {
+    const provider = this.getProviderById(ctx, input.providerId);
     if (!provider) {
       throw new Error('Provider not found');
     }
 
     const normalizedCqc = input.cqcLocationId.trim().toUpperCase();
-    const existing = await this.getFacilityByCqcLocationId(ctx, input.providerId, normalizedCqc);
+    const indexKey = `${input.providerId}::${normalizedCqc}`;
+    const existingFacilityId = this.facilityIndex.get(indexKey);
 
     let isNew = false;
     let id: string;
     let createdAt: string;
     let createdBy: string;
 
-    if (existing) {
+    if (existingFacilityId) {
+      // Update existing facility
+      const existing = this.facilities.readByKey(ctx, existingFacilityId);
+      if (!existing) {
+        throw new Error('Facility index inconsistent');
+      }
       const unscopedId = unscopeKey(ctx, existing.id);
       if (!unscopedId) {
         throw new Error('Invalid facility ID format');
       }
-      id = unscopedId;
+      id = unscopedId; // Unscoped ID
       createdAt = existing.createdAt;
       createdBy = existing.createdBy;
     } else {
+      // Create new facility
       isNew = true;
       id = `facility-${this.nextSequence(ctx, 'facility')}`;
       createdAt = new Date().toISOString();
@@ -689,162 +445,280 @@ export class PrismaStore {
 
     const now = new Date().toISOString();
 
+    // Determine inspection status
     let inspectionStatus: 'NEVER_INSPECTED' | 'INSPECTED' | 'PENDING_FIRST_INSPECTION' =
       input.inspectionStatus || 'PENDING_FIRST_INSPECTION';
 
+    // If we have a rating, they've been inspected
     if (input.latestRating && input.latestRatingDate) {
       inspectionStatus = 'INSPECTED';
-    } else if (input.dataSource === 'CQC_API' && !input.latestRating) {
+    }
+    // If no rating and data source is CQC_API, check if it's truly never inspected
+    else if (input.dataSource === 'CQC_API' && !input.latestRating) {
       inspectionStatus = 'NEVER_INSPECTED';
     }
 
-    const row = await prisma.facility.upsert({
-      where: { id: domainFacility.id },
-      create: {
-        id: domainFacility.id,
-        tenantId: domainFacility.tenantId,
-        providerId: domainFacility.providerId,
-        facilityName: domainFacility.facilityName,
-        addressLine1: input.addressLine1.trim(),
-        townCity: input.townCity.trim(),
-        postcode: input.postcode.trim(),
-        address: domainFacility.address,
-        cqcLocationId: domainFacility.cqcLocationId,
-        serviceType: domainFacility.serviceType,
-        capacity: domainFacility.capacity ?? null,
-        facilityHash: domainFacility.facilityHash,
-        dataSource: input.dataSource,
-        cqcSyncedAt: input.cqcSyncedAt,
-        latestRating: input.latestRating ?? null,
-        latestRatingDate: input.latestRatingDate ?? null,
-        inspectionStatus,
-        lastReportScrapedAt: input.lastReportScrapedAt ?? null,
-        lastScrapedReportDate: input.lastScrapedReportDate ?? null,
-        lastScrapedReportUrl: input.lastScrapedReportUrl ?? null,
-        createdAt,
-        createdBy,
-        asOf: now,
-      },
-      update: {
-        providerId: domainFacility.providerId,
-        facilityName: domainFacility.facilityName,
-        addressLine1: input.addressLine1.trim(),
-        townCity: input.townCity.trim(),
-        postcode: input.postcode.trim(),
-        address: domainFacility.address,
-        cqcLocationId: domainFacility.cqcLocationId,
-        serviceType: domainFacility.serviceType,
-        capacity: domainFacility.capacity ?? null,
-        facilityHash: domainFacility.facilityHash,
-        dataSource: input.dataSource,
-        cqcSyncedAt: input.cqcSyncedAt,
-        latestRating: input.latestRating ?? null,
-        latestRatingDate: input.latestRatingDate ?? null,
-        inspectionStatus,
-        lastReportScrapedAt: input.lastReportScrapedAt ?? null,
-        lastScrapedReportDate: input.lastScrapedReportDate ?? null,
-        lastScrapedReportUrl: input.lastScrapedReportUrl ?? null,
-        asOf: now,
-      },
-    });
+    const record: FacilityRecord = {
+      id: domainFacility.id,
+      tenantId: domainFacility.tenantId,
+      providerId: domainFacility.providerId,
+      facilityName: domainFacility.facilityName,
+      addressLine1: input.addressLine1.trim(),
+      townCity: input.townCity.trim(),
+      postcode: input.postcode.trim(),
+      address: domainFacility.address,
+      cqcLocationId: domainFacility.cqcLocationId,
+      serviceType: domainFacility.serviceType,
+      capacity: domainFacility.capacity,
+      facilityHash: domainFacility.facilityHash,
+      createdAt,
+      createdBy,
+      asOf: now,
+      dataSource: input.dataSource,
+      cqcSyncedAt: input.cqcSyncedAt,
+      latestRating: input.latestRating,
+      latestRatingDate: input.latestRatingDate,
+      inspectionStatus,
+      lastReportScrapedAt: input.lastReportScrapedAt,
+      lastScrapedReportDate: input.lastScrapedReportDate,
+      lastScrapedReportUrl: input.lastScrapedReportUrl,
+    };
 
-    await this.syncProviderAggregates(ctx, input.providerId);
+    this.facilities.write(ctx, id, record);
+    this.facilityIndex.set(indexKey, record.id);
 
-    const facility = this.mapFacilityRecord(row);
-    this.facilityIndex.set(`${facility.providerId}::${facility.cqcLocationId}`, facility.id);
-
-    const list = this.facilitiesByProvider.get(facility.providerId) ?? [];
-    if (!list.includes(facility.id)) {
-      list.push(facility.id);
-      this.facilitiesByProvider.set(facility.providerId, list);
+    // Update provider's facility list if new
+    if (isNew) {
+      const facilityList = this.facilitiesByProvider.get(record.providerId) ?? [];
+      facilityList.push(record.id);
+      this.facilitiesByProvider.set(record.providerId, facilityList);
     }
 
-    return { facility, isNew };
+    // Update provider's aggregated service types and bed count
+    const providerKey = unscopeKey(ctx, record.providerId);
+    if (providerKey) {
+      const providerRecord = this.providers.read(ctx, providerKey);
+      if (providerRecord) {
+        const allFacilities = this.listFacilitiesByProvider(ctx, record.providerId);
+        const updatedServiceTypes = Array.from(
+          new Set(allFacilities.map((facility) => facility.serviceType))
+        );
+        const updatedBeds = allFacilities.reduce(
+          (total, facility) => total + (facility.capacity ?? 0),
+          0
+        );
+
+        this.providers.write(ctx, providerKey, {
+          ...providerRecord,
+          serviceTypes: updatedServiceTypes,
+          registeredBeds: updatedBeds,
+        });
+      }
+    }
+
+    return { facility: record, isNew };
   }
 
-  async createEvidenceBlob(
-    _ctx: TenantContext,
-    input: { contentBase64: string; mimeType: string }
-  ): Promise<EvidenceBlobRecord> {
-    const buffer = Buffer.from(input.contentBase64, 'base64');
-    const blobHash = `sha256:${computeBlobHash(buffer)}`;
+  updateFacility(
+    ctx: TenantContext,
+    facilityId: string,
+    updates: {
+      facilityName?: string;
+      addressLine1?: string;
+      townCity?: string;
+      postcode?: string;
+      serviceType?: string;
+      capacity?: number;
+    }
+  ): FacilityRecord {
+    const existing = this.facilities.readByKey(ctx, facilityId);
+    if (!existing) {
+      throw new Error('Facility not found');
+    }
 
-    const row = await prisma.evidenceBlob.upsert({
-      where: { contentHash: blobHash },
-      create: {
-        contentHash: blobHash,
-        contentType: input.mimeType,
-        sizeBytes: BigInt(buffer.byteLength),
-        storagePath: '',
-      },
-      update: {},
+    const facilityName = updates.facilityName ?? existing.facilityName;
+    const addressLine1 = updates.addressLine1 ?? existing.addressLine1;
+    const townCity = updates.townCity ?? existing.townCity;
+    const postcode = updates.postcode ?? existing.postcode;
+    const serviceType = updates.serviceType ?? existing.serviceType;
+    const capacity = updates.capacity !== undefined ? updates.capacity : existing.capacity;
+    const address = `${addressLine1.trim()}, ${townCity.trim()}, ${postcode.trim()}`;
+
+    const domainFacility = createFacility({
+      id: unscopeKey(ctx, existing.id) ?? existing.id,
+      tenantId: ctx.tenantId,
+      providerId: existing.providerId,
+      facilityName,
+      address,
+      cqcLocationId: existing.cqcLocationId,
+      serviceType,
+      capacity,
+      createdBy: existing.createdBy,
     });
 
-    const record: EvidenceBlobRecord = {
-      blobHash: row.contentHash,
-      mimeType: row.contentType,
-      sizeBytes: Number(row.sizeBytes),
-      uploadedAt: row.uploadedAt.toISOString(),
+    const now = new Date().toISOString();
+    const record: FacilityRecord = {
+      ...existing,
+      facilityName,
+      addressLine1: addressLine1.trim(),
+      townCity: townCity.trim(),
+      postcode: postcode.trim(),
+      address,
+      serviceType,
+      capacity,
+      facilityHash: domainFacility.facilityHash,
+      asOf: now,
     };
+
+    const unscopedId = unscopeKey(ctx, existing.id);
+    if (unscopedId) {
+      this.facilities.write(ctx, unscopedId, record);
+    } else {
+      this.facilities.writeByKey(ctx, existing.id, record);
+    }
+
+    // Recalculate provider aggregates
+    this.recalculateProviderAggregates(ctx, existing.providerId);
 
     return record;
   }
 
-  async getEvidenceBlob(_ctx: TenantContext, blobHash: string): Promise<EvidenceBlobRecord | undefined> {
-    const record = await prisma.evidenceBlob.findUnique({ where: { contentHash: blobHash } });
-    if (!record) return undefined;
-    return {
-      blobHash: record.contentHash,
-      mimeType: record.contentType,
-      sizeBytes: Number(record.sizeBytes),
-      uploadedAt: record.uploadedAt.toISOString(),
-    };
+  deleteFacility(ctx: TenantContext, facilityId: string): void {
+    const existing = this.facilities.readByKey(ctx, facilityId);
+    if (!existing) {
+      throw new Error('Facility not found');
+    }
+
+    // Guard: no in-progress mock sessions
+    const sessions = this.sessionsByProvider.get(existing.providerId) ?? [];
+    for (const sid of sessions) {
+      const session = this.sessions.readByKey(ctx, sid);
+      if (session && session.facilityId === facilityId && session.status === 'IN_PROGRESS') {
+        throw new Error('Cannot delete location with in-progress practice inspections');
+      }
+    }
+
+    // Remove from facilities store
+    const unscopedId = unscopeKey(ctx, existing.id);
+    if (unscopedId) {
+      this.facilities.delete(ctx, unscopedId);
+    }
+
+    // Remove from facilityIndex
+    const normalizedCqc = existing.cqcLocationId.trim().toUpperCase();
+    const indexKey = `${existing.providerId}::${normalizedCqc}`;
+    this.facilityIndex.delete(indexKey);
+
+    // Remove from facilitiesByProvider
+    const facilityList = this.facilitiesByProvider.get(existing.providerId);
+    if (facilityList) {
+      const idx = facilityList.indexOf(existing.id);
+      if (idx !== -1) facilityList.splice(idx, 1);
+    }
+
+    // Recalculate provider aggregates
+    this.recalculateProviderAggregates(ctx, existing.providerId);
   }
 
-  async createEvidenceRecord(
-    ctx: TenantContext,
-    input: {
-      facilityId: string;
-      providerId: string;
-      blobHash: string;
-      evidenceType: string;
-      fileName: string;
-      description?: string;
+  deleteEvidenceRecord(ctx: TenantContext, evidenceRecordId: string): EvidenceRecordRecord {
+    const existing = this.evidenceRecords.readByKey(ctx, evidenceRecordId);
+    if (!existing) {
+      throw new Error('Evidence record not found');
     }
-  ): Promise<EvidenceRecordRecord> {
-    const blob = await this.getEvidenceBlob(ctx, input.blobHash);
+
+    // Remove from evidenceRecords store
+    const unscopedId = unscopeKey(ctx, existing.id);
+    if (unscopedId) {
+      this.evidenceRecords.delete(ctx, unscopedId);
+    }
+
+    // Remove from evidenceByFacility index
+    const evidenceList = this.evidenceByFacility.get(existing.facilityId);
+    if (evidenceList) {
+      const idx = evidenceList.indexOf(existing.id);
+      if (idx !== -1) evidenceList.splice(idx, 1);
+    }
+
+    return existing;
+  }
+
+  private recalculateProviderAggregates(ctx: TenantContext, providerId: string): void {
+    const providerKey = unscopeKey(ctx, providerId);
+    if (!providerKey) return;
+    const providerRecord = this.providers.read(ctx, providerKey);
+    if (!providerRecord) return;
+
+    const allFacilities = this.listFacilitiesByProvider(ctx, providerId);
+    const updatedServiceTypes = Array.from(
+      new Set(allFacilities.map((f) => f.serviceType))
+    );
+    const updatedBeds = allFacilities.reduce(
+      (total, f) => total + (f.capacity ?? 0),
+      0
+    );
+
+    this.providers.write(ctx, providerKey, {
+      ...providerRecord,
+      serviceTypes: updatedServiceTypes,
+      registeredBeds: updatedBeds,
+    });
+  }
+
+  createEvidenceBlob(ctx: TenantContext, input: { contentBase64: string; mimeType: string }): EvidenceBlobRecord {
+    const buffer = Buffer.from(input.contentBase64, 'base64');
+    const hashHex = computeBlobHash(buffer);
+    const blobHash = `sha256:${hashHex}`;
+    const now = new Date().toISOString();
+
+    const record: EvidenceBlobRecord = {
+      blobHash,
+      mimeType: input.mimeType,
+      sizeBytes: buffer.byteLength,
+      uploadedAt: now,
+    };
+
+    this.evidenceBlobs.write(ctx, blobHash, record);
+    return record;
+  }
+
+  getEvidenceBlob(ctx: TenantContext, blobHash: string): EvidenceBlobRecord | undefined {
+    // Use read() which scopes the key, not readByKey() which expects already-scoped key
+    return this.evidenceBlobs.read(ctx, blobHash);
+  }
+
+  createEvidenceRecord(ctx: TenantContext, input: {
+    facilityId: string;
+    providerId: string;
+    blobHash: string;
+    evidenceType: string;
+    fileName: string;
+    description?: string;
+  }): EvidenceRecordRecord {
+    const blob = this.getEvidenceBlob(ctx, input.blobHash);
     if (!blob) {
       throw new Error('Evidence blob not found');
     }
 
-    const id = randomUUID();
-    const tenantUuid = this.toUuid(ctx.tenantId);
+    const id = `evidence-${this.nextSequence(ctx, 'evidence')}`;
+    const recordId = scopeKey(ctx, id);
+    const now = new Date().toISOString();
 
-    const row = await prisma.evidenceRecord.create({
-      data: {
-        id,
-        tenantId: tenantUuid,
-        contentHash: input.blobHash,
-        evidenceType: input.evidenceType,
-        title: input.fileName,
-        description: input.description,
-        collectedAt: new Date(blob.uploadedAt),
-        metadata: {
-          providerId: input.providerId,
-          facilityId: input.facilityId,
-          fileName: input.fileName,
-          mimeType: blob.mimeType,
-          sizeBytes: blob.sizeBytes,
-          createdBy: ctx.actorId,
-        },
-        createdBy: ctx.actorId,
-      },
-    });
+    const record: EvidenceRecordRecord = {
+      id: recordId,
+      tenantId: ctx.tenantId,
+      providerId: input.providerId,
+      facilityId: input.facilityId,
+      blobHash: input.blobHash,
+      mimeType: blob.mimeType,
+      sizeBytes: blob.sizeBytes,
+      evidenceType: input.evidenceType,
+      fileName: input.fileName,
+      description: input.description,
+      uploadedAt: now,
+      createdBy: ctx.actorId,
+    };
 
-    const record = this.mapEvidenceRecord(row, ctx.tenantId);
-    const key = unscopeKey(ctx, record.id) ?? record.id;
-    this.evidenceRecords.write(ctx, key, record);
-
+    this.evidenceRecords.write(ctx, id, record);
     const evidenceList = this.evidenceByFacility.get(record.facilityId) ?? [];
     evidenceList.push(record.id);
     this.evidenceByFacility.set(record.facilityId, evidenceList);
@@ -852,70 +726,41 @@ export class PrismaStore {
     return record;
   }
 
-  async getEvidenceRecordByContentHash(
-    ctx: TenantContext,
-    blobHash: string
-  ): Promise<EvidenceRecordRecord | undefined> {
-    const row = await prisma.evidenceRecord.findFirst({
-      where: {
-        contentHash: blobHash,
-        tenantId: this.toUuid(ctx.tenantId),
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    return row ? this.mapEvidenceRecord(row, ctx.tenantId) : undefined;
-  }
-
-  async listEvidenceByFacility(ctx: TenantContext, facilityId: string): Promise<EvidenceRecordRecord[]> {
-    const records = await prisma.evidenceRecord.findMany({
-      where: { tenantId: this.toUuid(ctx.tenantId) },
-      include: { blob: true },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    return records
-      .filter((record) => (record.metadata as any)?.facilityId === facilityId)
-      .map((record) => ({
-        id: record.id,
-        tenantId: ctx.tenantId,
-        providerId: (record.metadata as any)?.providerId ?? '',
-        facilityId: (record.metadata as any)?.facilityId ?? '',
-        blobHash: record.contentHash,
-        mimeType: (record.metadata as any)?.mimeType ?? record.blob?.contentType ?? '',
-        sizeBytes: Number(record.blob?.sizeBytes ?? (record.metadata as any)?.sizeBytes ?? 0),
-        evidenceType: record.evidenceType,
-        fileName: record.title,
-        description: record.description ?? undefined,
-        uploadedAt: record.collectedAt.toISOString(),
-        createdBy: record.createdBy,
-      }));
-  }
-
-  async listEvidenceByProvider(ctx: TenantContext, providerId: string): Promise<EvidenceRecordRecord[]> {
-    const facilities = await this.listFacilitiesByProvider(ctx, providerId);
-    const records: EvidenceRecordRecord[] = [];
-
-    for (const facility of facilities) {
-      const facilityEvidence = await this.listEvidenceByFacility(ctx, facility.id);
-      records.push(...facilityEvidence);
+  getEvidenceRecordByContentHash(ctx: TenantContext, blobHash: string): EvidenceRecordRecord | undefined {
+    const allKeys = this.evidenceRecords.listKeys(ctx);
+    for (const key of allKeys) {
+      const record = this.evidenceRecords.read(ctx, key);
+      if (record && record.blobHash === blobHash) {
+        return record;
+      }
     }
+    return undefined;
+  }
 
+  listEvidenceByFacility(ctx: TenantContext, facilityId: string): EvidenceRecordRecord[] {
+    const ids = this.evidenceByFacility.get(facilityId) ?? [];
+    return ids.map((id) => this.evidenceRecords.readByKey(ctx, id))
+      .filter((record): record is EvidenceRecordRecord => Boolean(record));
+  }
+
+  listEvidenceByProvider(ctx: TenantContext, providerId: string): EvidenceRecordRecord[] {
+    const facilities = this.listFacilitiesByProvider(ctx, providerId);
+    const records: EvidenceRecordRecord[] = [];
+    for (const facility of facilities) {
+      records.push(...this.listEvidenceByFacility(ctx, facility.id));
+    }
     return records;
   }
 
-  createMockSession(
-    ctx: TenantContext,
-    input: {
-      provider: ProviderRecord;
-      facilityId: string;
-      topicId: string;
-      topicCatalogVersion: string;
-      topicCatalogHash: string;
-      prsLogicProfilesVersion: string;
-      prsLogicProfilesHash: string;
-    }
-  ): MockSessionRecord {
+  createMockSession(ctx: TenantContext, input: {
+    provider: ProviderRecord;
+    facilityId: string;
+    topicId: string;
+    topicCatalogVersion: string;
+    topicCatalogHash: string;
+    prsLogicProfilesVersion: string;
+    prsLogicProfilesHash: string;
+  }): MockSessionRecord {
     const id = `session-${this.nextSequence(ctx, 'session')}`;
     const sessionId = scopeKey(ctx, id);
     const now = new Date().toISOString();
@@ -956,8 +801,7 @@ export class PrismaStore {
 
   listSessionsByProvider(ctx: TenantContext, providerId: string): MockSessionRecord[] {
     const ids = this.sessionsByProvider.get(providerId) ?? [];
-    return ids
-      .map((id) => this.sessions.readByKey(ctx, id))
+    return ids.map((id) => this.sessions.readByKey(ctx, id))
       .filter((record): record is MockSessionRecord => Boolean(record));
   }
 
@@ -969,10 +813,7 @@ export class PrismaStore {
     this.sessions.writeByKey(ctx, session.sessionId, session);
   }
 
-  addFinding(
-    ctx: TenantContext,
-    input: Omit<FindingRecord, 'id' | 'tenantId' | 'deterministicHash' | 'createdAt'>
-  ): FindingRecord {
+  addFinding(ctx: TenantContext, input: Omit<FindingRecord, 'id' | 'tenantId' | 'deterministicHash' | 'createdAt'>): FindingRecord {
     const id = `finding-${this.nextSequence(ctx, 'finding')}`;
     const findingId = scopeKey(ctx, id);
     const now = new Date().toISOString();
@@ -1003,8 +844,7 @@ export class PrismaStore {
 
   listFindingsByProvider(ctx: TenantContext, providerId: string): FindingRecord[] {
     const ids = this.findingsByProvider.get(providerId) ?? [];
-    return ids
-      .map((id) => this.findings.readByKey(ctx, id))
+    return ids.map((id) => this.findings.readByKey(ctx, id))
       .filter((record): record is FindingRecord => Boolean(record));
   }
 
@@ -1012,24 +852,21 @@ export class PrismaStore {
     return this.findings.readByKey(ctx, findingId);
   }
 
-  createExport(
-    ctx: TenantContext,
-    input: {
-      providerId: string;
-      facilityId: string;
-      sessionId: string;
-      format: 'CSV' | 'PDF' | 'BLUE_OCEAN' | 'BLUE_OCEAN_BOARD' | 'BLUE_OCEAN_AUDIT';
-      content: string;
-      reportingDomain: 'MOCK_SIMULATION' | 'REGULATORY_HISTORY';
-      mode: 'MOCK' | 'REAL';
-      reportSource: {
-        type: 'cqc_upload' | 'mock';
-        id: string;
-        asOf: string;
-      };
-      snapshotId: string;
-    }
-  ): ExportRecord {
+  createExport(ctx: TenantContext, input: {
+    providerId: string;
+    facilityId: string;
+    sessionId: string;
+    format: 'CSV' | 'PDF' | 'BLUE_OCEAN' | 'BLUE_OCEAN_BOARD' | 'BLUE_OCEAN_AUDIT';
+    content: string;
+    reportingDomain: 'MOCK_SIMULATION' | 'REGULATORY_HISTORY';
+    mode: 'MOCK' | 'REAL';
+    reportSource: {
+      type: 'cqc_upload' | 'mock';
+      id: string;
+      asOf: string;
+    };
+    snapshotId: string;
+  }): ExportRecord {
     const id = `export-${this.nextSequence(ctx, 'export')}`;
     const exportId = scopeKey(ctx, id);
     const now = new Date().toISOString();
@@ -1060,44 +897,21 @@ export class PrismaStore {
   }
 
   listExportsByProvider(ctx: TenantContext, providerId: string, facilityId?: string): ExportRecord[] {
-    return this.exports
-      .listKeys(ctx)
+    return this.exports.listKeys(ctx)
       .map((key) => this.exports.read(ctx, key))
       .filter((record): record is ExportRecord => Boolean(record))
       .filter((record) => record.providerId === providerId)
       .filter((record) => !facilityId || record.facilityId === facilityId)
-      .sort((a, b) => b.generatedAt.localeCompare(a.generatedAt));
+      .sort((a, b) => b.generatedAt.localeCompare(a.generatedAt)); // Most recent first
   }
 
-  async listAuditEvents(ctx: TenantContext, providerId: string): Promise<AuditEventRecord[]> {
-    const rows = await prisma.auditEvent.findMany({
-      where: {
-        tenantId: this.toUuid(ctx.tenantId),
-        entityId: providerId,
-      },
-      orderBy: { timestamp: 'asc' },
-    });
-
-    return rows.map((row) => this.mapAuditEvent(row));
+  listAuditEvents(ctx: TenantContext, providerId: string): AuditEventRecord[] {
+    return this.audits.readByKey(ctx, providerId) ?? [];
   }
 
-  async appendAuditEvent(
-    ctx: TenantContext,
-    providerId: string,
-    eventType: string,
-    payload: Record<string, unknown>
-  ): Promise<AuditEventRecord> {
-    const tenantUuid = this.toUuid(ctx.tenantId);
-
-    const previous = await prisma.auditEvent.findFirst({
-      where: {
-        tenantId: tenantUuid,
-        entityId: providerId,
-      },
-      orderBy: { timestamp: 'desc' },
-    });
-
-    const previousEventHash = previous?.eventHash;
+  appendAuditEvent(ctx: TenantContext, providerId: string, eventType: string, payload: Record<string, unknown>): AuditEventRecord {
+    const events = this.listAuditEvents(ctx, providerId);
+    const previousEventHash = events.length > 0 ? events[events.length - 1].eventHash : undefined;
     const payloadHash = `sha256:${createHash('sha256').update(JSON.stringify(payload)).digest('hex')}`;
     const timestamp = new Date().toISOString();
 
@@ -1110,26 +924,21 @@ export class PrismaStore {
     };
 
     const eventHash = `sha256:${createHash('sha256').update(JSON.stringify(eventBody)).digest('hex')}`;
+    const eventId = scopeKey(ctx, `event-${events.length + 1}`);
 
-    const row = await prisma.auditEvent.create({
-      data: {
-        tenantId: tenantUuid,
-        eventType,
-        entityType: 'PROVIDER',
-        entityId: providerId,
-        actor: ctx.actorId,
-        payload: payload as Prisma.InputJsonValue,
-        payloadHash,
-        previousEventHash,
-        eventHash,
-        timestamp: new Date(timestamp),
-      },
-    });
+    const record: AuditEventRecord = {
+      eventId,
+      eventType,
+      timestamp,
+      userId: ctx.actorId,
+      payloadHash,
+      previousEventHash,
+      eventHash,
+      payload,
+    };
 
-    return this.mapAuditEvent(row);
+    const updated = [...events, record];
+    this.audits.writeByKey(ctx, providerId, updated);
+    return record;
   }
 }
-
-export { PrismaStore as InMemoryStore };
-export const store = new PrismaStore();
-export type { TenantContext };

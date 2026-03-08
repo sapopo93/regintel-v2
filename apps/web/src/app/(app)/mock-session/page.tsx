@@ -14,6 +14,7 @@ import Link from 'next/link';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DisclosurePanel } from '@/components/disclosure/DisclosurePanel';
+import { MetadataBar } from '@/components/constitutional/MetadataBar';
 import { SimulationFrame } from '@/components/mock/SimulationFrame';
 import { apiClient } from '@/lib/api/client';
 import type { MockSessionsListResponse, ProviderOverviewResponse, Topic } from '@/lib/api/types';
@@ -25,11 +26,6 @@ export default function MockSessionsPage() {
   // Decode URL-encoded params (colons in tenant:resource IDs get encoded as %3A)
   const providerId = searchParams.get('provider') ? decodeURIComponent(searchParams.get('provider')!) : null;
   const facilityId = searchParams.get('facility') ? decodeURIComponent(searchParams.get('facility')!) : null;
-  const statusDisplayMap: Record<string, string> = {
-    IN_PROGRESS: 'In Progress',
-    COMPLETED: 'Completed',
-    ABANDONED: 'Not Completed',
-  };
 
   const [overview, setOverview] = useState<ProviderOverviewResponse | null>(null);
   const [data, setData] = useState<MockSessionsListResponse | null>(null);
@@ -72,14 +68,14 @@ export default function MockSessionsPage() {
 
     setCreating(true);
     setError(null);
-    setCreateStatus('Setting up your practice inspection...');
+    setCreateStatus('Starting practice inspection...');
     setCreatedSessionId(null);
 
     try {
       const created = await apiClient.createMockSession(providerId, selectedTopic, facilityId);
       const refreshed = await apiClient.getMockSessions(providerId, facilityId);
       setData(refreshed);
-      setCreateStatus('Practice inspection ready');
+      setCreateStatus('Practice inspection started.');
       setCreatedSessionId(created.sessionId);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to start session');
@@ -112,7 +108,6 @@ export default function MockSessionsPage() {
           providerName={overview.provider.providerName}
           snapshotDate={overview.provider.asOf}
           status={overview.provider.prsState}
-          latestRating={overview.facility?.latestRating}
           topicCatalogVersion={data.topicCatalogVersion}
           prsLogicVersion={data.prsLogicVersion}
           topicsCompleted={overview.topicsCompleted}
@@ -149,17 +144,17 @@ export default function MockSessionsPage() {
                       className={styles.sessionCard}
                     >
                       <div className={styles.sessionHeader}>
-                        <h3 className={styles.sessionTitle}>Practice Session</h3>
+                        <h3 className={styles.sessionTitle}>Practice inspection</h3>
                         <div className={`${styles.statusBadge} ${styles[session.status.toLowerCase()]}`}>
-                          {statusDisplayMap[session.status] ?? session.status}
+                          {session.status}
                         </div>
                       </div>
                       <div className={styles.sessionMeta}>
-                        <span>Compliance area: {session.topicId}</span>
-                        <span>Follow-up questions used: {session.followUpsUsed} of {session.maxFollowUps}</span>
+                        <span>Inspection area selected</span>
+                        <span>Follow-ups: {session.followUpsUsed}/{session.maxFollowUps}</span>
                       </div>
                       <div className={styles.sessionDate}>
-                        Started: {new Date(session.createdAt).toLocaleString()}
+                        Created: {new Date(session.createdAt).toLocaleString()}
                         {session.completedAt && ` • Completed: ${new Date(session.completedAt).toLocaleString()}`}
                       </div>
                     </Link>
@@ -192,7 +187,7 @@ export default function MockSessionsPage() {
                     disabled={creating || !selectedTopic}
                     data-testid="primary-start-session"
                   >
-                    {creating ? 'Starting...' : 'Start Practice Inspection'}
+                    {creating ? 'Starting...' : 'Start Session'}
                   </button>
                 </div>
                 {createStatus && (
@@ -205,7 +200,7 @@ export default function MockSessionsPage() {
                           className={styles.statusLink}
                           href={`/mock-session/${createdSessionId}?provider=${providerId}&facility=${facilityId}`}
                         >
-                          Begin inspection →
+                          Open session →
                         </Link>
                       </>
                     )}
@@ -214,12 +209,19 @@ export default function MockSessionsPage() {
               </div>
             )}
             trace={(
-              <div style={{ padding: '16px', color: '#666', fontSize: '14px' }}>
-                <p><strong>Compliance Framework:</strong> {data.topicCatalogVersion}</p>
-                <p><strong>Rules Engine:</strong> {data.prsLogicVersion}</p>
-                <p><strong>Data as of:</strong> {new Date(data.snapshotTimestamp).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                <p><strong>Inspection Type:</strong> {data.mode === 'REAL' ? 'Live CQC Data' : 'Practice Inspection'}</p>
-              </div>
+              <MetadataBar
+                topicCatalogVersion={data.topicCatalogVersion}
+                topicCatalogHash={data.topicCatalogHash}
+                prsLogicVersion={data.prsLogicVersion}
+                prsLogicHash={data.prsLogicHash}
+                snapshotTimestamp={data.snapshotTimestamp}
+                domain={data.domain}
+                reportingDomain={data.reportingDomain}
+                mode={data.mode}
+                reportSource={data.reportSource}
+                snapshotId={data.snapshotId}
+                ingestionStatus={data.ingestionStatus}
+              />
             )}
           />
         </main>

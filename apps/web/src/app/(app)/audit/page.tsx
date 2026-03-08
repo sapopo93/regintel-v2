@@ -13,6 +13,7 @@ import { useSearchParams } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DisclosurePanel } from '@/components/disclosure/DisclosurePanel';
+import { MetadataBar } from '@/components/constitutional/MetadataBar';
 import { SimulationFrame } from '@/components/mock/SimulationFrame';
 import { apiClient } from '@/lib/api/client';
 import type { AuditTrailResponse, ProviderOverviewResponse } from '@/lib/api/types';
@@ -65,16 +66,40 @@ export default function AuditPage() {
     );
   }
 
-  const formatEventType = (type: string) => {
+  const toActivityLabel = (eventType: string) => {
     const map: Record<string, string> = {
-      'MOCK_SESSION_STARTED': 'Practice Inspection Started',
-      'MOCK_SESSION_COMPLETED': 'Practice Inspection Completed',
-      'EVIDENCE_UPLOADED': 'Document Uploaded',
-      'FINDING_CREATED': 'Action Item Created',
-      'EXPORT_GENERATED': 'Report Downloaded',
+      MOCK_SESSION_STARTED: 'Practice inspection started',
+      MOCK_SESSION_ANSWERED: 'Practice inspection answer saved',
+      MOCK_SESSION_COMPLETED: 'Practice inspection completed',
+      FINDING_CREATED: 'Finding created',
+      EVIDENCE_UPLOADED: 'Evidence uploaded',
+      EVIDENCE_RECORDED: 'Evidence uploaded',
+      EVIDENCE_DELETED: 'Evidence removed',
+      EXPORT_GENERATED: 'Export generated',
+      PROVIDER_CREATED: 'Provider created',
+      FACILITY_CREATED: 'Location registered',
+      FACILITY_ONBOARDED: 'Location onboarded',
+      FACILITY_UPDATED: 'Location updated',
+      FACILITY_DELETED: 'Location deleted',
+      REPORT_SCRAPED: 'CQC report synced',
     };
-    return map[type] ?? type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+    return map[eventType] ?? eventType.replaceAll('_', ' ').toLowerCase();
   };
+
+  const formatPayloadDetail = (key: string, value: unknown): string => {
+    if (key === 'sizeBytes' && typeof value === 'number') {
+      return value > 1024 * 1024
+        ? `${(value / (1024 * 1024)).toFixed(1)} MB`
+        : `${(value / 1024).toFixed(1)} KB`;
+    }
+    return String(value);
+  };
+
+  const DISPLAY_PAYLOAD_KEYS = new Set([
+    'facilityName', 'cqcLocationId', 'fileName', 'mimeType', 'sizeBytes',
+    'evidenceType', 'format', 'topicId', 'findingsCount', 'providerName',
+    'dataSource', 'reportDate', 'rating',
+  ]);
 
   return (
     <SimulationFrame reportingDomain={data.reportingDomain}>
@@ -83,7 +108,6 @@ export default function AuditPage() {
           providerName={overview.provider.providerName}
           snapshotDate={overview.provider.asOf}
           status={overview.provider.prsState}
-          latestRating={overview.facility?.latestRating}
           topicCatalogVersion={data.topicCatalogVersion}
           prsLogicVersion={data.prsLogicVersion}
           topicsCompleted={overview.topicsCompleted}
@@ -92,8 +116,8 @@ export default function AuditPage() {
 
         <main className={styles.main}>
           <PageHeader
-            title="Activity Log"
-            subtitle={`${data.totalCount} recorded activities`}
+            title="Audit Trail"
+            subtitle={`${data.totalCount} audit events`}
             topicCatalogVersion={data.topicCatalogVersion}
             topicCatalogHash={data.topicCatalogHash}
             prsLogicVersion={data.prsLogicVersion}
@@ -110,52 +134,64 @@ export default function AuditPage() {
           <DisclosurePanel
             summary={(
               <div className={styles.integrity}>
-                <h2 className={styles.integrityTitle}>Tamper-Proof Record</h2>
+                <h2 className={styles.integrityTitle}>Activity Integrity</h2>
                 <p className={styles.integrityDescription}>
-                  Every action in this system is permanently recorded and cannot be altered. Each entry is linked to the one before it, so any attempt to change historical records would be immediately detected.
+                  This timeline records key provider actions in order so teams can review what happened and when.
                 </p>
               </div>
             )}
             evidence={(
               <div className={styles.auditList}>
                 {data.events.length === 0 ? (
-                  <div className={styles.empty}>No activity recorded yet</div>
+                  <div className={styles.empty}>No audit events found</div>
                 ) : (
                   data.events.map((event, index) => (
                     <div key={event.eventId} className={styles.auditCard}>
                       <div className={styles.auditHeader}>
                         <span className={styles.eventNumber}>#{index + 1}</span>
-                        <span className={styles.eventType}>{formatEventType(event.eventType)}</span>
+                        <span className={styles.eventType}>{toActivityLabel(event.eventType)}</span>
                         <span className={styles.timestamp}>
                           {new Date(event.timestamp).toLocaleString()}
                         </span>
                       </div>
 
                       <dl className={styles.auditMeta}>
-                        <dt>Activity Reference</dt>
-                        <dd>{'Entry #' + (index + 1)}</dd>
-
-                        <dt>Performed By</dt>
-                        <dd>{'User ...' + event.userId.slice(-8)}</dd>
+                        <dt>Recorded By</dt>
+                        <dd>{event.userId}</dd>
                       </dl>
 
-                      {event.previousEventHash && (
-                        <div className={styles.chainIndicator}>
-                          ✓ Linked to previous entry
+                      {event.payload && (
+                        <div className={styles.payloadDetails}>
+                          {Object.entries(event.payload)
+                            .filter(([key]) => DISPLAY_PAYLOAD_KEYS.has(key))
+                            .map(([key, value]) => (
+                              <span key={key} className={styles.payloadTag}>
+                                {key.replace(/([A-Z])/g, ' $1').trim()}: {formatPayloadDetail(key, value)}
+                              </span>
+                            ))}
                         </div>
                       )}
+
+                      {event.previousEventHash && <div className={styles.chainIndicator}>Linked to previous activity</div>}
                     </div>
                   ))
                 )}
               </div>
             )}
             trace={(
-              <div style={{ padding: '16px', color: '#666', fontSize: '14px' }}>
-                <p><strong>Compliance Framework:</strong> {data.topicCatalogVersion}</p>
-                <p><strong>Rules Engine:</strong> {data.prsLogicVersion}</p>
-                <p><strong>Data as of:</strong> {new Date(data.snapshotTimestamp).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                <p><strong>Inspection Type:</strong> {data.mode === 'REAL' ? 'Live CQC Data' : 'Practice Inspection'}</p>
-              </div>
+              <MetadataBar
+                topicCatalogVersion={data.topicCatalogVersion}
+                topicCatalogHash={data.topicCatalogHash}
+                prsLogicVersion={data.prsLogicVersion}
+                prsLogicHash={data.prsLogicHash}
+                snapshotTimestamp={data.snapshotTimestamp}
+                domain={data.domain}
+                reportingDomain={data.reportingDomain}
+                mode={data.mode}
+                reportSource={data.reportSource}
+                snapshotId={data.snapshotId}
+                ingestionStatus={data.ingestionStatus}
+              />
             )}
           />
         </main>

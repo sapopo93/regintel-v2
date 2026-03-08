@@ -16,7 +16,7 @@ import * as path from 'path';
 
 describe('CSP configuration', () => {
   const originalNodeEnv = process.env.NODE_ENV;
-  const env = process.env as Record<string, string | undefined>;
+  const env = process.env as NodeJS.ProcessEnv & { NODE_ENV?: string };
 
   beforeAll(() => {
     // Set to production to test CSP headers

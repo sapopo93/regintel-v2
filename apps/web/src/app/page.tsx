@@ -1,5 +1,5 @@
-import { auth } from "@clerk/nextjs/server";
-import { redirect } from "next/navigation";
+import { auth } from '@clerk/nextjs/server';
+import { redirect } from 'next/navigation';
 import LandingPage from '@/components/marketing/LandingPage';
 
 /**
@@ -11,11 +11,12 @@ import LandingPage from '@/components/marketing/LandingPage';
  * - Not signed in: show landing page
  */
 export default async function HomePage() {
-  if (process.env.E2E_TEST_MODE === "true") {
-    const userId = "e2e-user";
-    const providerId = `${userId}:provider-1`;
-    const facilityId = `${userId}:facility-1`;
-    redirect(`/overview?provider=${providerId}&facility=${facilityId}`);
+  const isE2EMode =
+    process.env.E2E_TEST_MODE === 'true' &&
+    process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true';
+
+  if (isE2EMode) {
+    redirect('/providers');
   }
 
   const { userId, getToken } = await auth();

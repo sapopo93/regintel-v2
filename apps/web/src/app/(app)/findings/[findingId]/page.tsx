@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
  * Finding Detail Page
  *
  * Progressive disclosure: Summary → Evidence → Trace layers.
- * Mock findings have SYSTEM_MOCK badge and darker border.
+ * Practice findings have a visual badge and darker border.
  */
 
 import { useEffect, useState } from 'react';
@@ -19,6 +19,7 @@ import { TraceLayer } from '@/components/disclosure/TraceLayer';
 import { SimulationFrame } from '@/components/mock/SimulationFrame';
 import { apiClient } from '@/lib/api/client';
 import type { FindingDetailResponse, ProviderOverviewResponse } from '@/lib/api/types';
+import { ORIGIN_LABELS } from '@/lib/constants';
 import { validateConstitutionalRequirements, validateFindingForDisplay } from '@/lib/validators';
 import styles from './page.module.css';
 
@@ -109,30 +110,27 @@ export default function FindingDetailPage() {
               <div className={styles.section}>
                 <div className={styles.sectionHeader}>
                   <h2 className={styles.sectionTitle}>Summary</h2>
-                  {isMock && <div className={styles.originBadge}>SYSTEM_MOCK</div>}
+                  {isMock && <div className={styles.originBadge}>{ORIGIN_LABELS.SYSTEM_MOCK}</div>}
                 </div>
 
                 <dl className={styles.definitionList}>
-                  <dt>Finding ID</dt>
-                  <dd>{data.finding.id}</dd>
-
                   <dt>Severity</dt>
                   <dd>{data.finding.severity}</dd>
 
                   <dt>Composite Risk Score</dt>
                   <dd>{data.finding.compositeRiskScore}</dd>
 
-                  <dt>Topic ID</dt>
+                  <dt>Inspection Area</dt>
                   <dd>{data.finding.topicId}</dd>
 
                   <dt>Regulation Section</dt>
                   <dd>{data.finding.regulationSectionId}</dd>
 
                   <dt>Origin</dt>
-                  <dd>{data.finding.origin}</dd>
+                  <dd>{ORIGIN_LABELS[data.finding.origin]}</dd>
 
-                  <dt>Reporting Domain</dt>
-                  <dd>{data.finding.reportingDomain}</dd>
+                  <dt>Record Type</dt>
+                  <dd>{isMock ? 'Practice inspection record' : 'Regulatory inspection record'}</dd>
                 </dl>
 
                 <div className={styles.description}>

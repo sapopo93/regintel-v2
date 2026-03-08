@@ -12,9 +12,20 @@ import type {
 import { validateConstitutionalRequirements } from '@/lib/validators';
 import styles from './page.module.css';
 
-export default function ProvidersPage() {
+const isE2EMode = process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true';
+
+interface ProvidersPageInnerProps {
+  isLoaded: boolean;
+  isSignedIn: boolean;
+  enableSignInRedirect: boolean;
+}
+
+function ProvidersPageInner({
+  isLoaded,
+  isSignedIn,
+  enableSignInRedirect,
+}: ProvidersPageInnerProps) {
   const router = useRouter();
-  const { isLoaded, isSignedIn } = useAuth();
 
   const [data, setData] = useState<ProvidersListResponse | null>(null);
   const [providerName, setProviderName] = useState('');
@@ -63,8 +74,16 @@ export default function ProvidersPage() {
   }
 
   // If not signed in, redirect to sign-in (using Clerk component, not window.location)
-  if (!isSignedIn || authError) {
+  if (enableSignInRedirect && (!isSignedIn || authError)) {
     return <RedirectToSignIn />;
+  }
+
+  if (!enableSignInRedirect && authError) {
+    return (
+      <div className={styles.layout}>
+        <div className={styles.error}>Error: Authentication required</div>
+      </div>
+    );
   }
 
   const handleSubmit = async (event: FormEvent) => {
@@ -132,11 +151,11 @@ export default function ProvidersPage() {
         </div>
 
         <section className={styles.formCard}>
-          <h2 className={styles.sectionTitle}>Add a New Provider</h2>
+          <h2 className={styles.sectionTitle}>Create Provider</h2>
           {error && <div className={styles.error}>{error}</div>}
           <form onSubmit={handleSubmit} className={styles.form}>
             <label className={styles.label}>
-              Organisation Name <span className={styles.required}>*</span>
+              Provider Name <span className={styles.required}>*</span>
               <input
                 value={providerName}
                 onChange={(event) => setProviderName(event.target.value)}
@@ -147,7 +166,7 @@ export default function ProvidersPage() {
             </label>
 
             <label className={styles.label}>
-              Reference Code (optional)
+              Organisation Reference (optional)
               <input
                 value={orgRef}
                 onChange={(event) => setOrgRef(event.target.value)}
@@ -163,24 +182,23 @@ export default function ProvidersPage() {
               disabled={submitting}
               data-testid="primary-create-provider"
             >
-              {submitting ? 'Adding...' : 'Add Provider'}
+              {submitting ? 'Creating...' : 'Create Provider'}
             </button>
           </form>
         </section>
 
         <section className={styles.list}>
-          <h2 className={styles.sectionTitle}>Your Providers</h2>
+          <h2 className={styles.sectionTitle}>Existing Providers</h2>
           {data && data.providers.length === 0 ? (
-            <p className={styles.empty}>You have not added any providers yet.</p>
+            <p className={styles.empty}>No providers yet.</p>
           ) : (
             <div className={styles.grid}>
               {data?.providers.map((provider) => (
                 <div key={provider.providerId} className={styles.card}>
                   <div>
                     <h3 className={styles.cardTitle}>{provider.providerName}</h3>
-                    <p className={styles.cardMeta}>CQC Provider Reference: {provider.providerId}</p>
                     {provider.orgRef && (
-                      <p className={styles.cardMeta}>Reference: {provider.orgRef}</p>
+                      <p className={styles.cardMeta}>Org ref: {provider.orgRef}</p>
                     )}
                   </div>
                   <button
@@ -199,4 +217,29 @@ export default function ProvidersPage() {
       </main>
     </div>
   );
+}
+
+function ProvidersPageWithClerkAuth() {
+  const { isLoaded, isSignedIn } = useAuth();
+  return (
+    <ProvidersPageInner
+      isLoaded={isLoaded}
+      isSignedIn={!!isSignedIn}
+      enableSignInRedirect
+    />
+  );
+}
+
+export default function ProvidersPage() {
+  if (isE2EMode) {
+    return (
+      <ProvidersPageInner
+        isLoaded
+        isSignedIn
+        enableSignInRedirect={false}
+      />
+    );
+  }
+
+  return <ProvidersPageWithClerkAuth />;
 }

@@ -5,6 +5,7 @@
  * Used at the top of every page.
  */
 
+import { MetadataBar } from '../constitutional/MetadataBar';
 import type { ConstitutionalMetadata } from '@/lib/api/types';
 import styles from './PageHeader.module.css';
 
@@ -12,20 +13,16 @@ interface PageHeaderProps extends ConstitutionalMetadata {
   title: string;
   subtitle?: string;
   actions?: React.ReactNode;
-  hasReport?: boolean;
 }
 
 export function PageHeader({
   title,
   subtitle,
   actions,
-  hasReport,
   ...metadata
 }: PageHeaderProps) {
   const showIngestionBanner =
-    metadata.mode === 'REAL' &&
-    metadata.ingestionStatus !== 'READY' &&
-    !hasReport;
+    metadata.mode === 'REAL' && metadata.ingestionStatus !== 'READY';
 
   return (
     <header className={styles.header}>
@@ -39,9 +36,12 @@ export function PageHeader({
       {showIngestionBanner && (
         <div className={styles.ingestionBanner} data-testid="ingestion-status-banner">
           <strong>CQC data still loading.</strong>
-          <span>CQC inspection data not yet available. Retrieve the latest published report to continue.</span>
+          <span>
+            Your latest CQC report is still being linked and checked.
+          </span>
         </div>
       )}
+      <MetadataBar {...metadata} compact />
     </header>
   );
 }

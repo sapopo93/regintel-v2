@@ -24,12 +24,12 @@ import { useProviderContext } from '@/lib/hooks/useProviderContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DisclosurePanel } from '@/components/disclosure/DisclosurePanel';
+import { MetadataBar } from '@/components/constitutional/MetadataBar';
 import { SimulationFrame } from '@/components/mock/SimulationFrame';
 import { SimulationModeBadge } from '@/components/mock/SimulationModeBadge';
 import { apiClient } from '@/lib/api/client';
 import type { ProviderOverviewResponse } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
-import { toCqcPrsStatus } from '@/lib/cqcLanguage';
 import styles from './page.module.css';
 
 export default function OverviewPage() {
@@ -84,7 +84,6 @@ export default function OverviewPage() {
           providerName={data.provider.providerName}
           snapshotDate={data.provider.asOf}
           status={data.provider.prsState}
-          latestRating={data.facility?.latestRating}
           topicCatalogVersion={data.topicCatalogVersion}
           prsLogicVersion={data.prsLogicVersion}
           topicsCompleted={data.topicsCompleted}
@@ -93,8 +92,8 @@ export default function OverviewPage() {
 
         <main className={styles.main}>
           <PageHeader
-            title="Compliance Dashboard"
-            subtitle={`Organisation: ${data.provider.providerName} · Location: ${data.facility?.facilityName ?? 'Unknown'}`}
+            title="Inspection Readiness Record"
+            subtitle={`Provider: ${data.provider.providerName} · Facility: ${data.facility?.facilityName ?? 'Unknown'}`}
             topicCatalogVersion={data.topicCatalogVersion}
             topicCatalogHash={data.topicCatalogHash}
             prsLogicVersion={data.prsLogicVersion}
@@ -114,70 +113,64 @@ export default function OverviewPage() {
             summary={(
               <div className={styles.grid}>
                 <div className={styles.card}>
-                  <div className={styles.cardLabel}>Documents Uploaded</div>
+                  <div className={styles.cardLabel}>Evidence Coverage</div>
                   <div className={styles.cardValue}>{data.evidenceCoverage}%</div>
                   <div className={styles.cardNote}>
-                    {isRealMode ? 'Documents submitted for CQC review' : 'How much of your required documentation is uploaded'}
+                    {isRealMode ? 'CQC evidence uploaded for regulatory ingestion' : 'Percentage of required evidence uploaded'}
                   </div>
                   <div className={styles.cardProvenance}>
                     {isRealMode
-                      ? `CQC report source on record`
-                      : `Calculated from Inspection Framework ${data.topicCatalogVersion} requirements`}
+                      ? 'Based on linked CQC report data'
+                      : 'Calculated from CQC quality statement requirements'}
                   </div>
                 </div>
 
                 <div className={styles.card}>
-                  <div className={styles.cardLabel}>Compliance Areas Reviewed</div>
+                  <div className={styles.cardLabel}>Topics Completed</div>
                   <div className={styles.cardValue}>
                     {data.topicsCompleted} / {data.totalTopics}
                   </div>
                   <div className={styles.cardNote}>
-                    {isRealMode ? 'Being reviewed against CQC standards' : 'Practice inspection areas completed'}
+                    {isRealMode ? 'Regulatory topic mapping pending ingestion' : 'Mock inspection topics addressed'}
                   </div>
                   <div className={styles.cardProvenance}>
-                    {isRealMode ? 'CQC review in progress' : 'Based on your practice inspection sessions'}
+                    {isRealMode ? 'Awaiting regulatory ingestion' : 'Based on practice inspections'}
                   </div>
                 </div>
 
                 <div className={styles.card}>
-                  <div className={styles.cardLabel}>Outstanding Questions</div>
+                  <div className={styles.cardLabel}>Unanswered Questions</div>
                   <div className={styles.cardValue}>{data.unansweredQuestions}</div>
                   <div className={styles.cardNote}>
-                    {isRealMode ? 'Questions will appear once your CQC review begins' : 'Questions that still need your response'}
+                    {isRealMode ? 'Regulatory questions unavailable until ingestion completes' : 'Questions requiring provider response'}
                   </div>
                   <div className={styles.cardProvenance}>
-                    {isRealMode ? 'CQC review pending' : 'Awaiting your response'}
+                    {isRealMode ? 'Regulatory ingestion pending' : 'Awaiting provider response'}
                   </div>
                 </div>
 
                 <div className={styles.card}>
-                  <div className={styles.cardLabel}>Items Needing Attention</div>
+                  <div className={styles.cardLabel}>Open Findings</div>
                   <div className={styles.cardValue}>{data.openFindings}</div>
                   <div className={styles.cardNote}>
-                    {isRealMode ? 'Will appear once your CQC review is complete' : 'Issues that have not yet been resolved'}
+                    {isRealMode ? 'Regulatory findings available after ingestion' : 'Findings without remediation'}
                   </div>
                   <div className={styles.cardProvenance}>
                     {isRealMode
-                      ? `Regulatory history`
-                      : `Generated via Assessment Rules ${data.prsLogicVersion} (practice mode)`}
+                      ? 'Taken from regulatory inspection history'
+                      : 'Generated from risk profile rules for practice mode'}
                   </div>
                 </div>
               </div>
             )}
             evidence={(
               <div className={styles.providerInfo}>
-                <h2 className={styles.sectionTitle}>Organisation Details</h2>
+                <h2 className={styles.sectionTitle}>Provider Details</h2>
                 <dl className={styles.definitionList}>
-                  <dt>CQC Provider Reference</dt>
-                  <dd>{data.provider.providerId}</dd>
+                  <dt>PRS State</dt>
+                  <dd>{data.provider.prsState}</dd>
 
-                  <dt>Location Reference</dt>
-                  <dd>{data.facility?.id || 'Unknown'}</dd>
-
-                  <dt>Regulatory Status</dt>
-                  <dd>{toCqcPrsStatus(data.provider.prsState)}</dd>
-
-                  <dt>Registered Capacity</dt>
+                  <dt>Registered Beds</dt>
                   <dd>{data.provider.registeredBeds}</dd>
 
                   <dt>Service Types</dt>
@@ -185,7 +178,7 @@ export default function OverviewPage() {
 
                   {data.facility && (
                     <>
-                      <dt>CQC Location Reference</dt>
+                      <dt>Facility CQC Location ID</dt>
                       <dd>{data.facility.cqcLocationId}</dd>
                     </>
                   )}
@@ -193,12 +186,19 @@ export default function OverviewPage() {
               </div>
             )}
             trace={(
-              <div style={{ padding: '16px', color: '#666', fontSize: '14px' }}>
-                <p><strong>Compliance Framework:</strong> {data.topicCatalogVersion}</p>
-                <p><strong>Rules Engine:</strong> {data.prsLogicVersion}</p>
-                <p><strong>Data as of:</strong> {new Date(data.snapshotTimestamp).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                <p><strong>Inspection Type:</strong> {data.mode === 'REAL' ? 'Live CQC Data' : 'Practice Inspection'}</p>
-              </div>
+              <MetadataBar
+                topicCatalogVersion={data.topicCatalogVersion}
+                topicCatalogHash={data.topicCatalogHash}
+                prsLogicVersion={data.prsLogicVersion}
+                prsLogicHash={data.prsLogicHash}
+                snapshotTimestamp={data.snapshotTimestamp}
+                domain={data.domain}
+                reportingDomain={data.reportingDomain}
+                mode={data.mode}
+                reportSource={data.reportSource}
+                snapshotId={data.snapshotId}
+                ingestionStatus={data.ingestionStatus}
+              />
             )}
           />
         </main>

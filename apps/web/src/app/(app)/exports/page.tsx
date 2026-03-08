@@ -14,6 +14,7 @@ import { useSearchParams } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DisclosurePanel } from '@/components/disclosure/DisclosurePanel';
+import { MetadataBar } from '@/components/constitutional/MetadataBar';
 import { SimulationFrame } from '@/components/mock/SimulationFrame';
 import { apiClient } from '@/lib/api/client';
 import { getAuthRole, getAuthToken } from '@/lib/auth';
@@ -146,7 +147,6 @@ export default function ExportsPage() {
           providerName={overview.provider.providerName}
           snapshotDate={overview.provider.asOf}
           status={overview.provider.prsState}
-          latestRating={overview.facility?.latestRating}
           topicCatalogVersion={statusData.topicCatalogVersion}
           prsLogicVersion={statusData.prsLogicVersion}
           topicsCompleted={overview.topicsCompleted}
@@ -155,10 +155,10 @@ export default function ExportsPage() {
 
         <main className={styles.main}>
           <PageHeader
-            title="Download Reports"
+            title="Export Readiness Report"
             subtitle={overview.facility
-              ? `${overview.provider.providerName} - ${overview.facility.facilityName}`
-              : `${overview.provider.providerName}`}
+              ? `${overview.provider.providerName} - ${overview.facility.facilityName} | Generate export`
+              : `${overview.provider.providerName} | Generate export`}
             topicCatalogVersion={statusData.topicCatalogVersion}
             topicCatalogHash={statusData.topicCatalogHash}
             prsLogicVersion={statusData.prsLogicVersion}
@@ -175,10 +175,10 @@ export default function ExportsPage() {
           <DisclosurePanel
             summary={(
               <div className={styles.section}>
-                <h2 className={styles.sectionTitle}>Choose Your Report Format</h2>
+                <h2 className={styles.sectionTitle}>Export Configuration</h2>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.label}>Report Format</label>
+                  <label className={styles.label}>Format</label>
                   <div className={styles.radioGroup}>
                     {availableFormats.map((option) => (
                       <label key={option} className={styles.radio}>
@@ -201,7 +201,7 @@ export default function ExportsPage() {
                       checked={includeWatermark}
                       onChange={(e) => setIncludeWatermark(e.target.checked)}
                     />
-                    <span>Include "Practice Inspection" watermark on every page</span>
+                    <span>Include watermark: {statusData.watermark}</span>
                   </label>
                 </div>
 
@@ -211,7 +211,7 @@ export default function ExportsPage() {
                   disabled={loading}
                   data-testid="primary-generate-export"
                 >
-                  {loading ? 'Preparing your report...' : `Download ${formatLabel(format)}`}
+                  {loading ? 'Generating...' : `Generate ${formatLabel(format)}`}
                 </button>
 
                 {exportError && (
@@ -219,12 +219,12 @@ export default function ExportsPage() {
                     {exportError}
                     {!isRealMode && (exportError.includes('No completed session') || exportError.includes('Conflict')) && (
                       <div style={{ marginTop: '8px', fontSize: '0.9em' }}>
-                        Please complete a practice inspection session first. You can find this in the left menu under "Mock Inspection".
+                        Tip: Complete a practice inspection first. Use "Practice Inspection" in the sidebar.
                       </div>
                     )}
                     {isRealMode && exportError.includes('Regulatory exports') && (
                       <div style={{ marginTop: '8px', fontSize: '0.9em' }}>
-                        CQC reports are only available in Blue Ocean format.
+                        💡 Tip: Regulatory exports are available only as Blue Ocean reports.
                       </div>
                     )}
                   </div>
@@ -232,14 +232,14 @@ export default function ExportsPage() {
 
                 {downloadUrl && (
                   <div className={styles.section}>
-                    <h2 className={styles.sectionTitle}>Your Report is Ready</h2>
-                    <p className={styles.successMessage}>Your report has been prepared and is ready to download.</p>
+                    <h2 className={styles.sectionTitle}>Export Ready</h2>
+                    <p className={styles.successMessage}>Your export has been generated.</p>
                     <a
                       href={downloadUrl}
                       download
                       className={styles.downloadButton}
                     >
-                      Download Your Report
+                      Download {formatLabel(format)}
                     </a>
                   </div>
                 )}
@@ -247,43 +247,50 @@ export default function ExportsPage() {
             )}
             evidence={(
               <div className={styles.section}>
-                <h2 className={styles.sectionTitle}>What is included in this report</h2>
+                <h2 className={styles.sectionTitle}>Export Contents</h2>
                 <ul className={styles.contentList}>
-                  <li>Inspection session details</li>
-                  <li>Compliance framework version</li>
-                  <li>Assessment rules version</li>
-                  <li>{isRealMode ? 'CQC inspection findings (if available)' : 'All findings from your practice inspection'}</li>
-                  <li>Document upload summary</li>
-                  <li>"Practice Inspection" watermark on every page (if enabled)</li>
+                  <li>Session details (provider, location, and inspection date)</li>
+                  <li>Relevant CQC quality statement references</li>
+                  <li>Risk profile summary used for scoring</li>
+                  <li>{isRealMode ? 'Regulatory findings (if available)' : 'All findings from practice inspections'}</li>
+                  <li>Evidence coverage statistics</li>
+                  <li>Watermark on every page/row (if enabled)</li>
                 </ul>
                 <div className={styles.warning}>
                   {isRealMode ? (
                     <>
-                      <strong>Note:</strong> This report uses your official CQC inspection data only.
-                      Practice inspection findings are not included.
+                      <strong>Note:</strong> Regulatory exports are sourced from uploaded CQC evidence and regulatory findings only.
+                      Mock findings are excluded.
                     </>
                   ) : (
                     <>
-                      <strong>Note:</strong> This report is for practice purposes only.
-                      It does not contain or affect your official CQC inspection record.
+                      <strong>Note:</strong> Exports NEVER include regulatory history findings.
+                      All exported findings are marked as practice inspection findings.
                     </>
                   )}
                 </div>
 
                 {statusData.latestExport && (
                   <div className={styles.latestExport}>
-                    Last downloaded report: {statusData.latestExport.exportId} — {statusData.latestExport.format}
+                    Latest export: {statusData.latestExport.exportId} ({statusData.latestExport.format})
                   </div>
                 )}
               </div>
             )}
             trace={(
-              <div style={{ padding: '16px', color: '#666', fontSize: '14px' }}>
-                <p><strong>Compliance Framework:</strong> {statusData.topicCatalogVersion}</p>
-                <p><strong>Rules Engine:</strong> {statusData.prsLogicVersion}</p>
-                <p><strong>Data as of:</strong> {new Date(statusData.snapshotTimestamp).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                <p><strong>Inspection Type:</strong> {statusData.mode === 'REAL' ? 'Live CQC Data' : 'Practice Inspection'}</p>
-              </div>
+              <MetadataBar
+                topicCatalogVersion={statusData.topicCatalogVersion}
+                topicCatalogHash={statusData.topicCatalogHash}
+                prsLogicVersion={statusData.prsLogicVersion}
+                prsLogicHash={statusData.prsLogicHash}
+                snapshotTimestamp={statusData.snapshotTimestamp}
+                domain={statusData.domain}
+                reportingDomain={statusData.reportingDomain}
+                mode={statusData.mode}
+                reportSource={statusData.reportSource}
+                snapshotId={statusData.snapshotId}
+                ingestionStatus={statusData.ingestionStatus}
+              />
             )}
           />
         </main>

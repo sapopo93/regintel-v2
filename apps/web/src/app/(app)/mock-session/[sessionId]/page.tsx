@@ -14,12 +14,24 @@ import Link from 'next/link';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DisclosurePanel } from '@/components/disclosure/DisclosurePanel';
+import { MetadataBar } from '@/components/constitutional/MetadataBar';
 import { SimulationFrame } from '@/components/mock/SimulationFrame';
 import { apiClient } from '@/lib/api/client';
 import type { MockInspectionSession, ConstitutionalMetadata, ProviderOverviewResponse } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
-import { toCqcPrsStatus } from '@/lib/cqcLanguage';
 import styles from './page.module.css';
+
+const PRS_LABELS: Record<string, string> = {
+  NEW_PROVIDER: 'New provider',
+  ESTABLISHED: 'No active enforcement',
+  SPECIAL_MEASURES: 'Special Measures',
+  ENFORCEMENT_ACTION: 'Enforcement action',
+  RATING_INADEQUATE: 'Rated: Inadequate',
+  RATING_REQUIRES_IMPROVEMENT: 'Rated: Requires Improvement',
+  REOPENED_SERVICE: 'Reopened service',
+  MERGED_SERVICE: 'Merged service',
+  STABLE: 'Standard regulation',
+};
 
 export default function MockSessionDetailPage() {
   const searchParams = useSearchParams();
@@ -98,7 +110,6 @@ export default function MockSessionDetailPage() {
           providerName={overview.provider.providerName}
           snapshotDate={overview.provider.asOf}
           status={overview.provider.prsState}
-          latestRating={overview.facility?.latestRating}
           topicCatalogVersion={data.topicCatalogVersion}
           prsLogicVersion={data.prsLogicVersion}
           topicsCompleted={overview.topicsCompleted}
@@ -107,7 +118,7 @@ export default function MockSessionDetailPage() {
 
         <main className={styles.main}>
           <PageHeader
-            title={`Session ${data.sessionId}`}
+            title="Practice inspection session"
             subtitle="Practice inspection session detail"
             topicCatalogVersion={data.topicCatalogVersion}
             topicCatalogHash={data.topicCatalogHash}
@@ -127,10 +138,7 @@ export default function MockSessionDetailPage() {
               <div className={styles.section}>
                 <h2 className={styles.sectionTitle}>Session Information</h2>
                 <dl className={styles.definitionList}>
-                  <dt>Session ID</dt>
-                  <dd>{data.sessionId}</dd>
-
-                  <dt>Topic ID</dt>
+                  <dt>Inspection Area</dt>
                   <dd>{data.topicId}</dd>
 
                   <dt>Status</dt>
@@ -155,17 +163,14 @@ export default function MockSessionDetailPage() {
               <div className={styles.section}>
                 <h2 className={styles.sectionTitle}>Provider Details</h2>
                 <dl className={styles.definitionList}>
-                  <dt>Provider ID</dt>
-                  <dd>{data.providerSnapshot.providerId}</dd>
-
                   <dt>Provider Name</dt>
                   <dd>{data.providerSnapshot.providerName}</dd>
 
                   <dt>Recorded on</dt>
-                  <dd>{data.providerSnapshot.asOf}</dd>
+                  <dd>{new Date(data.providerSnapshot.asOf).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</dd>
 
                   <dt>Regulatory Status</dt>
-                  <dd>{toCqcPrsStatus(data.providerSnapshot.prsState)}</dd>
+                  <dd>{PRS_LABELS[data.providerSnapshot.prsState] ?? data.providerSnapshot.prsState}</dd>
 
                   <dt>Registered Beds</dt>
                   <dd>{data.providerSnapshot.registeredBeds}</dd>
@@ -176,12 +181,19 @@ export default function MockSessionDetailPage() {
               </div>
             )}
             trace={(
-              <div style={{ padding: '16px', color: '#666', fontSize: '14px' }}>
-                <p><strong>Compliance Framework:</strong> {data.topicCatalogVersion}</p>
-                <p><strong>Rules Engine:</strong> {data.prsLogicVersion}</p>
-                <p><strong>Data as of:</strong> {new Date(data.snapshotTimestamp).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                <p><strong>Inspection Type:</strong> {data.mode === 'REAL' ? 'Live CQC Data' : 'Practice Inspection'}</p>
-              </div>
+              <MetadataBar
+                topicCatalogVersion={data.topicCatalogVersion}
+                topicCatalogHash={data.topicCatalogHash}
+                prsLogicVersion={data.prsLogicVersion}
+                prsLogicHash={data.prsLogicHash}
+                snapshotTimestamp={data.snapshotTimestamp}
+                domain={data.domain}
+                reportingDomain={data.reportingDomain}
+                mode={data.mode}
+                reportSource={data.reportSource}
+                snapshotId={data.snapshotId}
+                ingestionStatus={data.ingestionStatus}
+              />
             )}
           />
 

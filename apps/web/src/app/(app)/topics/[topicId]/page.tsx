@@ -14,6 +14,7 @@ import Link from 'next/link';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DisclosurePanel } from '@/components/disclosure/DisclosurePanel';
+import { MetadataBar } from '@/components/constitutional/MetadataBar';
 import { SimulationFrame } from '@/components/mock/SimulationFrame';
 import { apiClient } from '@/lib/api/client';
 import type { Topic, ConstitutionalMetadata, ProviderOverviewResponse } from '@/lib/api/types';
@@ -26,11 +27,6 @@ export default function TopicDetailPage() {
   const providerId = searchParams.get('provider');
   const facilityId = searchParams.get('facility');
   const topicId = params.topicId as string;
-  const questionModeDisplayMap: Record<string, string> = {
-    STRUCTURED: 'Structured Review',
-    OPEN: 'Open Questions',
-    HYBRID: 'Mixed Format',
-  };
 
   const [overview, setOverview] = useState<ProviderOverviewResponse | null>(null);
   const [data, setData] = useState<(Topic & ConstitutionalMetadata) | null>(null);
@@ -80,7 +76,6 @@ export default function TopicDetailPage() {
           providerName={overview.provider.providerName}
           snapshotDate={overview.provider.asOf}
           status={overview.provider.prsState}
-          latestRating={overview.facility?.latestRating}
           topicCatalogVersion={data.topicCatalogVersion}
           prsLogicVersion={data.prsLogicVersion}
           topicsCompleted={overview.topicsCompleted}
@@ -90,7 +85,7 @@ export default function TopicDetailPage() {
         <main className={styles.main}>
           <PageHeader
             title={data.title}
-            subtitle="Compliance area details"
+            subtitle="Topic detail"
             topicCatalogVersion={data.topicCatalogVersion}
             topicCatalogHash={data.topicCatalogHash}
             prsLogicVersion={data.prsLogicVersion}
@@ -107,25 +102,22 @@ export default function TopicDetailPage() {
           <DisclosurePanel
             summary={(
               <div className={styles.section}>
-                <h2 className={styles.sectionTitle}>About This Compliance Area</h2>
+                <h2 className={styles.sectionTitle}>Topic Information</h2>
                 <dl className={styles.definitionList}>
-                  <dt>Reference</dt>
-                  <dd>{data.id}</dd>
-
-                  <dt>CQC Regulation</dt>
+                  <dt>Regulation Section</dt>
                   <dd>{data.regulationSectionId}</dd>
 
-                  <dt>Assessment Type</dt>
-                  <dd>{questionModeDisplayMap[data.questionMode] ?? data.questionMode}</dd>
+                  <dt>Review Approach</dt>
+                  <dd>{data.questionMode.replaceAll('_', ' ')}</dd>
 
-                  <dt>Maximum follow-up questions</dt>
+                  <dt>Max Follow-ups</dt>
                   <dd>{data.maxFollowUps}</dd>
                 </dl>
               </div>
             )}
             evidence={(
               <div className={styles.section}>
-                <h2 className={styles.sectionTitle}>Documents Required for This Area</h2>
+                <h2 className={styles.sectionTitle}>Evidence Requirements</h2>
                 <ul className={styles.evidenceList}>
                   {data.evidenceRequirements.map((req, idx) => (
                     <li key={idx}>{req}</li>
@@ -134,12 +126,19 @@ export default function TopicDetailPage() {
               </div>
             )}
             trace={(
-              <div style={{ padding: '16px', color: '#666', fontSize: '14px' }}>
-                <p><strong>Compliance Framework:</strong> {data.topicCatalogVersion}</p>
-                <p><strong>Rules Engine:</strong> {data.prsLogicVersion}</p>
-                <p><strong>Data as of:</strong> {new Date(data.snapshotTimestamp).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                <p><strong>Inspection Type:</strong> {data.mode === 'REAL' ? 'Live CQC Data' : 'Practice Inspection'}</p>
-              </div>
+              <MetadataBar
+                topicCatalogVersion={data.topicCatalogVersion}
+                topicCatalogHash={data.topicCatalogHash}
+                prsLogicVersion={data.prsLogicVersion}
+                prsLogicHash={data.prsLogicHash}
+                snapshotTimestamp={data.snapshotTimestamp}
+                domain={data.domain}
+                reportingDomain={data.reportingDomain}
+                mode={data.mode}
+                reportSource={data.reportSource}
+                snapshotId={data.snapshotId}
+                ingestionStatus={data.ingestionStatus}
+              />
             )}
           />
 
@@ -148,7 +147,7 @@ export default function TopicDetailPage() {
               href={`/topics?provider=${providerId}&facility=${facilityId}`}
               className={styles.backButton}
             >
-              ← Back to Compliance Areas
+              ← Back to Topics
             </Link>
           </div>
         </main>

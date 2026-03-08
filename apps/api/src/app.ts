@@ -42,6 +42,7 @@ import {
   isWebsiteReportNewer,
 } from '@regintel/domain/cqc-scraper';
 import { EvidenceType, getAllRequiredEvidenceTypes } from '@regintel/domain/evidence-types';
+import { getQualityStatementCoverage } from '@regintel/domain/saf34';
 import { fetchCqcLocation } from '@regintel/domain/cqc-client';
 import { buildConstitutionalMetadata, type ReportContext } from './metadata';
 import { authMiddleware } from './auth';
@@ -381,6 +382,18 @@ const TOPICS = [
     maxFollowUps: 3,
   },
 ];
+
+// SAF 34 regulation key mappings for topics (maps topic IDs to CQC regulation keys)
+const SAF34_TOPIC_REGULATION_KEYS: Record<string, string[]> = {
+  'safe-care-treatment': ['CQC:REG:SAFE_CARE', 'CQC:QS:SAFE', 'CQC:REG:SAFEGUARDING', 'CQC:REG:IPC', 'CQC:REG:MEDICINES', 'CQC:REG:PREMISES'],
+  'staffing': ['CQC:REG:STAFFING', 'CQC:QS:SAFE', 'CQC:QS:EFFECTIVE', 'CQC:QS:WELL_LED'],
+  'dignity-privacy': ['CQC:REG:DIGNITY', 'CQC:QS:CARING'],
+  'person-centred-care': ['CQC:REG:PERSON_CENTRED', 'CQC:QS:CARING', 'CQC:QS:RESPONSIVE', 'CQC:QS:EFFECTIVE'],
+  'governance': ['CQC:REG:GOVERNANCE', 'CQC:QS:WELL_LED', 'CQC:QS:EFFECTIVE'],
+  'complaints-feedback': ['CQC:REG:COMPLAINTS', 'CQC:QS:RESPONSIVE'],
+  'consent': ['CQC:REG:CONSENT', 'CQC:QS:EFFECTIVE'],
+  'duty-of-candour': ['CQC:REG:DUTY_OF_CANDOUR', 'CQC:QS:RESPONSIVE'],
+};
 
 const DEFAULT_MAX_TOTAL_QUESTIONS = 10;
 
@@ -814,7 +827,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         }
       },
       credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE'],
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
       allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-Id'],
     })
   );
@@ -925,7 +938,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     const { providerName, orgRef } = parsed.body as { providerName: string; orgRef?: string };
 
     const provider = await store.createProvider(ctx, { providerName: providerName.trim(), orgRef });
-    await store.appendAuditEvent(ctx, provider.providerId, 'PROVIDER_CREATED', { providerId: provider.providerId });
+    await store.appendAuditEvent(ctx, provider.providerId, 'PROVIDER_CREATED', { providerId: provider.providerId, providerName: provider.providerName });
     sendWithMetadata(res, { provider });
   });
 
@@ -1201,10 +1214,12 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     await store.appendAuditEvent(ctx, providerId, 'MOCK_SESSION_ANSWERED', {
       sessionId,
       answerLength: answer.length,
+      followUpsUsed: updated.followUpsUsed,
     });
     await store.appendAuditEvent(ctx, providerId, 'MOCK_SESSION_COMPLETED', {
       sessionId,
       findingId: finding.id,
+      findingsCount: 1,
     });
 
     if (process.env.ENABLE_AI_INSIGHTS !== 'false') {
@@ -1290,6 +1305,50 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       console.error('[AI_INSIGHTS] Failed:', error);
       sendError(res, 500, 'Failed to fetch AI insights');
     }
+  });
+
+  // ── SAF 34 Quality Statement Coverage ──────────────────────────
+  app.get('/v1/providers/:providerId/saf34-coverage', async (req, res) => {
+    const ctx = getContext(req);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId }).strip(),
+      query: z.object({ facility: zQueryString }).strip(),
+    });
+    if (!parsed) return;
+    const { providerId } = parsed.params as { providerId: string };
+    const { facility: facilityId } = parsed.query as { facility: string };
+
+    const provider = await store.getProviderById(ctx, providerId);
+    const facility = await store.getFacilityById(ctx, facilityId);
+
+    if (!provider || !facility || facility.providerId !== providerId) {
+      sendError(res, 404, 'Provider or facility not found');
+      return;
+    }
+
+    // Build topics with regulation keys for coverage analysis
+    const topicsForCoverage = TOPICS.map((t) => ({
+      id: t.id,
+      title: t.title,
+      regulationSectionId: t.regulationSectionId,
+      regulationKeys: SAF34_TOPIC_REGULATION_KEYS[t.id] || [],
+    }));
+
+    const coverage = getQualityStatementCoverage(topicsForCoverage);
+
+    const reportContext = await resolveReportContextForFacility(ctx, providerId, facilityId);
+
+    sendWithMetadata(res, {
+      statements: coverage.statements.map((s) => ({
+        id: s.qualityStatement.id,
+        keyQuestion: s.qualityStatement.keyQuestion,
+        title: s.qualityStatement.title,
+        covered: s.covered,
+        matchingTopicIds: s.matchingTopicIds,
+      })),
+      keyQuestions: coverage.keyQuestions,
+      overall: coverage.overall,
+    }, reportContext);
   });
 
   app.get('/v1/providers/:providerId/findings', async (req, res) => {
@@ -1580,6 +1639,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       });
       await store.appendAuditEvent(ctx, providerId, 'FACILITY_CREATED', {
         facilityId: facility.id,
+        facilityName: facility.facilityName,
         cqcLocationId: facility.cqcLocationId,
       });
       sendWithMetadata(res, { facility });
@@ -1630,6 +1690,126 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     const provider = await store.getProviderById(ctx, facility.providerId);
     const reportContext = await resolveReportContextForFacility(ctx, facility.providerId, facilityId);
     sendWithMetadata(res, { facility, provider }, reportContext);
+  });
+
+  /**
+   * PATCH /v1/facilities/:facilityId
+   *
+   * Update a location's mutable fields. CQC Location ID and provider are immutable.
+   */
+  app.patch('/v1/facilities/:facilityId', async (req, res) => {
+    const ctx = getContext(req);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ facilityId: zFacilityId }).strip(),
+      body: z
+        .object({
+          facilityName: z.string().trim().min(1).optional(),
+          addressLine1: z.string().trim().min(1).optional(),
+          townCity: z.string().trim().min(1).optional(),
+          postcode: z.string().trim().min(1).optional(),
+          serviceType: zServiceType.optional(),
+          capacity: zOptionalPositiveInt.optional(),
+        })
+        .strip(),
+    });
+    if (!parsed) return;
+    const { facilityId } = parsed.params as { facilityId: string };
+    const updates = parsed.body as {
+      facilityName?: string;
+      addressLine1?: string;
+      townCity?: string;
+      postcode?: string;
+      serviceType?: string;
+      capacity?: number;
+    };
+
+    const facility = await store.getFacilityById(ctx, facilityId);
+    if (!facility) {
+      sendError(res, 404, 'Facility not found');
+      return;
+    }
+
+    try {
+      const updated = await store.updateFacility(ctx, facilityId, updates);
+      await store.appendAuditEvent(ctx, facility.providerId, 'FACILITY_UPDATED', {
+        facilityId,
+        facilityName: updated.facilityName,
+        cqcLocationId: updated.cqcLocationId,
+        updatedFields: Object.keys(updates),
+      });
+      const provider = await store.getProviderById(ctx, updated.providerId);
+      sendWithMetadata(res, { facility: updated, provider });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Update failed';
+      sendError(res, 400, message);
+    }
+  });
+
+  /**
+   * DELETE /v1/facilities/:facilityId
+   *
+   * Delete a location. Guards against deletion if in-progress sessions exist.
+   */
+  app.delete('/v1/facilities/:facilityId', async (req, res) => {
+    const ctx = getContext(req);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ facilityId: zFacilityId }).strip(),
+    });
+    if (!parsed) return;
+    const { facilityId } = parsed.params as { facilityId: string };
+
+    const facility = await store.getFacilityById(ctx, facilityId);
+    if (!facility) {
+      sendError(res, 404, 'Facility not found');
+      return;
+    }
+
+    try {
+      await store.deleteFacility(ctx, facilityId);
+      await store.appendAuditEvent(ctx, facility.providerId, 'FACILITY_DELETED', {
+        facilityId,
+        facilityName: facility.facilityName,
+        cqcLocationId: facility.cqcLocationId,
+      });
+      sendWithMetadata(res, { deleted: true, facilityId });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Delete failed';
+      sendError(res, 409, message);
+    }
+  });
+
+  /**
+   * DELETE /v1/facilities/:facilityId/evidence/:evidenceId
+   *
+   * Delete an evidence record. Does not delete the underlying blob.
+   */
+  app.delete('/v1/facilities/:facilityId/evidence/:evidenceId', async (req, res) => {
+    const ctx = getContext(req);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ facilityId: zFacilityId, evidenceId: zId }).strip(),
+    });
+    if (!parsed) return;
+    const { facilityId, evidenceId } = parsed.params as { facilityId: string; evidenceId: string };
+
+    const facility = await store.getFacilityById(ctx, facilityId);
+    if (!facility) {
+      sendError(res, 404, 'Facility not found');
+      return;
+    }
+
+    try {
+      const deleted = await store.deleteEvidenceRecord(ctx, evidenceId);
+      await store.appendAuditEvent(ctx, facility.providerId, 'EVIDENCE_DELETED', {
+        facilityId,
+        evidenceRecordId: evidenceId,
+        fileName: deleted.fileName,
+        blobHash: deleted.blobHash,
+      });
+      sendWithMetadata(res, { deleted: true, evidenceRecordId: evidenceId });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Delete failed';
+      sendError(res, 404, message);
+    }
   });
 
   /**
@@ -1841,6 +2021,11 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       await store.appendAuditEvent(ctx, facility.providerId, 'EVIDENCE_RECORDED', {
         facilityId,
         evidenceRecordId: record.id,
+        blobHash: record.blobHash,
+        fileName: record.fileName,
+        mimeType: record.mimeType,
+        sizeBytes: record.sizeBytes,
+        evidenceType: record.evidenceType,
       });
 
       const reportContext = await resolveReportContextForFacility(ctx, facility.providerId, facilityId);
@@ -2084,6 +2269,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       await store.appendAuditEvent(ctx, providerId, 'EXPORT_GENERATED', {
         exportId: exportRecord.id,
         format: safeFormat,
+        facilityId,
       });
 
       const fileExtension = getExportExtension(safeFormat);
@@ -2232,6 +2418,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     await store.appendAuditEvent(ctx, providerId, 'EXPORT_GENERATED', {
       exportId: exportRecord.id,
       format: safeFormat,
+      facilityId,
     });
 
     const fileExtension = getExportExtension(safeFormat);

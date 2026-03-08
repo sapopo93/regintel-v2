@@ -10,6 +10,8 @@ RegIntel v2 is a regulatory compliance platform for UK CQC-registered care provi
 
 ## Build & Test Commands
 
+Requires `pnpm` (not npm/yarn).
+
 ```bash
 pnpm install                      # Install dependencies
 pnpm test                         # Run all tests via Vitest (excludes apps/api — see below)
@@ -51,60 +53,9 @@ cd apps/web && pnpm test:e2e --ui                         # Playwright with UI
 
 ### Phase Gate Tests
 
-Test names follow the pattern `<phase>:<gate>`. All phases 0-11 have gate tests:
+Test names follow the pattern `<phase>:<gate>`. Run all gates with `pnpm gate` (or `pnpm gate --strict` for CI). Run a single gate with `pnpm vitest run -t "<phase>:<gate>"`.
 
-```bash
-# Phase 0: Foundations
-pnpm vitest run -t "security:tenant"
-pnpm vitest run -t "audit:chain"
-pnpm vitest run -t "security:secrets"
-
-# Phase 1: The Spine
-pnpm vitest run -t "spine:no-orphans"
-pnpm vitest run -t "spine:mock-separation"
-pnpm vitest run -t "spine:hashes"
-
-# Phase 2: Drift Engine
-pnpm vitest run -t "drift:cosmetic"
-pnpm vitest run -t "drift:normative"
-pnpm vitest run -t "drift:determinism"
-
-# Phase 3: Policy Intelligence
-pnpm vitest run -t "policy-intel:edges"
-pnpm vitest run -t "policy-intel:migrations"
-
-# Phase 4: PRS Logic Profiles
-pnpm vitest run -t "logic:determinism"
-pnpm vitest run -t "logic:interaction-hash"
-
-# Phase 5: Mock Inspection Engine
-pnpm vitest run -t "mock:limits"
-pnpm vitest run -t "mock:replay"
-pnpm vitest run -t "mock:safety"
-
-# Phase 6: Topic Catalog
-pnpm vitest run -t "topics:scope"
-pnpm vitest run -t "topics:evidence"
-
-# Phase 7: Provider Outputs
-pnpm vitest run -t "outputs:purity"
-
-# Phase 9e: Readiness Export
-pnpm vitest run -t "ux:report_export"
-
-# Phase 10: Forensic UI (run from apps/web)
-cd apps/web && pnpm vitest run -t "ui:constitutional"
-cd apps/web && pnpm vitest run -t "ui:mock-safety"
-cd apps/web && pnpm vitest run -t "ui:projection-purity"
-cd apps/web && pnpm vitest run -t "ui:disclosure"
-cd apps/web && pnpm vitest run -t "ui:no-interpretation"
-
-# Phase 11: Blue Ocean Reports
-pnpm vitest run -t "blue-ocean:completeness"
-pnpm vitest run -t "blue-ocean:rca"
-pnpm vitest run -t "blue-ocean:smart-actions"
-pnpm vitest run -t "blue-ocean:golden"
-```
+**Note:** Phase 10 UI gates must run from `apps/web`: `cd apps/web && pnpm vitest run -t "ui:<gate>"`.
 
 **CI Strict Mode:** When `CI=true`, SKIP results are treated as failures. All tests must explicitly PASS.
 

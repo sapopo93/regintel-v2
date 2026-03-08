@@ -115,7 +115,7 @@ export default function NewFacilityPage() {
     setError(null);
 
     if (!providerId) {
-      setError('Provider ID is required');
+      setError('A provider must be selected');
       return;
     }
 

@@ -24,6 +24,7 @@ import type {
   FacilitiesListResponse,
   FacilityDetailResponse,
   CreateFacilityRequest,
+  UpdateFacilityRequest,
   OnboardFacilityRequest,
   OnboardFacilityResponse,
   CqcLocationLookupResponse,
@@ -40,6 +41,7 @@ import type {
   SyncReportResponse,
   BulkOnboardRequest,
   BulkOnboardResponse,
+  Saf34CoverageResponse,
 } from './types';
 
 /**
@@ -407,6 +409,39 @@ export class ApiClient {
   }
 
   /**
+   * Update facility
+   */
+  async updateFacility(facilityId: string, updates: UpdateFacilityRequest): Promise<FacilityDetailResponse> {
+    return this.fetch<FacilityDetailResponse>(
+      `/v1/facilities/${facilityId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      }
+    );
+  }
+
+  /**
+   * Delete facility
+   */
+  async deleteFacility(facilityId: string): Promise<ConstitutionalMetadata & { deleted: boolean }> {
+    return this.fetch<ConstitutionalMetadata & { deleted: boolean }>(
+      `/v1/facilities/${facilityId}`,
+      { method: 'DELETE' }
+    );
+  }
+
+  /**
+   * Delete evidence record
+   */
+  async deleteEvidence(facilityId: string, evidenceId: string): Promise<ConstitutionalMetadata & { deleted: boolean }> {
+    return this.fetch<ConstitutionalMetadata & { deleted: boolean }>(
+      `/v1/facilities/${facilityId}/evidence/${evidenceId}`,
+      { method: 'DELETE' }
+    );
+  }
+
+  /**
    * Create evidence blob (returns scan status)
    */
   async createEvidenceBlob(request: CreateEvidenceBlobRequest): Promise<CreateEvidenceBlobResponseWithScan> {
@@ -485,6 +520,18 @@ export class ApiClient {
     return this.fetch<SyncReportResponse>(
       `/v1/facilities/${facilityId}/sync-latest-report`,
       { method: 'POST' }
+    );
+  }
+
+  /**
+   * Get SAF 34 Quality Statement coverage
+   */
+  async getSaf34Coverage(
+    providerId: string,
+    facilityId: string
+  ): Promise<Saf34CoverageResponse> {
+    return this.fetch<Saf34CoverageResponse>(
+      `/v1/providers/${providerId}/saf34-coverage?facility=${encodeURIComponent(facilityId)}`
     );
   }
 
