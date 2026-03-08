@@ -10,8 +10,6 @@ import type { FacilitiesListResponse, Facility, UpdateFacilityRequest } from '@/
 import { validateConstitutionalRequirements } from '@/lib/validators';
 import styles from './page.module.css';
 
-type SidebarData = { providerName: string; snapshotDate: string; topicCatalogVersion: string; prsLogicVersion: string };
-
 export default function FacilitiesPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -107,27 +105,19 @@ export default function FacilitiesPage() {
     }
   };
 
-  // Always render Sidebar for navigation, even during loading/error states
-  let sidebarProps: SidebarData;
-  if (data) {
-    sidebarProps = {
-      providerName: data.provider?.providerName || 'Provider',
-      snapshotDate: data.provider?.asOf || data.snapshotTimestamp,
-      topicCatalogVersion: data.topicCatalogVersion,
-      prsLogicVersion: data.prsLogicVersion,
-    };
-  } else {
-    sidebarProps = {
-      providerName: 'Loading...',
-      snapshotDate: new Date().toISOString(),
-      topicCatalogVersion: 'v1',
-      prsLogicVersion: 'v1',
-    };
-  }
+  const providerName = data?.provider?.providerName ?? 'Provider';
+  const snapshotDate = data?.provider?.asOf ?? data?.snapshotTimestamp ?? new Date().toISOString();
+  const topicCatalogVersion = data?.topicCatalogVersion ?? 'v1';
+  const prsLogicVersion = data?.prsLogicVersion ?? 'v1';
 
   return (
     <div className={styles.layout}>
-      <Sidebar {...sidebarProps} />
+      <Sidebar
+        providerName={providerName}
+        snapshotDate={snapshotDate}
+        topicCatalogVersion={topicCatalogVersion}
+        prsLogicVersion={prsLogicVersion}
+      />
 
       <main className={styles.main}>
         {loading ? (
@@ -176,89 +166,89 @@ export default function FacilitiesPage() {
               </button>
             </div>
 
+            {editingFacility && (
+              <div className={styles.editOverlay} data-testid="edit-facility-form">
+                <div className={styles.editForm}>
+                  <h3 className={styles.editTitle}>Edit Location</h3>
+                  {editError && <div className={styles.error}>{editError}</div>}
+                  <div className={styles.editFieldGroup}>
+                    <label className={styles.editLabel}>Location Name</label>
+                    <input
+                      className={styles.editInput}
+                      value={editForm.facilityName ?? ''}
+                      onChange={(e) => setEditForm({ ...editForm, facilityName: e.target.value })}
+                    />
+                  </div>
+                  <div className={styles.editFieldGroup}>
+                    <label className={styles.editLabel}>Address Line 1</label>
+                    <input
+                      className={styles.editInput}
+                      value={editForm.addressLine1 ?? ''}
+                      onChange={(e) => setEditForm({ ...editForm, addressLine1: e.target.value })}
+                    />
+                  </div>
+                  <div className={styles.editFieldGroup}>
+                    <label className={styles.editLabel}>Town/City</label>
+                    <input
+                      className={styles.editInput}
+                      value={editForm.townCity ?? ''}
+                      onChange={(e) => setEditForm({ ...editForm, townCity: e.target.value })}
+                    />
+                  </div>
+                  <div className={styles.editFieldGroup}>
+                    <label className={styles.editLabel}>Postcode</label>
+                    <input
+                      className={styles.editInput}
+                      value={editForm.postcode ?? ''}
+                      onChange={(e) => setEditForm({ ...editForm, postcode: e.target.value })}
+                    />
+                  </div>
+                  <div className={styles.editFieldGroup}>
+                    <label className={styles.editLabel}>Service Type</label>
+                    <select
+                      className={styles.editInput}
+                      value={editForm.serviceType ?? ''}
+                      onChange={(e) => setEditForm({ ...editForm, serviceType: e.target.value })}
+                    >
+                      <option value="residential">Residential</option>
+                      <option value="nursing">Nursing</option>
+                      <option value="domiciliary">Domiciliary</option>
+                      <option value="supported_living">Supported Living</option>
+                      <option value="hospice">Hospice</option>
+                    </select>
+                  </div>
+                  <div className={styles.editFieldGroup}>
+                    <label className={styles.editLabel}>Capacity</label>
+                    <input
+                      className={styles.editInput}
+                      type="number"
+                      min="0"
+                      value={editForm.capacity ?? ''}
+                      onChange={(e) => setEditForm({ ...editForm, capacity: e.target.value ? parseInt(e.target.value, 10) : undefined })}
+                    />
+                  </div>
+                  <div className={styles.editFieldGroup}>
+                    <label className={styles.editLabel}>CQC Location ID</label>
+                    <input className={styles.editInput} value={editingFacility.cqcLocationId} disabled />
+                  </div>
+                  <div className={styles.editActions}>
+                    <button className={styles.editSaveButton} onClick={handleSaveEdit} disabled={saving} data-testid="save-edit-button">
+                      {saving ? 'Saving...' : 'Save'}
+                    </button>
+                    <button className={styles.editCancelButton} onClick={handleCancelEdit}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {data.facilities.length === 0 ? (
               <div className={styles.empty}>
                 <p>No locations registered yet.</p>
-                <p>Click "Register a Location" to register your first location.</p>
+                <p>Click &quot;Register a Location&quot; to register your first location.</p>
               </div>
             ) : (
-              {editingFacility && (
-                <div className={styles.editOverlay} data-testid="edit-facility-form">
-                  <div className={styles.editForm}>
-                    <h3 className={styles.editTitle}>Edit Location</h3>
-                    {editError && <div className={styles.error}>{editError}</div>}
-                    <div className={styles.editFieldGroup}>
-                      <label className={styles.editLabel}>Location Name</label>
-                      <input
-                        className={styles.editInput}
-                        value={editForm.facilityName ?? ''}
-                        onChange={(e) => setEditForm({ ...editForm, facilityName: e.target.value })}
-                      />
-                    </div>
-                    <div className={styles.editFieldGroup}>
-                      <label className={styles.editLabel}>Address Line 1</label>
-                      <input
-                        className={styles.editInput}
-                        value={editForm.addressLine1 ?? ''}
-                        onChange={(e) => setEditForm({ ...editForm, addressLine1: e.target.value })}
-                      />
-                    </div>
-                    <div className={styles.editFieldGroup}>
-                      <label className={styles.editLabel}>Town/City</label>
-                      <input
-                        className={styles.editInput}
-                        value={editForm.townCity ?? ''}
-                        onChange={(e) => setEditForm({ ...editForm, townCity: e.target.value })}
-                      />
-                    </div>
-                    <div className={styles.editFieldGroup}>
-                      <label className={styles.editLabel}>Postcode</label>
-                      <input
-                        className={styles.editInput}
-                        value={editForm.postcode ?? ''}
-                        onChange={(e) => setEditForm({ ...editForm, postcode: e.target.value })}
-                      />
-                    </div>
-                    <div className={styles.editFieldGroup}>
-                      <label className={styles.editLabel}>Service Type</label>
-                      <select
-                        className={styles.editInput}
-                        value={editForm.serviceType ?? ''}
-                        onChange={(e) => setEditForm({ ...editForm, serviceType: e.target.value })}
-                      >
-                        <option value="residential">Residential</option>
-                        <option value="nursing">Nursing</option>
-                        <option value="domiciliary">Domiciliary</option>
-                        <option value="supported_living">Supported Living</option>
-                        <option value="hospice">Hospice</option>
-                      </select>
-                    </div>
-                    <div className={styles.editFieldGroup}>
-                      <label className={styles.editLabel}>Capacity</label>
-                      <input
-                        className={styles.editInput}
-                        type="number"
-                        min="0"
-                        value={editForm.capacity ?? ''}
-                        onChange={(e) => setEditForm({ ...editForm, capacity: e.target.value ? parseInt(e.target.value, 10) : undefined })}
-                      />
-                    </div>
-                    <div className={styles.editFieldGroup}>
-                      <label className={styles.editLabel}>CQC Location ID</label>
-                      <input className={styles.editInput} value={editingFacility.cqcLocationId} disabled />
-                    </div>
-                    <div className={styles.editActions}>
-                      <button className={styles.editSaveButton} onClick={handleSaveEdit} disabled={saving} data-testid="save-edit-button">
-                        {saving ? 'Saving...' : 'Save'}
-                      </button>
-                      <button className={styles.editCancelButton} onClick={handleCancelEdit}>
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               <div className={styles.facilitiesList}>
                 {data.facilities.map((facility) => (
                   <div
