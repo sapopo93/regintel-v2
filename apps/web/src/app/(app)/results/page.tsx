@@ -185,7 +185,7 @@ export default function ResultsPage() {
           ingestionStatus={overview.ingestionStatus}
         />
 
-        <SimulationFrame mode={overview.mode}>
+        <SimulationFrame>
           {/* 1. Readiness Score */}
           <section className={styles.readinessSection}>
             <h2 className={styles.readinessTitle}>Overall Readiness</h2>
