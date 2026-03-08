@@ -16,9 +16,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script: |
-            cd ${{ secrets.DEPLOY_PATH }}
-            bash deploy.sh
+          script: cd ${{ secrets.DEPLOY_PATH }} && bash deploy.sh
 
       - name: Health check
         uses: appleboy/ssh-action@v1.0.3
