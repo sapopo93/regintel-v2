@@ -172,9 +172,39 @@ describe('cqc-intelligence', () => {
         dismissedAt: null,
       };
 
-      const existingKeys = new Set(['1-12345:S7:2026-03-01']);
+      const existingKeys = new Set(['1-12345:S7:2026-03-01:RISK_SIGNAL']);
       const result = deduplicateAlerts([alert], existingKeys);
       expect(result).toHaveLength(0);
+    });
+
+    it('keeps both RISK_SIGNAL and OUTSTANDING_SIGNAL for same location+QS+date', () => {
+      const baseAlert: CqcIntelligenceAlert = {
+        id: 'demo:alert-1',
+        tenantId: 'demo',
+        providerId: 'demo:provider-1',
+        facilityIds: ['demo:fac-1'],
+        intelligenceType: 'RISK_SIGNAL',
+        sourceLocationId: '1-12345',
+        sourceLocationName: 'Test',
+        sourceServiceType: 'Social Care Org',
+        reportDate: '2026-03-01',
+        keyQuestion: 'SAFE',
+        qualityStatementId: 'S7',
+        qualityStatementTitle: 'IPC',
+        findingText: 'test',
+        providerCoveragePercent: 35,
+        severity: 'HIGH',
+        createdAt: new Date().toISOString(),
+        dismissedAt: null,
+      };
+      const outstandingAlert: CqcIntelligenceAlert = {
+        ...baseAlert,
+        id: 'demo:alert-2',
+        intelligenceType: 'OUTSTANDING_SIGNAL',
+      };
+
+      const result = deduplicateAlerts([baseAlert, outstandingAlert], new Set());
+      expect(result).toHaveLength(2);
     });
 
     it('keeps alerts with different keys', () => {

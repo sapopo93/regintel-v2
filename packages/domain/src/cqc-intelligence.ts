@@ -87,7 +87,7 @@ function calculateSeverity(coveragePercent: number, type: IntelligenceType): Ale
     if (coveragePercent < 60) return 'MEDIUM';
     return 'LOW';
   }
-  // OUTSTANDING_SIGNAL: severity based on gap to outstanding
+  // OUTSTANDING_SIGNAL: HIGH = large gap to outstanding coverage, LOW = close to outstanding
   if (coveragePercent < 40) return 'HIGH';
   if (coveragePercent < 70) return 'MEDIUM';
   return 'LOW';
@@ -255,14 +255,14 @@ export function generateAlerts(input: GenerateAlertsInput): CqcIntelligenceAlert
 }
 
 /**
- * Deduplicate alerts by sourceLocationId + qualityStatementId + reportDate.
+ * Deduplicate alerts by sourceLocationId + qualityStatementId + reportDate + intelligenceType.
  */
 export function deduplicateAlerts(
   newAlerts: CqcIntelligenceAlert[],
   existingAlertKeys: Set<string>
 ): CqcIntelligenceAlert[] {
   return newAlerts.filter((alert) => {
-    const key = `${alert.sourceLocationId}:${alert.qualityStatementId}:${alert.reportDate}`;
+    const key = alertDeduplicationKey(alert);
     return !existingAlertKeys.has(key);
   });
 }
@@ -286,7 +286,7 @@ export function capAlerts(alerts: CqcIntelligenceAlert[], maxCount: number): Cqc
  * Build a deduplication key for an alert.
  */
 export function alertDeduplicationKey(alert: CqcIntelligenceAlert): string {
-  return `${alert.sourceLocationId}:${alert.qualityStatementId}:${alert.reportDate}`;
+  return `${alert.sourceLocationId}:${alert.qualityStatementId}:${alert.reportDate}:${alert.intelligenceType}`;
 }
 
 /**

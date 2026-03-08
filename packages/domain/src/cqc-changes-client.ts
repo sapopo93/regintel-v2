@@ -269,6 +269,10 @@ async function fetchPage(
 function pickRandomPages(totalPages: number, count: number): number[] {
   if (totalPages <= 1) return [];
   const available = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
-  const shuffled = available.sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, Math.min(count, available.length));
+  // Fisher-Yates shuffle (unbiased)
+  for (let i = available.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [available[i], available[j]] = [available[j], available[i]];
+  }
+  return available.slice(0, Math.min(count, available.length));
 }
