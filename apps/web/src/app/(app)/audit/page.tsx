@@ -73,10 +73,33 @@ export default function AuditPage() {
       MOCK_SESSION_COMPLETED: 'Practice inspection completed',
       FINDING_CREATED: 'Finding created',
       EVIDENCE_UPLOADED: 'Evidence uploaded',
+      EVIDENCE_RECORDED: 'Evidence uploaded',
+      EVIDENCE_DELETED: 'Evidence removed',
       EXPORT_GENERATED: 'Export generated',
+      PROVIDER_CREATED: 'Provider created',
+      FACILITY_CREATED: 'Location registered',
+      FACILITY_ONBOARDED: 'Location onboarded',
+      FACILITY_UPDATED: 'Location updated',
+      FACILITY_DELETED: 'Location deleted',
+      REPORT_SCRAPED: 'CQC report synced',
     };
     return map[eventType] ?? eventType.replaceAll('_', ' ').toLowerCase();
   };
+
+  const formatPayloadDetail = (key: string, value: unknown): string => {
+    if (key === 'sizeBytes' && typeof value === 'number') {
+      return value > 1024 * 1024
+        ? `${(value / (1024 * 1024)).toFixed(1)} MB`
+        : `${(value / 1024).toFixed(1)} KB`;
+    }
+    return String(value);
+  };
+
+  const DISPLAY_PAYLOAD_KEYS = new Set([
+    'facilityName', 'cqcLocationId', 'fileName', 'mimeType', 'sizeBytes',
+    'evidenceType', 'format', 'topicId', 'findingsCount', 'providerName',
+    'dataSource', 'reportDate', 'rating',
+  ]);
 
   return (
     <SimulationFrame reportingDomain={data.reportingDomain}>
@@ -136,6 +159,18 @@ export default function AuditPage() {
                         <dt>Recorded By</dt>
                         <dd>{event.userId}</dd>
                       </dl>
+
+                      {event.payload && (
+                        <div className={styles.payloadDetails}>
+                          {Object.entries(event.payload)
+                            .filter(([key]) => DISPLAY_PAYLOAD_KEYS.has(key))
+                            .map(([key, value]) => (
+                              <span key={key} className={styles.payloadTag}>
+                                {key.replace(/([A-Z])/g, ' $1').trim()}: {formatPayloadDetail(key, value)}
+                              </span>
+                            ))}
+                        </div>
+                      )}
 
                       {event.previousEventHash && <div className={styles.chainIndicator}>Linked to previous activity</div>}
                     </div>

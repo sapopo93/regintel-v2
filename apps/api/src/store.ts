@@ -142,6 +142,7 @@ export interface AuditEventRecord {
   payloadHash: string;
   previousEventHash?: string;
   eventHash: string;
+  payload?: Record<string, unknown>;
 }
 
 export interface TenantContext {
@@ -518,6 +519,151 @@ export class InMemoryStore {
     return { facility: record, isNew };
   }
 
+  updateFacility(
+    ctx: TenantContext,
+    facilityId: string,
+    updates: {
+      facilityName?: string;
+      addressLine1?: string;
+      townCity?: string;
+      postcode?: string;
+      serviceType?: string;
+      capacity?: number;
+    }
+  ): FacilityRecord {
+    const existing = this.facilities.readByKey(ctx, facilityId);
+    if (!existing) {
+      throw new Error('Facility not found');
+    }
+
+    const facilityName = updates.facilityName ?? existing.facilityName;
+    const addressLine1 = updates.addressLine1 ?? existing.addressLine1;
+    const townCity = updates.townCity ?? existing.townCity;
+    const postcode = updates.postcode ?? existing.postcode;
+    const serviceType = updates.serviceType ?? existing.serviceType;
+    const capacity = updates.capacity !== undefined ? updates.capacity : existing.capacity;
+    const address = `${addressLine1.trim()}, ${townCity.trim()}, ${postcode.trim()}`;
+
+    const domainFacility = createFacility({
+      id: unscopeKey(ctx, existing.id) ?? existing.id,
+      tenantId: ctx.tenantId,
+      providerId: existing.providerId,
+      facilityName,
+      address,
+      cqcLocationId: existing.cqcLocationId,
+      serviceType,
+      capacity,
+      createdBy: existing.createdBy,
+    });
+
+    const now = new Date().toISOString();
+    const record: FacilityRecord = {
+      ...existing,
+      facilityName,
+      addressLine1: addressLine1.trim(),
+      townCity: townCity.trim(),
+      postcode: postcode.trim(),
+      address,
+      serviceType,
+      capacity,
+      facilityHash: domainFacility.facilityHash,
+      asOf: now,
+    };
+
+    const unscopedId = unscopeKey(ctx, existing.id);
+    if (unscopedId) {
+      this.facilities.write(ctx, unscopedId, record);
+    } else {
+      this.facilities.writeByKey(ctx, existing.id, record);
+    }
+
+    // Recalculate provider aggregates
+    this.recalculateProviderAggregates(ctx, existing.providerId);
+
+    return record;
+  }
+
+  deleteFacility(ctx: TenantContext, facilityId: string): void {
+    const existing = this.facilities.readByKey(ctx, facilityId);
+    if (!existing) {
+      throw new Error('Facility not found');
+    }
+
+    // Guard: no in-progress mock sessions
+    const sessions = this.sessionsByProvider.get(existing.providerId) ?? [];
+    for (const sid of sessions) {
+      const session = this.sessions.readByKey(ctx, sid);
+      if (session && session.facilityId === facilityId && session.status === 'IN_PROGRESS') {
+        throw new Error('Cannot delete location with in-progress practice inspections');
+      }
+    }
+
+    // Remove from facilities store
+    const unscopedId = unscopeKey(ctx, existing.id);
+    if (unscopedId) {
+      this.facilities.delete(ctx, unscopedId);
+    }
+
+    // Remove from facilityIndex
+    const normalizedCqc = existing.cqcLocationId.trim().toUpperCase();
+    const indexKey = `${existing.providerId}::${normalizedCqc}`;
+    this.facilityIndex.delete(indexKey);
+
+    // Remove from facilitiesByProvider
+    const facilityList = this.facilitiesByProvider.get(existing.providerId);
+    if (facilityList) {
+      const idx = facilityList.indexOf(existing.id);
+      if (idx !== -1) facilityList.splice(idx, 1);
+    }
+
+    // Recalculate provider aggregates
+    this.recalculateProviderAggregates(ctx, existing.providerId);
+  }
+
+  deleteEvidenceRecord(ctx: TenantContext, evidenceRecordId: string): EvidenceRecordRecord {
+    const existing = this.evidenceRecords.readByKey(ctx, evidenceRecordId);
+    if (!existing) {
+      throw new Error('Evidence record not found');
+    }
+
+    // Remove from evidenceRecords store
+    const unscopedId = unscopeKey(ctx, existing.id);
+    if (unscopedId) {
+      this.evidenceRecords.delete(ctx, unscopedId);
+    }
+
+    // Remove from evidenceByFacility index
+    const evidenceList = this.evidenceByFacility.get(existing.facilityId);
+    if (evidenceList) {
+      const idx = evidenceList.indexOf(existing.id);
+      if (idx !== -1) evidenceList.splice(idx, 1);
+    }
+
+    return existing;
+  }
+
+  private recalculateProviderAggregates(ctx: TenantContext, providerId: string): void {
+    const providerKey = unscopeKey(ctx, providerId);
+    if (!providerKey) return;
+    const providerRecord = this.providers.read(ctx, providerKey);
+    if (!providerRecord) return;
+
+    const allFacilities = this.listFacilitiesByProvider(ctx, providerId);
+    const updatedServiceTypes = Array.from(
+      new Set(allFacilities.map((f) => f.serviceType))
+    );
+    const updatedBeds = allFacilities.reduce(
+      (total, f) => total + (f.capacity ?? 0),
+      0
+    );
+
+    this.providers.write(ctx, providerKey, {
+      ...providerRecord,
+      serviceTypes: updatedServiceTypes,
+      registeredBeds: updatedBeds,
+    });
+  }
+
   createEvidenceBlob(ctx: TenantContext, input: { contentBase64: string; mimeType: string }): EvidenceBlobRecord {
     const buffer = Buffer.from(input.contentBase64, 'base64');
     const hashHex = computeBlobHash(buffer);
@@ -788,6 +934,7 @@ export class InMemoryStore {
       payloadHash,
       previousEventHash,
       eventHash,
+      payload,
     };
 
     const updated = [...events, record];

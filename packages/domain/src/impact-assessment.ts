@@ -98,7 +98,10 @@ export interface ImpactAssessment {
 export function determineMigrationRecommendation(params: {
   link: RegulationPolicyLink;
   changeEvent: RegulatoryChangeEvent;
-}): Omit<ImpactAssessmentItem, 'linkId' | 'oldRegulationId' | 'newRegulationId' | 'policyId' | 'policyClauseId'> {
+}): Omit<
+  ImpactAssessmentItem,
+  'linkId' | 'oldRegulationId' | 'oldRegulationSectionId' | 'newRegulationId' | 'policyId' | 'policyClauseId'
+> {
   const { link, changeEvent } = params;
 
   // Find changes affecting this link's section

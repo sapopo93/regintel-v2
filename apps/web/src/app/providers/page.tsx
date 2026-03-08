@@ -224,7 +224,7 @@ function ProvidersPageWithClerkAuth() {
   return (
     <ProvidersPageInner
       isLoaded={isLoaded}
-      isSignedIn={isSignedIn}
+      isSignedIn={!!isSignedIn}
       enableSignInRedirect
     />
   );

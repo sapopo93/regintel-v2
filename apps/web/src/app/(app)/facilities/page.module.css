@@ -114,3 +114,130 @@
   color: var(--color-charcoal);
   font-weight: var(--font-semibold);
 }
+
+.facilityCardFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cardActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.editButton,
+.deleteButton {
+  padding: 4px 12px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  border: 1px solid var(--color-slate-300);
+  background: transparent;
+  color: var(--color-slate-700);
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.editButton:hover {
+  background-color: var(--color-slate-100);
+  border-color: var(--color-slate-400);
+}
+
+.deleteButton {
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
+.deleteButton:hover {
+  background-color: #fef2f2;
+  border-color: #f87171;
+}
+
+.deleteButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.editOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.editForm {
+  background: white;
+  padding: var(--space-8);
+  border-radius: var(--radius-md);
+  width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.editTitle {
+  font-size: var(--text-xl);
+  font-weight: var(--font-semibold);
+  margin-bottom: var(--space-6);
+}
+
+.editFieldGroup {
+  margin-bottom: var(--space-4);
+}
+
+.editLabel {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-slate-600);
+  margin-bottom: var(--space-1);
+}
+
+.editInput {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--color-slate-300);
+  border-radius: var(--radius-md);
+  font-size: var(--text-base);
+}
+
+.editInput:disabled {
+  background: var(--color-slate-100);
+  color: var(--color-slate-500);
+}
+
+.editActions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+.editSaveButton {
+  padding: 8px 20px;
+  background: var(--color-charcoal);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-weight: var(--font-semibold);
+}
+
+.editSaveButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.editCancelButton {
+  padding: 8px 20px;
+  background: transparent;
+  border: 1px solid var(--color-slate-300);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--color-slate-700);
+}

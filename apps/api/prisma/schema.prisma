@@ -288,3 +288,120 @@ model AuditEvent {
   @@index([tenantId, entityType, entityId])
   @@map("audit_events")
 }
+
+// ── V2 tables: mirror in-memory record shapes for write-through persistence ──
+
+model MockSessionV2 {
+  sessionId              String @id @map("session_id")
+  tenantId               String @map("tenant_id")
+  providerId             String @map("provider_id")
+  facilityId             String @map("facility_id")
+  mode                   String @default("MOCK")
+  providerSnapshot       Json   @map("provider_snapshot")
+  topicId                String @map("topic_id")
+  status                 String @default("IN_PROGRESS")
+  followUpsUsed          Int    @map("follow_ups_used") @default(0)
+  maxFollowUps           Int    @map("max_follow_ups") @default(4)
+  createdAt              String @map("created_at")
+  completedAt            String? @map("completed_at")
+  topicCatalogVersion    String @map("topic_catalog_version")
+  topicCatalogHash       String @map("topic_catalog_hash")
+  prsLogicProfilesVersion String @map("prs_logic_profiles_version")
+  prsLogicProfilesHash   String @map("prs_logic_profiles_hash")
+
+  @@index([tenantId])
+  @@index([providerId])
+  @@map("mock_sessions_v2")
+}
+
+model FindingV2 {
+  id                  String @id
+  tenantId            String @map("tenant_id")
+  providerId          String @map("provider_id")
+  facilityId          String @map("facility_id")
+  sessionId           String @map("session_id")
+  regulationSectionId String @map("regulation_section_id")
+  topicId             String @map("topic_id")
+  origin              String
+  reportingDomain     String @map("reporting_domain")
+  severity            String
+  impactScore         Int    @map("impact_score")
+  likelihoodScore     Int    @map("likelihood_score")
+  compositeRiskScore  Int    @map("composite_risk_score")
+  title               String
+  description         String
+  evidenceRequired    String[] @map("evidence_required")
+  evidenceProvided    String[] @map("evidence_provided")
+  evidenceMissing     String[] @map("evidence_missing")
+  deterministicHash   String @map("deterministic_hash")
+  createdAt           String @map("created_at")
+
+  @@index([tenantId])
+  @@index([providerId])
+  @@map("findings_v2")
+}
+
+model EvidenceBlobV2 {
+  blobHash   String @id @map("blob_hash")
+  mimeType   String @map("mime_type")
+  sizeBytes  Int    @map("size_bytes")
+  uploadedAt String @map("uploaded_at")
+
+  @@map("evidence_blobs_v2")
+}
+
+model EvidenceRecordV2 {
+  id           String  @id
+  tenantId     String  @map("tenant_id")
+  providerId   String  @map("provider_id")
+  facilityId   String  @map("facility_id")
+  blobHash     String  @map("blob_hash")
+  mimeType     String  @map("mime_type")
+  sizeBytes    Int     @map("size_bytes")
+  evidenceType String  @map("evidence_type")
+  fileName     String  @map("file_name")
+  description  String?
+  uploadedAt   String  @map("uploaded_at")
+  createdBy    String  @map("created_by")
+
+  @@index([tenantId])
+  @@index([facilityId])
+  @@map("evidence_records_v2")
+}
+
+model ExportV2 {
+  id              String @id
+  tenantId        String @map("tenant_id")
+  providerId      String @map("provider_id")
+  facilityId      String @map("facility_id")
+  sessionId       String @map("session_id")
+  format          String
+  content         String
+  reportingDomain String @map("reporting_domain")
+  mode            String
+  reportSource    Json   @map("report_source")
+  snapshotId      String @map("snapshot_id")
+  generatedAt     String @map("generated_at")
+  expiresAt       String @map("expires_at")
+
+  @@index([tenantId])
+  @@index([providerId])
+  @@map("exports_v2")
+}
+
+model AuditEventV2 {
+  eventId           String  @id @map("event_id")
+  tenantId          String  @map("tenant_id")
+  providerId        String  @map("provider_id")
+  eventType         String  @map("event_type")
+  timestamp         String
+  userId            String  @map("user_id")
+  payloadHash       String  @map("payload_hash")
+  previousEventHash String? @map("previous_event_hash")
+  eventHash         String  @map("event_hash")
+  payload           Json?
+
+  @@index([tenantId])
+  @@index([providerId, timestamp])
+  @@map("audit_events_v2")
+}

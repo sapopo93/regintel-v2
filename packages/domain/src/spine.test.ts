@@ -37,8 +37,8 @@ describe('spine:no-orphans', () => {
         createAction({
           id: 'action-1',
           tenantId: 'tenant-a',
+          domain: Domain.CQC,
           findingId: '', // Empty findingId
-          title: 'Fix issue',
           description: 'Description',
           createdBy: 'user-1',
         });
@@ -48,8 +48,8 @@ describe('spine:no-orphans', () => {
         createAction({
           id: 'action-2',
           tenantId: 'tenant-a',
+          domain: Domain.CQC,
           findingId: '', // Empty findingId
-          title: 'Fix issue',
           description: 'Description',
           createdBy: 'user-1',
         });
@@ -60,8 +60,8 @@ describe('spine:no-orphans', () => {
       const action = createAction({
         id: 'action-1',
         tenantId: 'tenant-a',
+        domain: Domain.CQC,
         findingId: 'finding-1',
-        title: 'Remediate finding',
         description: 'Action description',
         createdBy: 'user-1',
       });

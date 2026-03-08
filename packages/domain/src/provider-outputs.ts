@@ -249,17 +249,23 @@ export function generateInspectionConfidenceReport(input: {
     }
   >();
 
+  const actionsByFindingId = new Map<string, Action[]>();
+  for (const action of input.actions) {
+    const list = actionsByFindingId.get(action.findingId);
+    if (list) list.push(action);
+    else actionsByFindingId.set(action.findingId, [action]);
+  }
+
   for (const finding of input.findings) {
     const key = `${finding.regulationId}:${finding.regulationSectionId}`;
     const existing = riskAreaMap.get(key);
 
     if (!existing) {
-      const hasActions = input.actions.some((a) => a.findingId === finding.id);
+      const findingActions = actionsByFindingId.get(finding.id) ?? [];
+      const hasActions = findingActions.length > 0;
       const actionsVerified =
         hasActions &&
-        input.actions
-          .filter((a) => a.findingId === finding.id)
-          .every((a) => a.status === ActionStatus.VERIFIED_CLOSED);
+        findingActions.every((a) => a.status === ActionStatus.VERIFIED_CLOSED);
 
       riskAreaMap.set(key, {
         regulationId: finding.regulationId,
@@ -334,8 +340,15 @@ export function generateRiskRegister(input: {
   const generatedAt = new Date().toISOString();
   const now = new Date();
 
+  const actionsByFindingId = new Map<string, Action>();
+  for (const a of input.actions) {
+    if (!actionsByFindingId.has(a.findingId)) {
+      actionsByFindingId.set(a.findingId, a);
+    }
+  }
+
   const entries: RiskRegisterEntry[] = input.findings.map((finding) => {
-    const relatedAction = input.actions.find((a) => a.findingId === finding.id);
+    const relatedAction = actionsByFindingId.get(finding.id);
 
     const identifiedDate = new Date(finding.identifiedAt);
     const daysSinceIdentified = Math.floor(
@@ -390,8 +403,11 @@ export function generateActionVerificationView(input: {
   const generatedAt = new Date().toISOString();
   const now = new Date();
 
+  const findingsById = new Map(input.findings.map((f) => [f.id, f]));
+
   const entries: ActionVerificationEntry[] = input.actions.map((action) => {
-    const finding = input.findings.find((f) => f.id === action.findingId);
+    const finding = findingsById.get(action.findingId);
+    const targetCompletionDate = action.targetCompletionDate ?? null;
 
     const createdDate = new Date(action.createdAt);
     const daysOpen = Math.floor(
@@ -399,8 +415,8 @@ export function generateActionVerificationView(input: {
     );
 
     const overdue =
-      action.targetCompletionDate !== null &&
-      new Date(action.targetCompletionDate) < now &&
+      targetCompletionDate !== null &&
+      new Date(targetCompletionDate) < now &&
       action.status !== ActionStatus.VERIFIED_CLOSED;
 
     return {
@@ -410,7 +426,7 @@ export function generateActionVerificationView(input: {
       actionDescription: action.description,
       status: action.status,
       createdAt: action.createdAt,
-      targetCompletionDate: action.targetCompletionDate,
+      targetCompletionDate,
       completedAt: action.completedAt ?? null,
       verifiedAt: action.verifiedAt ?? null,
       daysOpen,

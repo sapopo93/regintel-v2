@@ -16,14 +16,15 @@ import * as path from 'path';
 
 describe('CSP configuration', () => {
   const originalNodeEnv = process.env.NODE_ENV;
+  const env = process.env as NodeJS.ProcessEnv & { NODE_ENV?: string };
 
   beforeAll(() => {
     // Set to production to test CSP headers
-    process.env.NODE_ENV = 'production';
+    env.NODE_ENV = 'production';
   });
 
   afterAll(() => {
-    process.env.NODE_ENV = originalNodeEnv;
+    env.NODE_ENV = originalNodeEnv;
   });
 
   it('should allow all Clerk and Turnstile domains', async () => {
