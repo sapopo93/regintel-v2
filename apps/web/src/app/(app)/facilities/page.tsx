@@ -1,5 +1,4 @@
 'use client';
-export const dynamic = "force-dynamic";
 
 
 /**
@@ -122,7 +121,7 @@ export default function FacilitiesPage() {
   };
 
   // Always render Sidebar for navigation, even during loading/error states
-  let sidebarProps;
+  let sidebarProps: { providerName: string; snapshotDate: string; topicCatalogVersion: string; prsLogicVersion: string };
   if (data) {
     sidebarProps = {
       providerName: data.provider?.providerName || 'Provider',
