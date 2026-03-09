@@ -11,15 +11,17 @@ const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:300
 const clerkCustomDomain = process.env.CLERK_DOMAIN ? [`https://${process.env.CLERK_DOMAIN}`] : [];
 
 const clerkDomains = {
-  // Script sources - Clerk JS SDK and Cloudflare Turnstile CAPTCHA
+  // Script sources - Clerk JS SDK, Cloudflare Turnstile CAPTCHA, and OAuth providers
   scriptSrc: [
     ...clerkCustomDomain,
     'https://*.clerk.accounts.dev',  // Dev Clerk JS
     'https://*.clerk.com',           // Production Clerk JS
     'https://challenges.cloudflare.com', // Turnstile CAPTCHA
     'https://*.challenges.cloudflare.com', // Turnstile CAPTCHA subdomains
+    'https://accounts.google.com',   // Google OAuth / Google Identity Services
+    'https://*.gstatic.com',         // Google Identity Services JS
   ],
-  // Connect sources - Clerk API calls and telemetry
+  // Connect sources - Clerk API calls, telemetry, and OAuth providers
   connectSrc: [
     ...clerkCustomDomain,
     'https://*.clerk.accounts.dev',  // Dev Clerk API (FAPI)
@@ -27,14 +29,16 @@ const clerkDomains = {
     'https://clerk-telemetry.com',   // Clerk telemetry
     'https://*.clerk-telemetry.com', // Clerk telemetry subdomains
     'https://api.stripe.com',        // Stripe (for Clerk billing if used)
+    'https://accounts.google.com',   // Google OAuth
   ],
-  // Frame sources - Clerk UI iframes and Turnstile
+  // Frame sources - Clerk UI iframes, Turnstile, and OAuth providers
   frameSrc: [
     ...clerkCustomDomain,
     'https://*.clerk.accounts.dev',  // Dev Clerk iframes
     'https://*.clerk.com',           // Production Clerk iframes
     'https://challenges.cloudflare.com', // Turnstile CAPTCHA iframe
     'https://*.challenges.cloudflare.com', // Turnstile CAPTCHA subdomains
+    'https://accounts.google.com',   // Google OAuth popup/iframe
   ],
   // Image sources
   imgSrc: [
@@ -119,7 +123,7 @@ const nextConfig = {
             value: [
               "default-src 'self'",
               `script-src 'self' 'unsafe-eval' 'unsafe-inline' ${clerkDomains.scriptSrc.join(' ')}`,
-              "style-src 'self' 'unsafe-inline'",
+              "style-src 'self' 'unsafe-inline' https://accounts.google.com",
               `img-src 'self' data: https: ${clerkDomains.imgSrc.join(' ')}`,
               "font-src 'self'",
               connectSrc,
