@@ -225,6 +225,8 @@ export interface ProviderOverviewResponse extends ConstitutionalMetadata {
   totalTopics: number;
   unansweredQuestions: number;
   openFindings: number;
+  requiredEvidenceTypes?: string[];
+  readinessWeights?: { evidence: number; mockCoverage: number };
 }
 
 /**
@@ -574,9 +576,14 @@ export interface Saf34CoverageResponse extends ConstitutionalMetadata {
 export interface FacilitySummary {
   facilityId: string;
   facilityName: string;
+  serviceType?: string;
+  capacity?: number;
   readinessScore: number;
   evidenceCoverage: number;
   evidenceCount: number;
+  applicableTopicCount?: number;
+  requiredEvidenceTypes?: string[];
+  readinessColorThresholds?: { red: number; amber: number };
   findingsBySeverity: { critical: number; high: number; medium: number; low: number };
   lastEvidenceUploadDate: string | null;
   lastMockSessionDate: string | null;

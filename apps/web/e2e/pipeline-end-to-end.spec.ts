@@ -74,7 +74,7 @@ test('facility → CQC PDF → mock session → export pipeline', async ({ page 
 
   await page.click('[data-testid="sidebar-link-mock-session"]');
   await page.waitForURL(/\/mock-session/);
-  await page.getByText('Show Evidence →').click();
+  // Start button is now directly visible (not behind disclosure panel)
   const startButton = page.getByTestId('primary-start-session');
   await expect(startButton).toBeEnabled();
   const startResponsePromise = page.waitForResponse((response) =>

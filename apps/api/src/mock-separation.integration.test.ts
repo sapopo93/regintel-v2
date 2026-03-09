@@ -54,6 +54,7 @@ describe('integration:mock-separation', () => {
       provider: provider!,
       facilityId,
       topicId: 'test-topic',
+      maxFollowUps: 4,
       ...metadata,
     });
 
@@ -130,6 +131,7 @@ describe('integration:mock-separation', () => {
       provider: provider!,
       facilityId,
       topicId: 'test-topic',
+      maxFollowUps: 4,
       topicCatalogVersion: '1.0.0',
       topicCatalogHash: 'sha256:abc',
       prsLogicProfilesVersion: '1.0.0',

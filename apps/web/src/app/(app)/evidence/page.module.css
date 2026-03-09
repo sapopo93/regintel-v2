@@ -205,3 +205,36 @@
   background-color: #fff7ed;
   color: #9a3412;
 }
+
+.missingEvidence {
+  padding: var(--space-4) var(--space-6);
+  margin-bottom: var(--space-4);
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-md);
+  background-color: #fef2f2;
+}
+
+.missingTitle {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: #991b1b;
+  margin: 0 0 var(--space-2) 0;
+}
+
+.missingList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.missingItem {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background-color: #fee2e2;
+  color: #991b1b;
+  text-transform: capitalize;
+}

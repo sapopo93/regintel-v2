@@ -291,7 +291,7 @@ export default function FacilitiesPage() {
                           {facility.addressLine1}, {facility.townCity}, {facility.postcode}
                         </span>
                       </div>
-                      {facility.capacity && (
+                      {facility.capacity != null && (
                         <div className={styles.detailRow}>
                           <span className={styles.detailLabel}>Capacity:</span>
                           <span className={styles.detailValue}>{facility.capacity}</span>

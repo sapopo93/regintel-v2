@@ -30,9 +30,14 @@ import type { ProviderDashboardResponse, FacilitySummary, CqcIntelligenceRespons
 import { validateConstitutionalRequirements } from '@/lib/validators';
 import styles from './page.module.css';
 
-function getReadinessLevel(score: number): 'red' | 'amber' | 'green' {
-  if (score < 50) return 'red';
-  if (score < 80) return 'amber';
+function getReadinessLevel(
+  score: number,
+  thresholds?: { red: number; amber: number },
+): 'red' | 'amber' | 'green' {
+  const red = thresholds?.red ?? 50;
+  const amber = thresholds?.amber ?? 80;
+  if (score < red) return 'red';
+  if (score < amber) return 'amber';
   return 'green';
 }
 
@@ -268,7 +273,7 @@ export default function DashboardPage() {
           ) : (
             <div className={styles.facilityGrid}>
               {sortedFacilities.map((facility) => {
-                const level = getReadinessLevel(facility.readinessScore);
+                const level = getReadinessLevel(facility.readinessScore, facility.readinessColorThresholds);
                 return (
                   <div
                     key={facility.facilityId}

@@ -22,7 +22,7 @@ export function PageHeader({
   ...metadata
 }: PageHeaderProps) {
   const showIngestionBanner =
-    metadata.mode === 'REAL' && metadata.ingestionStatus !== 'READY';
+    metadata.mode === 'REAL' && metadata.ingestionStatus === 'INGESTION_INCOMPLETE';
 
   return (
     <header className={styles.header}>

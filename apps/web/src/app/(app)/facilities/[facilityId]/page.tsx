@@ -392,7 +392,7 @@ export default function FacilityDetailPage() {
               <span className={styles.detailLabel}>Service Type:</span>
               <span className={styles.detailValue}>{facility.serviceType}</span>
             </div>
-            {facility.capacity && (
+            {facility.capacity != null && (
               <div className={styles.detailItem}>
                 <span className={styles.detailLabel}>Capacity:</span>
                 <span className={styles.detailValue}>{facility.capacity}</span>

@@ -139,6 +139,51 @@ export default function MockSessionsPage() {
             ingestionStatus={data.ingestionStatus}
           />
 
+          <div className={styles.snapshotPanel}>
+            <h2 className={styles.sectionTitle}>Start a Practice Inspection</h2>
+            <div className={styles.formRow}>
+              <label className={styles.label}>
+                Inspection Area
+                <select
+                  value={selectedTopic}
+                  onChange={(event) => setSelectedTopic(event.target.value)}
+                  className={styles.select}
+                  data-testid="mock-session-topic-select"
+                >
+                  {topics.map((topic) => (
+                    <option key={topic.id} value={topic.id}>
+                      {topic.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                className={styles.startButton}
+                onClick={handleCreateSession}
+                disabled={creating || !selectedTopic}
+                data-testid="primary-start-session"
+              >
+                {creating ? 'Starting...' : 'Start Session'}
+              </button>
+            </div>
+            {createStatus && (
+              <div className={styles.statusMessage} aria-live="polite">
+                {createStatus}
+                {createdSessionId && (
+                  <>
+                    {' '}
+                    <Link
+                      className={styles.statusLink}
+                      href={`/mock-session/${createdSessionId}?provider=${providerId}&facility=${facilityId}`}
+                    >
+                      Open session →
+                    </Link>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
           <DisclosurePanel
             summary={(
               <div className={styles.sessionsList}>
@@ -146,7 +191,7 @@ export default function MockSessionsPage() {
                   <EmptyState
                     icon={PlayCircle}
                     title="No practice sessions found"
-                    description="Start a practice inspection from the panel below to prepare for your CQC visit."
+                    description="Start a practice inspection using the form above to prepare for your CQC visit."
                   />
                 ) : (
                   data.sessions.map((session) => (
@@ -174,52 +219,7 @@ export default function MockSessionsPage() {
                 )}
               </div>
             )}
-            evidence={(
-              <div className={styles.snapshotPanel}>
-                <h2 className={styles.sectionTitle}>Start a Practice Inspection</h2>
-                <div className={styles.formRow}>
-                  <label className={styles.label}>
-                    Inspection Area
-                    <select
-                      value={selectedTopic}
-                      onChange={(event) => setSelectedTopic(event.target.value)}
-                      className={styles.select}
-                      data-testid="mock-session-topic-select"
-                    >
-                      {topics.map((topic) => (
-                        <option key={topic.id} value={topic.id}>
-                          {topic.title}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <button
-                    className={styles.startButton}
-                    onClick={handleCreateSession}
-                    disabled={creating || !selectedTopic}
-                    data-testid="primary-start-session"
-                  >
-                    {creating ? 'Starting...' : 'Start Session'}
-                  </button>
-                </div>
-                {createStatus && (
-                  <div className={styles.statusMessage} aria-live="polite">
-                    {createStatus}
-                    {createdSessionId && (
-                      <>
-                        {' '}
-                        <Link
-                          className={styles.statusLink}
-                          href={`/mock-session/${createdSessionId}?provider=${providerId}&facility=${facilityId}`}
-                        >
-                          Open session →
-                        </Link>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
+            evidence={null}
             trace={(
               <MetadataBar
                 topicCatalogVersion={data.topicCatalogVersion}

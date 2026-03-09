@@ -152,6 +152,7 @@ describe('evidence:propagation', () => {
       provider: provider!,
       facilityId,
       topicId: 'safe-care-treatment',
+      maxFollowUps: 4,
       topicCatalogVersion: '1.0.0',
       topicCatalogHash: 'sha256:abc123',
       prsLogicProfilesVersion: '1.0.0',

@@ -116,8 +116,7 @@ test.describe('No dead buttons', () => {
     expect(body.toLowerCase()).not.toContain('not implemented');
 
     await page.goto(`${BASE_URL}/mock-session?provider=${providerId}&facility=${facilityId}`);
-    // Expand disclosure panel to show the evidence layer with the start button
-    await page.getByText('Show Evidence →').click();
+    // Start button is now directly visible (not behind disclosure panel)
     const startButton = page.getByTestId('primary-start-session');
     await expect(startButton).toBeEnabled();
     responsePromise = page.waitForResponse((response) =>

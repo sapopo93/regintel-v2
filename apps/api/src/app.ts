@@ -42,6 +42,8 @@ import {
   isWebsiteReportNewer,
 } from '@regintel/domain/cqc-scraper';
 import { EvidenceType, getAllRequiredEvidenceTypes } from '@regintel/domain/evidence-types';
+import { resolveFacilityContext, type FacilityContext } from '@regintel/domain/facility-context';
+import { computeAdjustedSeverityScore } from '@regintel/domain/prs-logic-profile';
 import { getQualityStatementCoverage, SAF_34_QUALITY_STATEMENTS } from '@regintel/domain/saf34';
 import { fetchCqcLocation } from '@regintel/domain/cqc-client';
 import {
@@ -506,6 +508,14 @@ function getBlueOceanFilename(exportId: string, format: ExportFormat): string {
 
 function getContext(req: express.Request): TenantContext {
   return { tenantId: req.auth.tenantId, actorId: req.auth.actorId };
+}
+
+function buildFacilityContext(facility: { serviceType?: string; capacity?: number }, provider: { prsState?: string }): FacilityContext {
+  return resolveFacilityContext({
+    serviceType: facility.serviceType,
+    prsState: provider.prsState as ProviderRegulatoryState | undefined,
+    capacity: facility.capacity,
+  }, TOPICS);
 }
 
 const QUEUE_NAME_VALUES: QueueName[] = Object.values(QUEUE_NAMES);
@@ -974,10 +984,11 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       return;
     }
 
+    const fCtx = buildFacilityContext(facility, provider);
     const facilityEvidence = await store.listEvidenceByFacility(ctx, facilityId);
     const hasCqcReport = facilityEvidence.some((record) => record.evidenceType === EvidenceType.CQC_REPORT);
     const evidenceCount = facilityEvidence.length;
-    const totalExpectedDocuments = getAllRequiredEvidenceTypes().length;
+    const totalExpectedDocuments = fCtx.expectedEvidenceCount;
     const documentUploadPercentage = totalExpectedDocuments > 0
       ? Math.min(100, Math.round((evidenceCount / totalExpectedDocuments) * 100))
       : evidenceCount > 0 ? 100 : 0;
@@ -1015,9 +1026,11 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       evidenceCount,
       documentUploadPercentage,
       topicsCompleted,
-      totalTopics: TOPICS.length,
+      totalTopics: fCtx.applicableTopicCount,
       unansweredQuestions,
       openFindings,
+      requiredEvidenceTypes: fCtx.requiredEvidenceTypes,
+      readinessWeights: fCtx.readinessWeights,
     }, reportContext);
   });
 
@@ -1044,17 +1057,16 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     const facilities = await store.listFacilitiesByProvider(ctx, providerId);
     const allFindings = await store.listFindingsByProvider(ctx, providerId);
     const allSessions = await store.listSessionsByProvider(ctx, providerId);
-    const totalExpectedDocuments = getAllRequiredEvidenceTypes().length;
-
     const facilitySummaries = await Promise.all(facilities.map(async (facility) => {
+      const fCtx = buildFacilityContext(facility, provider);
       const evidence = await store.listEvidenceByFacility(ctx, facility.id);
       const facilityFindings = allFindings.filter(f => f.facilityId === facility.id);
       const facilitySessions = allSessions.filter(s => s.facilityId === facility.id);
       const completedSessions = facilitySessions.filter(s => s.status === 'COMPLETED');
 
       const evidenceCount = evidence.length;
-      const evidenceCoverage = totalExpectedDocuments > 0
-        ? Math.min(100, Math.round((evidenceCount / totalExpectedDocuments) * 100))
+      const evidenceCoverage = fCtx.expectedEvidenceCount > 0
+        ? Math.min(100, Math.round((evidenceCount / fCtx.expectedEvidenceCount) * 100))
         : evidenceCount > 0 ? 100 : 0;
 
       const findingsBySeverity = {
@@ -1076,16 +1088,19 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         : null;
 
       // Readiness score: weighted combination of evidence coverage and mock completion
-      const mockCoverage = TOPICS.length > 0
-        ? Math.round((completedSessions.length / TOPICS.length) * 100)
+      const mockCoverage = fCtx.applicableTopicCount > 0
+        ? Math.round((completedSessions.length / fCtx.applicableTopicCount) * 100)
         : 0;
-      const readinessScore = Math.round(evidenceCoverage * 0.6 + mockCoverage * 0.4);
+      const readinessScore = Math.round(
+        evidenceCoverage * fCtx.readinessWeights.evidence +
+        mockCoverage * fCtx.readinessWeights.mockCoverage
+      );
 
       const attentionReasons: string[] = [];
       if (findingsBySeverity.critical > 0) attentionReasons.push('Has critical findings');
       if (lastEvidenceUpload) {
         const daysSinceUpload = Math.floor((Date.now() - new Date(lastEvidenceUpload).getTime()) / (1000 * 60 * 60 * 24));
-        if (daysSinceUpload > 14) attentionReasons.push(`No evidence uploads in ${daysSinceUpload} days`);
+        if (daysSinceUpload > fCtx.attentionThresholdDays) attentionReasons.push(`No evidence uploads in ${daysSinceUpload} days`);
       } else {
         attentionReasons.push('No evidence uploaded');
       }
@@ -1095,9 +1110,14 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       return {
         facilityId: facility.id,
         facilityName: facility.facilityName,
+        serviceType: facility.serviceType,
+        capacity: facility.capacity,
         readinessScore,
         evidenceCoverage,
         evidenceCount,
+        applicableTopicCount: fCtx.applicableTopicCount,
+        requiredEvidenceTypes: fCtx.requiredEvidenceTypes,
+        readinessColorThresholds: fCtx.readinessColorThresholds,
         findingsBySeverity,
         lastEvidenceUploadDate: lastEvidenceUpload,
         lastMockSessionDate: lastMockSession,
@@ -1117,8 +1137,10 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       low: facilitySummaries.reduce((sum, f) => sum + f.findingsBySeverity.low, 0),
     };
 
+    // Capacity-weighted average readiness
+    const totalCapacity = facilitySummaries.reduce((s, f) => s + (f.capacity ?? 1), 0);
     const averageReadiness = facilitySummaries.length > 0
-      ? Math.round(facilitySummaries.reduce((sum, f) => sum + f.readinessScore, 0) / facilitySummaries.length)
+      ? Math.round(facilitySummaries.reduce((sum, f) => sum + f.readinessScore * (f.capacity ?? 1), 0) / totalCapacity)
       : 0;
 
     // Collect expiring evidence across all facilities
@@ -1269,7 +1291,8 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     const hasCqcReport = evidence.some(e => e.evidenceType === EvidenceType.CQC_REPORT);
     const completedSessions = sessions.filter(s => s.status === 'COMPLETED');
     const criticalFindings = findings.filter(f => f.severity === 'CRITICAL');
-    const totalExpectedDocuments = getAllRequiredEvidenceTypes().length;
+    const fCtx = buildFacilityContext(facility, provider ?? {});
+    const totalExpectedDocuments = fCtx.expectedEvidenceCount;
     const evidenceCoverage = totalExpectedDocuments > 0
       ? Math.min(100, Math.round((evidence.length / totalExpectedDocuments) * 100))
       : evidence.length > 0 ? 100 : 0;
@@ -1397,7 +1420,12 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       ? await resolveReportContextForFacility(ctx, providerId, facilityId)
       : undefined;
 
-    let completionStatus = TOPICS.reduce<Record<string, { completed: number; total: number }>>(
+    // Filter topics by facility service type when facilityId provided
+    const facility = facilityId ? await store.getFacilityById(ctx, facilityId) : null;
+    const fCtx = buildFacilityContext(facility ?? {}, provider);
+    const filteredTopics = TOPICS.filter(t => fCtx.applicableTopicIds.includes(t.id));
+
+    let completionStatus = filteredTopics.reduce<Record<string, { completed: number; total: number }>>(
       (acc, topic) => {
         acc[topic.id] = { completed: 0, total: 1 };
         return acc;
@@ -1408,7 +1436,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     if (!reportContext || reportContext.mode === 'MOCK') {
       const sessions = (await store.listSessionsByProvider(ctx, providerId))
         .filter((session) => !facilityId || session.facilityId === facilityId);
-      completionStatus = TOPICS.reduce<Record<string, { completed: number; total: number }>>(
+      completionStatus = filteredTopics.reduce<Record<string, { completed: number; total: number }>>(
         (acc, topic) => {
           const completed = sessions.filter(
             (session) => session.topicId === topic.id && session.status === 'COMPLETED'
@@ -1420,7 +1448,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       );
     }
 
-    sendWithMetadata(res, { topics: TOPICS, completionStatus }, reportContext);
+    sendWithMetadata(res, { topics: filteredTopics, completionStatus }, reportContext);
   });
 
   app.get('/v1/providers/:providerId/topics/:topicId', async (req, res) => {
@@ -1482,11 +1510,13 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       return;
     }
 
+    const fCtx = buildFacilityContext(facility, provider);
     const metadata = buildConstitutionalMetadata();
     const session = await store.createMockSession(ctx, {
       provider,
       facilityId,
       topicId,
+      maxFollowUps: fCtx.maxFollowUpsPerTopic,
       topicCatalogVersion: metadata.topicCatalogVersion,
       topicCatalogHash: metadata.topicCatalogHash,
       prsLogicProfilesVersion: metadata.prsLogicVersion,
@@ -1559,9 +1589,12 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       (required) => !evidenceProvided.includes(required)
     );
     const facility = await store.getFacilityById(ctx, session.facilityId);
+    const provider = await store.getProviderById(ctx, providerId);
+    const fCtx = buildFacilityContext(facility ?? {}, provider ?? {});
 
     const impactScore = 80;
     const likelihoodScore = 90;
+    const adjusted = computeAdjustedSeverityScore(impactScore, likelihoodScore, fCtx.severityMultiplier);
     const finding = await store.addFinding(ctx, {
       providerId,
       facilityId: session.facilityId,
@@ -1571,9 +1604,9 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       origin: 'SYSTEM_MOCK',
       reportingDomain: 'MOCK_SIMULATION',
       severity: 'HIGH',
-      impactScore,
-      likelihoodScore,
-      compositeRiskScore: computeCompositeRiskScore(impactScore, likelihoodScore),
+      impactScore: adjusted.adjustedImpact,
+      likelihoodScore: adjusted.adjustedLikelihood,
+      compositeRiskScore: adjusted.composite,
       title: 'Mock finding generated',
       description: `Automated mock finding from answer: ${answer.slice(0, 120)}`,
       evidenceRequired,
@@ -1696,13 +1729,17 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       return;
     }
 
-    // Build topics with regulation keys for coverage analysis
-    const topicsForCoverage = TOPICS.map((t) => ({
-      id: t.id,
-      title: t.title,
-      regulationSectionId: t.regulationSectionId,
-      regulationKeys: SAF34_TOPIC_REGULATION_KEYS[t.id] || [],
-    }));
+    // Filter topics by facility service type, then build regulation keys for coverage
+    const fCtx = buildFacilityContext(facility, provider);
+    const applicableSet = new Set(fCtx.applicableTopicIds);
+    const topicsForCoverage = TOPICS
+      .filter(t => applicableSet.has(t.id))
+      .map((t) => ({
+        id: t.id,
+        title: t.title,
+        regulationSectionId: t.regulationSectionId,
+        regulationKeys: SAF34_TOPIC_REGULATION_KEYS[t.id] || [],
+      }));
 
     const coverage = getQualityStatementCoverage(topicsForCoverage);
 
@@ -2500,9 +2537,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     }
     const latestExport = exports[0]; // Already sorted by most recent
 
-    const availableFormats = reportContext?.mode === 'REAL'
-      ? ['BLUE_OCEAN_BOARD', 'BLUE_OCEAN_AUDIT', 'INSPECTOR_PACK']
-      : ['CSV', 'PDF', 'BLUE_OCEAN_BOARD', 'BLUE_OCEAN_AUDIT', 'INSPECTOR_PACK'];
+    const availableFormats = ['CSV', 'PDF', 'BLUE_OCEAN_BOARD', 'BLUE_OCEAN_AUDIT', 'INSPECTOR_PACK'];
 
     sendWithMetadata(res, {
       providerId,

@@ -100,13 +100,16 @@ export default function ResultsPage() {
 
   const { overview, findings, saf34 } = data;
 
-  // Compute readiness score (weighted average)
+  // Use API-provided readiness score (context-aware: weighted by PRS state and service type)
   const topicScore = overview.totalTopics > 0
     ? (overview.topicsCompleted / overview.totalTopics) * 100
     : 0;
   const evidenceScore = overview.evidenceCoverage;
   const saf34Score = saf34.overall.percentage;
-  const readinessScore = Math.round((topicScore + evidenceScore + saf34Score) / 3);
+  const weights = overview.readinessWeights ?? { evidence: 0.6, mockCoverage: 0.4 };
+  const readinessScore = Math.round(
+    evidenceScore * weights.evidence + topicScore * weights.mockCoverage
+  );
 
   // Severity counts
   const severityCounts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };

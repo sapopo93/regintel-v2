@@ -108,6 +108,22 @@ export default function EvidencePage() {
             ingestionStatus={data.ingestionStatus}
           />
 
+          {(() => {
+            const requiredTypes = overview.requiredEvidenceTypes ?? [];
+            const uploadedTypes = new Set(data.evidence.map(e => e.evidenceType));
+            const missingTypes = requiredTypes.filter(t => !uploadedTypes.has(t));
+            return missingTypes.length > 0 ? (
+              <div className={styles.missingEvidence}>
+                <h3 className={styles.missingTitle}>Missing Evidence Types</h3>
+                <ul className={styles.missingList}>
+                  {missingTypes.map(t => (
+                    <li key={t} className={styles.missingItem}>{t.replace(/_/g, ' ')}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null;
+          })()}
+
           <DisclosurePanel
             summary={(
               <div className={styles.summaryPanel}>

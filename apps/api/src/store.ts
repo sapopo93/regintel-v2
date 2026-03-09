@@ -801,6 +801,7 @@ export class InMemoryStore {
     provider: ProviderRecord;
     facilityId: string;
     topicId: string;
+    maxFollowUps: number;
     topicCatalogVersion: string;
     topicCatalogHash: string;
     prsLogicProfilesVersion: string;
@@ -827,7 +828,7 @@ export class InMemoryStore {
       topicId: input.topicId,
       status: 'IN_PROGRESS',
       followUpsUsed: 0,
-      maxFollowUps: 4,
+      maxFollowUps: input.maxFollowUps,
       createdAt: now,
       topicCatalogVersion: input.topicCatalogVersion,
       topicCatalogHash: input.topicCatalogHash,

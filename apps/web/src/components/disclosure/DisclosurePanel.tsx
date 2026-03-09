@@ -53,14 +53,12 @@ export function DisclosurePanel({
         <button
           className={currentLayer === 'evidence' ? styles.tabActive : styles.tab}
           onClick={() => setCurrentLayer('evidence')}
-          disabled={currentLayer === 'summary'}
         >
           {evidenceLabel}
         </button>
         <button
           className={currentLayer === 'trace' ? styles.tabActive : styles.tab}
           onClick={() => setCurrentLayer('trace')}
-          disabled={currentLayer !== 'trace'}
         >
           {traceLabel}
         </button>

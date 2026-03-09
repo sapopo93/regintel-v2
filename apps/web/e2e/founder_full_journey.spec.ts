@@ -91,8 +91,7 @@ test('founder full journey from onboarding to export', async ({ page }) => {
   await page.click('[data-testid="sidebar-link-mock-session"]');
   await page.waitForURL(/\/mock-session/);
 
-  // Expand disclosure panel to show the evidence layer with the start button
-  await page.getByText('Show Evidence →').click();
+  // Start button is now directly visible (not behind disclosure panel)
   const startButton = page.getByTestId('primary-start-session');
   await expect(startButton).toBeEnabled();
   const startResponsePromise = page.waitForResponse((response) =>
