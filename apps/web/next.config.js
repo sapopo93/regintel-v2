@@ -58,6 +58,7 @@ if (isProduction && apiBaseUrl.includes('localhost')) {
 }
 
 const nextConfig = {
+  output: "standalone",
   reactStrictMode: true,
   output: 'standalone',
   experimental: {

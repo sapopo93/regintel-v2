@@ -11,3 +11,4 @@ apps/*/.env
 output/
 tmp/
 apps/web/failure-screenshot.png
+ecosystem.config.js

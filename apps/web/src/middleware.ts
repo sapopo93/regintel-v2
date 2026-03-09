@@ -17,7 +17,8 @@ const hasClerkSecret = Boolean(process.env.CLERK_SECRET_KEY);
 // NOTE: '/' is intentionally excluded so that auth() in page.tsx returns the userId
 // for signed-in users. The root page handles unauthenticated users itself (shows landing page).
 const isPublicRoute = createRouteMatcher([
-  '/sign-in(.*)',
+  '/',
+    '/sign-in(.*)',
   '/sign-up(.*)',
   '/api/webhooks(.*)',
 ]);
@@ -28,10 +29,6 @@ const e2eBypassMiddleware = () => NextResponse.next();
 export default isE2EMode && !hasClerkSecret
   ? e2eBypassMiddleware
   : clerkMiddleware(async (auth, request) => {
-      // Root path: accessible to unauthenticated users (shows landing page),
-      // but NOT listed as public so Clerk still sets up auth context.
-      // This allows auth() in page.tsx to return the userId and redirect signed-in users.
-      if (request.nextUrl.pathname === '/') return;
 
       if (!isPublicRoute(request)) {
         await auth.protect();
