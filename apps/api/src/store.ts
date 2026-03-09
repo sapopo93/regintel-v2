@@ -451,6 +451,7 @@ export class InMemoryStore {
     let id: string;
     let createdAt: string;
     let createdBy: string;
+    let existingCapacity: number | undefined;
 
     if (existingFacilityId) {
       // Update existing facility
@@ -465,6 +466,7 @@ export class InMemoryStore {
       id = unscopedId; // Unscoped ID
       createdAt = existing.createdAt;
       createdBy = existing.createdBy;
+      existingCapacity = existing.capacity; // Preserve manually-set capacity
     } else {
       // Create new facility
       isNew = true;
@@ -482,7 +484,7 @@ export class InMemoryStore {
       address,
       cqcLocationId: normalizedCqc,
       serviceType: input.serviceType,
-      capacity: input.capacity,
+      capacity: input.capacity !== undefined ? input.capacity : existingCapacity,
       createdBy,
     });
 
