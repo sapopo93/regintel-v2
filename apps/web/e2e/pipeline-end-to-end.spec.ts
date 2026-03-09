@@ -65,9 +65,9 @@ test('facility → CQC PDF → mock session → export pipeline', async ({ page 
   await recordResponsePromise;
   await expect(page.getByText('St Joseph Nursing Home.pdf')).toBeVisible();
 
-  await page.click('[data-testid="continue-overview-button"]');
+  await page.click('[data-testid="continue-readiness-button"]');
   await page.waitForURL((url) =>
-    url.pathname === '/overview'
+    url.pathname === '/results'
     && url.searchParams.get('provider') === providerId
     && url.searchParams.get('facility') === facilityId
   );

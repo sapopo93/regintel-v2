@@ -31,7 +31,7 @@ test.describe('Menu Navigation', () => {
   test('sidebar navigation triggers endpoint calls', async ({ page }) => {
     const facilityQuery = encodeURIComponent(facilityId);
     const endpoints = [
-      { id: 'overview', endpoint: `/v1/providers/${providerId}/overview?facility=${facilityQuery}` },
+      { id: 'results', endpoint: `/v1/providers/${providerId}/overview?facility=${facilityQuery}` },
       { id: 'topics', endpoint: `/v1/providers/${providerId}/topics?facility=${facilityQuery}` },
       { id: 'mock-session', endpoint: `/v1/providers/${providerId}/mock-sessions?facility=${facilityQuery}` },
       { id: 'findings', endpoint: `/v1/providers/${providerId}/findings?facility=${facilityQuery}` },
@@ -40,7 +40,7 @@ test.describe('Menu Navigation', () => {
       { id: 'audit', endpoint: `/v1/providers/${providerId}/audit-trail` },
     ];
 
-    await page.goto(`${BASE_URL}/overview?provider=${providerId}&facility=${facilityId}`);
+    await page.goto(`${BASE_URL}/results?provider=${providerId}&facility=${facilityId}`);
     await page.waitForResponse((response) =>
       response.url().includes(endpoints[0].endpoint)
     );
@@ -54,7 +54,7 @@ test.describe('Menu Navigation', () => {
     }
   });
 
-  test('Overview menu item calls /v1/providers/:id/overview', async ({ page }) => {
+  test('Results menu item calls /v1/providers/:id/overview', async ({ page }) => {
     const apiCalls: string[] = [];
     page.on('request', (request) => {
       if (request.url().includes('/v1/providers')) {
@@ -67,15 +67,15 @@ test.describe('Menu Navigation', () => {
       { timeout: 10000 }
     );
 
-    await page.goto(`${BASE_URL}/overview?provider=${providerId}&facility=${facilityId}`);
+    await page.goto(`${BASE_URL}/results?provider=${providerId}&facility=${facilityId}`);
     await responsePromise;
 
     // Verify API endpoint was called
-    const overviewCall = apiCalls.find(url => url.includes(`/v1/providers/${providerId}/overview`));
-    expect(overviewCall).toBeTruthy();
+    const resultsCall = apiCalls.find(url => url.includes(`/v1/providers/${providerId}/overview`));
+    expect(resultsCall).toBeTruthy();
 
     // Verify page content loaded
-    await expect(page.locator('h1')).toContainText('Inspection Readiness Record');
+    await expect(page.locator('h1')).toContainText('Inspection Readiness');
   });
 
   test('Topics menu item calls /v1/providers/:id/topics', async ({ page }) => {
@@ -206,7 +206,7 @@ test.describe('Menu Navigation', () => {
 
   test('All pages display constitutional metadata', async ({ page }) => {
     const pages = [
-      '/overview',
+      '/results',
       '/topics',
       '/mock-session',
       '/findings',

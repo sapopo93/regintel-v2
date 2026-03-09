@@ -77,13 +77,6 @@ Source of truth for UI routes and API endpoints. Update this file when navigatio
       ]
     },
     {
-      "route": "/overview?provider=:providerId&facility=:facilityId",
-      "status": "LIVE",
-      "endpoints": [
-        "GET /v1/providers/:providerId/overview?facility=:facilityId"
-      ]
-    },
-    {
       "route": "/topics?provider=:providerId&facility=:facilityId",
       "status": "LIVE",
       "endpoints": [

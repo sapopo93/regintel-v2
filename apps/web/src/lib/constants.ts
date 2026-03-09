@@ -46,21 +46,59 @@ export const DOMAINS = {
   IMMIGRATION: 'IMMIGRATION',
 } as const;
 
-// Sidebar navigation items
-export const SIDEBAR_NAVIGATION = [
-  { id: 'providers', label: 'Providers', href: '/providers' },
-  { id: 'dashboard', label: 'Dashboard', href: '/dashboard' },
-  { id: 'overview', label: 'Overview', href: '/overview' },
-  { id: 'topics', label: 'Inspection Areas', href: '/topics' },
-  { id: 'mock-session', label: 'Practice Inspection', href: '/mock-session' },
-  { id: 'findings', label: 'Findings', href: '/findings' },
-  { id: 'facilities', label: 'Locations', href: '/facilities' },
-  { id: 'evidence', label: 'Evidence', href: '/evidence' },
-  { id: 'intelligence', label: 'CQC Intelligence', href: '/intelligence' },
-  { id: 'exports', label: 'Exports', href: '/exports' },
-  { id: 'results', label: 'Results', href: '/results' },
-  { id: 'audit', label: 'Audit Trail', href: '/audit' },
-] as const;
+// Sidebar navigation — grouped for visual hierarchy
+export interface SidebarGroup {
+  label: string;
+  items: readonly SidebarItem[];
+}
+
+export interface SidebarItem {
+  id: string;
+  label: string;
+  href: string;
+}
+
+export const SIDEBAR_GROUPS: readonly SidebarGroup[] = [
+  {
+    label: 'SETUP',
+    items: [
+      { id: 'providers', label: 'Providers', href: '/providers' },
+      { id: 'facilities', label: 'Locations', href: '/facilities' },
+    ],
+  },
+  {
+    label: 'MONITOR',
+    items: [
+      { id: 'dashboard', label: 'Dashboard', href: '/dashboard' },
+      { id: 'intelligence', label: 'CQC Intelligence', href: '/intelligence' },
+    ],
+  },
+  {
+    label: 'INSPECT',
+    items: [
+      { id: 'topics', label: 'Inspection Areas', href: '/topics' },
+      { id: 'mock-session', label: 'Practice Inspections', href: '/mock-session' },
+      { id: 'findings', label: 'Findings', href: '/findings' },
+      { id: 'evidence', label: 'Evidence', href: '/evidence' },
+    ],
+  },
+  {
+    label: 'REPORTS',
+    items: [
+      { id: 'results', label: 'Readiness', href: '/results' },
+      { id: 'exports', label: 'Exports', href: '/exports' },
+    ],
+  },
+  {
+    label: 'ADMIN',
+    items: [
+      { id: 'audit', label: 'Audit Trail', href: '/audit' },
+    ],
+  },
+];
+
+// Flat array for backward compat (tests, E2E)
+export const SIDEBAR_NAVIGATION = SIDEBAR_GROUPS.flatMap(g => g.items);
 
 // Severity levels (display only - no computation in UI)
 export const SEVERITY_LEVELS = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const;

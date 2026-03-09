@@ -29,7 +29,7 @@ test.describe('Constitutional Requirements', () => {
   });
 
   const pages = [
-    { path: '/overview', title: 'Provider Overview' },
+    { path: '/results', title: 'Inspection Readiness' },
     { path: '/topics', title: 'Inspection Topics' },
     { path: '/mock-session', title: 'Practice Inspections' },
     { path: '/findings', title: 'Inspection Findings' },

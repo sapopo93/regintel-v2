@@ -11,7 +11,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
 import { VersionBadge } from '../constitutional/VersionBadge';
-import { SIDEBAR_NAVIGATION } from '@/lib/constants';
+import { SIDEBAR_GROUPS } from '@/lib/constants';
 import { useProviderContext } from '@/lib/hooks/useProviderContext';
 import { toCqcPrsStatus } from '@/lib/cqcLanguage';
 import styles from './Sidebar.module.css';
@@ -76,53 +76,57 @@ export function Sidebar({
       </div>
 
       <nav className={styles.nav}>
-        {SIDEBAR_NAVIGATION.map((item) => {
-          const isActive = pathname === item.href;
-          const label =
-            item.id === 'topics' && topicsCompleted !== undefined && totalTopics !== undefined
-              ? `${item.label} (${topicsCompleted} of ${totalTopics} covered)`
-              : item.label;
+        {SIDEBAR_GROUPS.map((group) => (
+          <div key={group.label} className={styles.navGroup}>
+            <div className={styles.groupLabel}>{group.label}</div>
+            {group.items.map((item) => {
+              const isActive = pathname === item.href;
+              const label =
+                item.id === 'topics' && topicsCompleted !== undefined && totalTopics !== undefined
+                  ? `${item.label} (${topicsCompleted} of ${totalTopics} covered)`
+                  : item.label;
 
-          const query = new URLSearchParams();
-          if (providerId) {
-            query.set('provider', providerId);
-          }
-          if (resolvedFacilityId) {
-            query.set('facility', resolvedFacilityId);
-          } else if (
-            providerId &&
-            item.id !== 'providers' &&
-            item.id !== 'facilities' &&
-            item.id !== 'dashboard' &&
-            item.id !== 'intelligence'
-          ) {
-            // Without a facility context, route users back to facility selection.
-            const facilitiesQuery = new URLSearchParams();
-            facilitiesQuery.set('provider', providerId);
-            return (
-              <Link
-                key={item.id}
-                href={`/facilities?${facilitiesQuery.toString()}` as any}
-                className={isActive ? styles.navItemActive : styles.navItem}
-                data-testid={`sidebar-link-${item.id}`}
-              >
-                {label}
-              </Link>
-            );
-          }
-          const href = query.toString() ? `${item.href}?${query.toString()}` : item.href;
+              const query = new URLSearchParams();
+              if (providerId) {
+                query.set('provider', providerId);
+              }
+              if (resolvedFacilityId) {
+                query.set('facility', resolvedFacilityId);
+              } else if (
+                providerId &&
+                item.id !== 'providers' &&
+                item.id !== 'facilities' &&
+                item.id !== 'dashboard' &&
+                item.id !== 'intelligence'
+              ) {
+                const facilitiesQuery = new URLSearchParams();
+                facilitiesQuery.set('provider', providerId);
+                return (
+                  <Link
+                    key={item.id}
+                    href={`/facilities?${facilitiesQuery.toString()}` as any}
+                    className={isActive ? styles.navItemActive : styles.navItem}
+                    data-testid={`sidebar-link-${item.id}`}
+                  >
+                    {label}
+                  </Link>
+                );
+              }
+              const href = query.toString() ? `${item.href}?${query.toString()}` : item.href;
 
-          return (
-            <Link
-              key={item.id}
-              href={href as any}
-              className={isActive ? styles.navItemActive : styles.navItem}
-              data-testid={`sidebar-link-${item.id}`}
-            >
-              {label}
-            </Link>
-          );
-        })}
+              return (
+                <Link
+                  key={item.id}
+                  href={href as any}
+                  className={isActive ? styles.navItemActive : styles.navItem}
+                  data-testid={`sidebar-link-${item.id}`}
+                >
+                  {label}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       <div className={styles.systemStatus}>

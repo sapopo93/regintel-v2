@@ -81,9 +81,9 @@ test('founder full journey from onboarding to export', async ({ page }) => {
   expect(recordBody.record?.evidenceType).toBe('CQC_REPORT');
   await expect(page.getByText('cqc-report.pdf')).toBeVisible();
 
-  await page.click('[data-testid="continue-overview-button"]');
+  await page.click('[data-testid="continue-readiness-button"]');
   await page.waitForURL((url) =>
-    url.pathname === '/overview' &&
+    url.pathname === '/results' &&
     url.searchParams.get('provider') === providerId &&
     url.searchParams.get('facility') === facilityId
   );

@@ -56,9 +56,24 @@
 
 .nav {
   flex: 1;
-  padding: var(--space-4) 0;
+  padding: var(--space-2) 0;
   display: flex;
   flex-direction: column;
+}
+
+.navGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+.groupLabel {
+  padding: var(--space-3) var(--space-4) var(--space-1);
+  font-size: 11px;
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.08em;
+  color: var(--sidebar-text);
+  opacity: 0.5;
+  text-transform: uppercase;
 }
 
 .navItem {

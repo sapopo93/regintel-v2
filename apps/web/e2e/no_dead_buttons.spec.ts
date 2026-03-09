@@ -37,10 +37,10 @@ test.describe('No dead buttons', () => {
         return method !== 'OPTIONS';
       });
 
-    await page.goto(`${BASE_URL}/overview?provider=${providerId}&facility=${facilityId}`);
+    await page.goto(`${BASE_URL}/results?provider=${providerId}&facility=${facilityId}`);
 
     const sidebarIds = [
-      'overview',
+      'results',
       'topics',
       'mock-session',
       'findings',

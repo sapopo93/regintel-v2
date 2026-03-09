@@ -68,6 +68,16 @@ const nextConfig = {
   experimental: {
     typedRoutes: true,
   },
+  // Redirect legacy /overview route to /results (overview was merged into readiness)
+  async redirects() {
+    return [
+      {
+        source: '/overview',
+        destination: '/results',
+        permanent: true,
+      },
+    ];
+  },
   // Proxy API calls through Next.js to avoid CORS issues in production.
   // Browser calls /v1/... (same-origin), Next.js forwards to the API server.
   async rewrites() {

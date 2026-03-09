@@ -28,13 +28,13 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.describe('API Integration', () => {
-  test('overview page displays data from API', async ({ page }) => {
+  test('results page displays data from API', async ({ page }) => {
     const responsePromise = page.waitForResponse(
       r => r.url().includes('/v1/providers/') && r.url().includes('/overview'),
       { timeout: 10000 }
     );
 
-    await page.goto(`${BASE_URL}/overview?provider=${providerId}&facility=${facilityId}`);
+    await page.goto(`${BASE_URL}/results?provider=${providerId}&facility=${facilityId}`);
 
     const responseData = await (await responsePromise).json();
 
@@ -193,7 +193,7 @@ test.describe('API Integration', () => {
 
   test('API responses include constitutional metadata', async ({ page }) => {
     const endpoints = [
-      '/overview',
+      '/results',
       '/topics',
       '/findings',
       '/evidence',

@@ -161,7 +161,7 @@ test.describe('CQC Language Guard — Global Smoke', () => {
    * - /audit: sha256 chain hashes are tamper-evident proof and must remain
    */
   const smokePages: Array<{ path: string; skipTerms: string[] }> = [
-    { path: '/overview', skipTerms: [] },
+    { path: '/results', skipTerms: [] },
     { path: '/topics', skipTerms: [] },
     { path: '/mock-session', skipTerms: [] },
     { path: '/evidence', skipTerms: ['sha256:'] },

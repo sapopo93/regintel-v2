@@ -38,7 +38,7 @@ test.describe('Mock Safety', () => {
 
   test('mock pages show simulation frame and watermark', async ({ page }) => {
     const pages = [
-      '/overview',
+      '/results',
       '/topics',
       '/mock-session',
       '/findings',
