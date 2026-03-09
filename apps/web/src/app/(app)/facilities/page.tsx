@@ -2,18 +2,22 @@
 
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { useProviderContext } from '@/lib/hooks/useProviderContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { MetadataBar } from '@/components/constitutional/MetadataBar';
 import { apiClient } from '@/lib/api/client';
 import type { FacilitiesListResponse, Facility, UpdateFacilityRequest } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
+import { ErrorState } from '@/components/layout/ErrorState';
+import { LoadingSkeleton } from '@/components/layout/LoadingSkeleton';
+import { useToast } from '@/components/toast/ToastProvider';
 import styles from './page.module.css';
 
 export default function FacilitiesPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const providerId = searchParams.get('provider');
+  const { providerId } = useProviderContext();
 
   const [data, setData] = useState<FacilitiesListResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -23,9 +27,18 @@ export default function FacilitiesPage() {
   const [editError, setEditError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const toast = useToast();
+
+  // Redirect to /providers if no provider context available
+  useEffect(() => {
+    if (!providerId) {
+      router.replace('/providers');
+    }
+  }, [providerId, router]);
 
   useEffect(() => {
-    apiClient.getFacilities(providerId || undefined)
+    if (!providerId) return;
+    apiClient.getFacilities(providerId)
       .then((response) => {
         validateConstitutionalRequirements(response, { strict: true });
         setData(response);
@@ -35,8 +48,9 @@ export default function FacilitiesPage() {
   }, [providerId]);
 
   const refreshData = () => {
+    if (!providerId) return;
     setLoading(true);
-    apiClient.getFacilities(providerId || undefined)
+    apiClient.getFacilities(providerId)
       .then((response) => {
         validateConstitutionalRequirements(response, { strict: true });
         setData(response);
@@ -51,7 +65,7 @@ export default function FacilitiesPage() {
   };
 
   const handleViewFacility = (facilityId: string) => {
-    router.push(`/overview?provider=${providerId}&facility=${facilityId}` as any);
+    router.push(`/results?provider=${providerId}&facility=${facilityId}` as any);
   };
 
   const handleStartEdit = (facility: Facility, e: React.MouseEvent) => {
@@ -81,6 +95,7 @@ export default function FacilitiesPage() {
     try {
       await apiClient.updateFacility(editingFacility.id, editForm);
       setEditingFacility(null);
+      toast.success('Location updated');
       refreshData();
     } catch (err) {
       setEditError(err instanceof Error ? err.message : 'Failed to update location');
@@ -99,7 +114,7 @@ export default function FacilitiesPage() {
       await apiClient.deleteFacility(facility.id);
       refreshData();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete location');
+      toast.error(err instanceof Error ? err.message : 'Failed to delete location');
     } finally {
       setDeletingId(null);
     }
@@ -121,9 +136,9 @@ export default function FacilitiesPage() {
 
       <main className={styles.main}>
         {loading ? (
-          <div className={styles.loading}>Loading locations...</div>
+          <LoadingSkeleton variant="cards" />
         ) : error || !data ? (
-          <div className={styles.error}>Error: {error || 'Failed to load locations'}</div>
+          <ErrorState message={error || 'Failed to load locations'} onRetry={refreshData} />
         ) : (
           <>
             <PageHeader
@@ -254,7 +269,10 @@ export default function FacilitiesPage() {
                   <div
                     key={facility.id}
                     className={styles.facilityCard}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => handleViewFacility(facility.id)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleViewFacility(facility.id); } }}
                     data-testid={`facility-card-${facility.id}`}
                   >
                     <h3 className={styles.facilityName}>{facility.facilityName}</h3>

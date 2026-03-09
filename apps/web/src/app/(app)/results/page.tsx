@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { useProviderContext } from '@/lib/hooks/useProviderContext';
+import { useRequireProviderAndFacility } from '@/lib/hooks/useRequireContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { MetadataBar } from '@/components/constitutional/MetadataBar';
@@ -32,6 +32,8 @@ import type {
   Saf34CoverageResponse,
 } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
+import { ErrorState } from '@/components/layout/ErrorState';
+import { LoadingSkeleton } from '@/components/layout/LoadingSkeleton';
 import styles from './page.module.css';
 
 interface ResultsData {
@@ -42,18 +44,19 @@ interface ResultsData {
 
 export default function ResultsPage() {
   useSearchParams();
-  const { providerId, facilityId } = useProviderContext();
+  const { providerId, facilityId, ready } = useRequireProviderAndFacility();
 
   const [data, setData] = useState<ResultsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadData = () => {
     if (!providerId || !facilityId) {
       setLoading(false);
       return;
     }
-
+    setLoading(true);
+    setError(null);
     Promise.all([
       apiClient.getProviderOverview(providerId, facilityId),
       apiClient.getFindings(providerId, facilityId),
@@ -67,14 +70,14 @@ export default function ResultsPage() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [providerId, facilityId]);
+  };
 
-  if (!providerId || !facilityId) {
+  useEffect(loadData, [providerId, facilityId]);
+
+  if (!ready) {
     return (
       <div className={styles.layout}>
-        <div className={styles.noContext}>
-          Select a provider and location to view results.
-        </div>
+        <LoadingSkeleton variant="page" />
       </div>
     );
   }
@@ -82,7 +85,7 @@ export default function ResultsPage() {
   if (loading) {
     return (
       <div className={styles.layout}>
-        <div className={styles.loading}>Loading results...</div>
+        <LoadingSkeleton variant="page" />
       </div>
     );
   }
@@ -90,7 +93,7 @@ export default function ResultsPage() {
   if (error || !data) {
     return (
       <div className={styles.layout}>
-        <div className={styles.error}>Error: {error || 'Failed to load results'}</div>
+        <ErrorState message={error || 'Failed to load results'} onRetry={loadData} />
       </div>
     );
   }
@@ -150,14 +153,17 @@ export default function ResultsPage() {
       <Sidebar
         providerName={overview.provider.providerName}
         snapshotDate={overview.snapshotTimestamp}
+        status={overview.provider.prsState}
         topicCatalogVersion={overview.topicCatalogVersion}
         prsLogicVersion={overview.prsLogicVersion}
+        topicsCompleted={overview.topicsCompleted}
+        totalTopics={overview.totalTopics}
       />
 
       <main className={styles.main}>
         <PageHeader
-          title="Inspection Readiness Results"
-          subtitle="Consolidated view of your readiness for CQC inspection"
+          title="Inspection Readiness"
+          subtitle={`${overview.provider.providerName} · ${overview.facility?.facilityName ?? 'Unknown'}`}
           topicCatalogVersion={overview.topicCatalogVersion}
           topicCatalogHash={overview.topicCatalogHash}
           prsLogicVersion={overview.prsLogicVersion}
@@ -184,6 +190,49 @@ export default function ResultsPage() {
           snapshotId={overview.snapshotId}
           ingestionStatus={overview.ingestionStatus}
         />
+
+        {/* Overview Summary Cards */}
+        <section className={styles.overviewCards}>
+          <div className={styles.overviewCard}>
+            <div className={styles.overviewCardLabel}>Evidence Coverage</div>
+            <div className={styles.overviewCardValue}>{overview.evidenceCoverage}%</div>
+            <div className={styles.overviewCardNote}>Percentage of required evidence uploaded</div>
+          </div>
+          <div className={styles.overviewCard}>
+            <div className={styles.overviewCardLabel}>Topics Completed</div>
+            <div className={styles.overviewCardValue}>{overview.topicsCompleted} / {overview.totalTopics}</div>
+            <div className={styles.overviewCardNote}>Inspection areas addressed</div>
+          </div>
+          <div className={styles.overviewCard}>
+            <div className={styles.overviewCardLabel}>Unanswered Questions</div>
+            <div className={styles.overviewCardValue}>{overview.unansweredQuestions}</div>
+            <div className={styles.overviewCardNote}>Questions requiring provider response</div>
+          </div>
+          <div className={styles.overviewCard}>
+            <div className={styles.overviewCardLabel}>Open Findings</div>
+            <div className={styles.overviewCardValue}>{overview.openFindings}</div>
+            <div className={styles.overviewCardNote}>Findings without remediation</div>
+          </div>
+        </section>
+
+        {/* Provider Details */}
+        <section className={styles.providerDetails}>
+          <h3 className={styles.providerDetailsTitle}>Provider Details</h3>
+          <dl className={styles.providerDetailsList}>
+            <dt>PRS State</dt>
+            <dd>{overview.provider.prsState}</dd>
+            <dt>Registered Beds</dt>
+            <dd>{overview.provider.registeredBeds}</dd>
+            <dt>Service Types</dt>
+            <dd>{overview.provider.serviceTypes.join(', ')}</dd>
+            {overview.facility && (
+              <>
+                <dt>Facility CQC Location ID</dt>
+                <dd>{overview.facility.cqcLocationId}</dd>
+              </>
+            )}
+          </dl>
+        </section>
 
         <SimulationFrame>
           {/* 1. Readiness Score */}

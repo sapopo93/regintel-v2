@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useRequireProviderAndFacility } from '@/lib/hooks/useRequireContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DisclosurePanel } from '@/components/disclosure/DisclosurePanel';
@@ -18,25 +19,28 @@ import { SimulationFrame } from '@/components/mock/SimulationFrame';
 import { apiClient } from '@/lib/api/client';
 import type { AuditTrailResponse, ProviderOverviewResponse } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
+import { ErrorState } from '@/components/layout/ErrorState';
+import { LoadingSkeleton } from '@/components/layout/LoadingSkeleton';
+import { EmptyState } from '@/components/layout/EmptyState';
+import { ScrollText } from 'lucide-react';
 import styles from './page.module.css';
 
 export default function AuditPage() {
   const searchParams = useSearchParams();
-  const providerId = searchParams.get('provider');
-  const facilityId = searchParams.get('facility');
+  const { providerId, facilityId, ready } = useRequireProviderAndFacility();
 
   const [overview, setOverview] = useState<ProviderOverviewResponse | null>(null);
   const [data, setData] = useState<AuditTrailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!providerId || !facilityId) {
-      setError('Provider and facility are required');
+  const loadData = () => {
+    if (!ready || !providerId || !facilityId) {
       setLoading(false);
       return;
     }
-
+    setLoading(true);
+    setError(null);
     Promise.all([
       apiClient.getProviderOverview(providerId, facilityId),
       apiClient.getAuditTrail(providerId, facilityId),
@@ -48,12 +52,14 @@ export default function AuditPage() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [providerId, facilityId]);
+  };
+
+  useEffect(loadData, [providerId, facilityId, ready]);
 
   if (loading) {
     return (
       <div className={styles.layout}>
-        <div className={styles.loading}>Loading...</div>
+        <LoadingSkeleton variant="page" />
       </div>
     );
   }
@@ -61,7 +67,7 @@ export default function AuditPage() {
   if (error || !data || !overview) {
     return (
       <div className={styles.layout}>
-        <div className={styles.error}>Error: {error || 'Failed to load data'}</div>
+        <ErrorState message={error || 'Failed to load data'} onRetry={loadData} />
       </div>
     );
   }
@@ -143,7 +149,11 @@ export default function AuditPage() {
             evidence={(
               <div className={styles.auditList}>
                 {data.events.length === 0 ? (
-                  <div className={styles.empty}>No audit events found</div>
+                  <EmptyState
+                    icon={ScrollText}
+                    title="No audit events found"
+                    description="Activity will appear here as you use the platform."
+                  />
                 ) : (
                   data.events.map((event, index) => (
                     <div key={event.eventId} className={styles.auditCard}>

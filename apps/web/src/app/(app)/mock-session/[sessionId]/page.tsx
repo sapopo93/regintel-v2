@@ -11,8 +11,11 @@ export const dynamic = "force-dynamic";
 import { useEffect, useState } from 'react';
 import { useSearchParams, useParams } from 'next/navigation';
 import Link from 'next/link';
+import { useRequireProviderAndFacility } from '@/lib/hooks/useRequireContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { ErrorState } from '@/components/layout/ErrorState';
+import { LoadingSkeleton } from '@/components/layout/LoadingSkeleton';
 import { DisclosurePanel } from '@/components/disclosure/DisclosurePanel';
 import { MetadataBar } from '@/components/constitutional/MetadataBar';
 import { SimulationFrame } from '@/components/mock/SimulationFrame';
@@ -34,10 +37,8 @@ const PRS_LABELS: Record<string, string> = {
 };
 
 export default function MockSessionDetailPage() {
-  const searchParams = useSearchParams();
   const params = useParams();
-  const providerId = searchParams.get('provider');
-  const facilityId = searchParams.get('facility');
+  const { providerId, facilityId, ready } = useRequireProviderAndFacility();
   const sessionId = params.sessionId as string;
 
   const [overview, setOverview] = useState<ProviderOverviewResponse | null>(null);
@@ -47,13 +48,13 @@ export default function MockSessionDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!providerId || !facilityId) {
-      setError('Provider and facility are required');
+  const loadData = () => {
+    if (!ready || !providerId || !facilityId) {
       setLoading(false);
       return;
     }
-
+    setLoading(true);
+    setError(null);
     Promise.all([
       apiClient.getProviderOverview(providerId, facilityId),
       apiClient.getMockSession(providerId, sessionId, facilityId),
@@ -65,7 +66,9 @@ export default function MockSessionDetailPage() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [providerId, facilityId, sessionId]);
+  };
+
+  useEffect(loadData, [providerId, facilityId, sessionId, ready]);
 
   const handleSubmitAnswer = async () => {
     if (!providerId || !answer.trim()) {
@@ -87,10 +90,18 @@ export default function MockSessionDetailPage() {
     }
   };
 
+  if (!ready) {
+    return (
+      <div className={styles.layout}>
+        <LoadingSkeleton variant="detail" />
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className={styles.layout}>
-        <div className={styles.loading}>Loading...</div>
+        <LoadingSkeleton variant="detail" />
       </div>
     );
   }
@@ -98,7 +109,7 @@ export default function MockSessionDetailPage() {
   if (error || !data || !overview) {
     return (
       <div className={styles.layout}>
-        <div className={styles.error}>Error: {error || 'Failed to load data'}</div>
+        <ErrorState message={error || 'Failed to load data'} onRetry={loadData} />
       </div>
     );
   }
@@ -204,6 +215,7 @@ export default function MockSessionDetailPage() {
               value={answer}
               onChange={(event) => setAnswer(event.target.value)}
               placeholder="Provide a response to complete the session..."
+              aria-label="Your response to the inspection question"
               rows={4}
               data-testid="mock-session-answer"
             />

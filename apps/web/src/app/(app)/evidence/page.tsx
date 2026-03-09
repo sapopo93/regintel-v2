@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useRequireProviderAndFacility } from '@/lib/hooks/useRequireContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DisclosurePanel } from '@/components/disclosure/DisclosurePanel';
@@ -18,25 +19,28 @@ import { SimulationFrame } from '@/components/mock/SimulationFrame';
 import { apiClient } from '@/lib/api/client';
 import type { EvidenceListResponse, ProviderOverviewResponse } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
+import { ErrorState } from '@/components/layout/ErrorState';
+import { LoadingSkeleton } from '@/components/layout/LoadingSkeleton';
+import { EmptyState } from '@/components/layout/EmptyState';
+import { Upload } from 'lucide-react';
 import styles from './page.module.css';
 
 export default function EvidencePage() {
   const searchParams = useSearchParams();
-  const providerId = searchParams.get('provider');
-  const facilityId = searchParams.get('facility');
+  const { providerId, facilityId, ready } = useRequireProviderAndFacility();
 
   const [overview, setOverview] = useState<ProviderOverviewResponse | null>(null);
   const [data, setData] = useState<EvidenceListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!providerId || !facilityId) {
-      setError('Provider and facility are required');
+  const loadData = () => {
+    if (!ready || !providerId || !facilityId) {
       setLoading(false);
       return;
     }
-
+    setLoading(true);
+    setError(null);
     Promise.all([
       apiClient.getProviderOverview(providerId, facilityId),
       apiClient.getEvidence(providerId, facilityId),
@@ -48,12 +52,14 @@ export default function EvidencePage() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [providerId, facilityId]);
+  };
+
+  useEffect(loadData, [providerId, facilityId, ready]);
 
   if (loading) {
     return (
       <div className={styles.layout}>
-        <div className={styles.loading}>Loading...</div>
+        <LoadingSkeleton variant="page" />
       </div>
     );
   }
@@ -61,7 +67,7 @@ export default function EvidencePage() {
   if (error || !data || !overview) {
     return (
       <div className={styles.layout}>
-        <div className={styles.error}>Error: {error || 'Failed to load data'}</div>
+        <ErrorState message={error || 'Failed to load data'} onRetry={loadData} />
       </div>
     );
   }
@@ -114,7 +120,14 @@ export default function EvidencePage() {
             evidence={(
               <div className={styles.evidenceList}>
                 {data.evidence.length === 0 ? (
-                  <div className={styles.empty}>No evidence records found</div>
+                  <EmptyState
+                    icon={Upload}
+                    title="No evidence records found"
+                    description="Upload evidence from the Locations page to demonstrate compliance."
+                    action={
+                      <a href={`/facilities?provider=${providerId}`} style={{ color: 'var(--color-primary, #2563eb)' }}>Go to Locations</a>
+                    }
+                  />
                 ) : (
                   data.evidence.map((record) => {
                     const audit = record.documentAudit;

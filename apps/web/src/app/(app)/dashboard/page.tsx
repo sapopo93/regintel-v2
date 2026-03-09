@@ -16,9 +16,15 @@ export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useRequireProvider } from '@/lib/hooks/useRequireContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { ErrorState } from '@/components/layout/ErrorState';
+import { LoadingSkeleton } from '@/components/layout/LoadingSkeleton';
+import { EmptyState } from '@/components/layout/EmptyState';
 import { MetadataBar } from '@/components/constitutional/MetadataBar';
+import { Building2 } from 'lucide-react';
 import { apiClient } from '@/lib/api/client';
 import type { ProviderDashboardResponse, FacilitySummary, CqcIntelligenceResponse } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
@@ -47,19 +53,18 @@ function formatDaysSince(dateStr: string | null): string {
 export default function DashboardPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const providerId = searchParams.get('provider');
+  const { providerId, ready } = useRequireProvider();
 
   const [data, setData] = useState<ProviderDashboardResponse | null>(null);
   const [intelligence, setIntelligence] = useState<CqcIntelligenceResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!providerId) {
+  const loadData = () => {
+    if (!ready || !providerId) {
       setLoading(false);
       return;
     }
-
     setLoading(true);
     setError(null);
     Promise.all([
@@ -73,20 +78,22 @@ export default function DashboardPage() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [providerId]);
+  };
+
+  useEffect(loadData, [providerId, ready]);
 
   if (loading) {
     return (
       <div className={styles.layout}>
-        <div className={styles.loading}>Loading dashboard...</div>
+        <LoadingSkeleton variant="cards" />
       </div>
     );
   }
 
-  if (!providerId) {
+  if (!ready) {
     return (
       <div className={styles.layout}>
-        <div className={styles.error}>No provider specified. Add ?provider=your-provider-id to the URL.</div>
+        <LoadingSkeleton variant="cards" />
       </div>
     );
   }
@@ -94,7 +101,7 @@ export default function DashboardPage() {
   if (error || !data) {
     return (
       <div className={styles.layout}>
-        <div className={styles.error}>Error: {error || 'Failed to load dashboard'}</div>
+        <ErrorState message={error || 'Failed to load dashboard'} onRetry={loadData} />
       </div>
     );
   }
@@ -104,7 +111,7 @@ export default function DashboardPage() {
   );
 
   const handleFacilityClick = (facilityId: string) => {
-    router.push(`/overview?provider=${providerId}&facility=${facilityId}`);
+    router.push(`/results?provider=${providerId}&facility=${facilityId}`);
   };
 
   const lastActivity = (facility: FacilitySummary): string => {
@@ -170,27 +177,9 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className={styles.totalCard}>
-              <div className={styles.totalLabel}>Critical Findings</div>
-              <div className={`${styles.totalValue} ${styles.severityCritical}`}>
-                {data.totals.totalFindings.critical}
-              </div>
-            </div>
-            <div className={styles.totalCard}>
-              <div className={styles.totalLabel}>High Findings</div>
-              <div className={`${styles.totalValue} ${styles.severityHigh}`}>
-                {data.totals.totalFindings.high}
-              </div>
-            </div>
-            <div className={styles.totalCard}>
-              <div className={styles.totalLabel}>Medium Findings</div>
-              <div className={`${styles.totalValue} ${styles.severityMedium}`}>
-                {data.totals.totalFindings.medium}
-              </div>
-            </div>
-            <div className={styles.totalCard}>
-              <div className={styles.totalLabel}>Low Findings</div>
-              <div className={`${styles.totalValue} ${styles.severityLow}`}>
-                {data.totals.totalFindings.low}
+              <div className={styles.totalLabel}>Open Findings</div>
+              <div className={`${styles.totalValue} ${data.totals.totalFindings.critical > 0 ? styles.severityCritical : ''}`}>
+                {data.totals.totalFindings.critical + data.totals.totalFindings.high + data.totals.totalFindings.medium + data.totals.totalFindings.low}
               </div>
             </div>
           </div>
@@ -220,12 +209,12 @@ export default function DashboardPage() {
                   )}
                 </div>
               </div>
-              <a
+              <Link
                 href={`/intelligence?provider=${providerId}`}
                 style={{ color: 'var(--primary, #2563eb)', textDecoration: 'none', fontSize: '0.85rem' }}
               >
                 View all
-              </a>
+              </Link>
             </div>
           </section>
         )}
@@ -266,9 +255,16 @@ export default function DashboardPage() {
         <section className={styles.facilitiesSection} data-testid="facility-grid">
           <h2 className={styles.sectionTitle}>Locations by Readiness</h2>
           {sortedFacilities.length === 0 ? (
-            <div className={styles.empty}>
-              <p>No locations registered yet.</p>
-            </div>
+            <EmptyState
+              icon={Building2}
+              title="No locations registered yet"
+              description="Register your first location to start tracking readiness."
+              action={
+                <Link href={`/facilities?provider=${providerId}`} style={{ color: 'var(--color-primary, #2563eb)', textDecoration: 'none', fontSize: '0.9rem' }}>
+                  Go to Locations
+                </Link>
+              }
+            />
           ) : (
             <div className={styles.facilityGrid}>
               {sortedFacilities.map((facility) => {
@@ -277,7 +273,10 @@ export default function DashboardPage() {
                   <div
                     key={facility.facilityId}
                     className={`${styles.facilityCard} ${styles[`facilityCard${level.charAt(0).toUpperCase() + level.slice(1)}`]}`}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => handleFacilityClick(facility.facilityId)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleFacilityClick(facility.facilityId); } }}
                     data-testid={`facility-card-${facility.facilityId}`}
                   >
                     <div className={styles.cardHeader}>

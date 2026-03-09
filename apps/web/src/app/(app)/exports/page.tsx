@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useRequireProviderAndFacility } from '@/lib/hooks/useRequireContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DisclosurePanel } from '@/components/disclosure/DisclosurePanel';
@@ -20,12 +21,13 @@ import { apiClient } from '@/lib/api/client';
 import { getAuthRole, getAuthToken } from '@/lib/auth';
 import type { ExportStatusResponse, ProviderOverviewResponse, ExportFormat } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
+import { ErrorState } from '@/components/layout/ErrorState';
+import { LoadingSkeleton } from '@/components/layout/LoadingSkeleton';
 import styles from './page.module.css';
 
 export default function ExportsPage() {
   const searchParams = useSearchParams();
-  const providerId = searchParams.get('provider');
-  const facilityId = searchParams.get('facility');
+  const { providerId, facilityId, ready } = useRequireProviderAndFacility();
 
   const [overview, setOverview] = useState<ProviderOverviewResponse | null>(null);
   const [statusData, setStatusData] = useState<ExportStatusResponse | null>(null);
@@ -36,11 +38,11 @@ export default function ExportsPage() {
   const [exportError, setExportError] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!providerId || !facilityId) {
+  const loadPageData = () => {
+    if (!ready || !providerId || !facilityId) {
       return;
     }
-
+    setLoadError(null);
     Promise.all([
       apiClient.getProviderOverview(providerId, facilityId),
       apiClient.getExportStatus(providerId, facilityId),
@@ -51,7 +53,9 @@ export default function ExportsPage() {
         setStatusData(exportResponse);
       })
       .catch((err) => setLoadError(err.message));
-  }, [providerId, facilityId]);
+  };
+
+  useEffect(loadPageData, [providerId, facilityId, ready]);
 
   const authRole = getAuthRole();
   const enableAuditExport = searchParams.get('enableAuditExport') === 'true';
@@ -117,10 +121,10 @@ export default function ExportsPage() {
     }
   };
 
-  if (!providerId || !facilityId) {
+  if (!ready) {
     return (
       <div className={styles.layout}>
-        <div className={styles.error}>No provider or facility selected</div>
+        <LoadingSkeleton variant="page" />
       </div>
     );
   }
@@ -128,7 +132,7 @@ export default function ExportsPage() {
   if (loadError) {
     return (
       <div className={styles.layout}>
-        <div className={styles.error}>Error: {loadError}</div>
+        <ErrorState message={loadError} onRetry={loadPageData} />
       </div>
     );
   }
@@ -136,7 +140,7 @@ export default function ExportsPage() {
   if (!overview || !statusData) {
     return (
       <div className={styles.layout}>
-        <div className={styles.loading}>Loading...</div>
+        <LoadingSkeleton variant="page" />
       </div>
     );
   }

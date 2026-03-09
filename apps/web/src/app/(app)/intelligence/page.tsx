@@ -10,12 +10,16 @@ export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useRequireProvider } from '@/lib/hooks/useRequireContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { MetadataBar } from '@/components/constitutional/MetadataBar';
 import { apiClient } from '@/lib/api/client';
-import type { CqcIntelligenceResponse, CqcIntelligenceAlert } from '@/lib/api/types';
+import type { CqcIntelligenceResponse, CqcIntelligenceAlert, ProviderDashboardResponse } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
+import { ErrorState } from '@/components/layout/ErrorState';
+import { LoadingSkeleton } from '@/components/layout/LoadingSkeleton';
+import { useToast } from '@/components/toast/ToastProvider';
 import styles from './page.module.css';
 
 type TabType = 'all' | 'risk' | 'outstanding';
@@ -40,51 +44,55 @@ function formatDate(dateStr: string): string {
 
 export default function IntelligencePage() {
   const searchParams = useSearchParams();
-  const providerId = searchParams.get('provider');
+  const { providerId, ready } = useRequireProvider();
 
   const [data, setData] = useState<CqcIntelligenceResponse | null>(null);
+  const [providerName, setProviderName] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabType>('all');
   const [polling, setPolling] = useState(false);
-  const [pollError, setPollError] = useState<string | null>(null);
+  const toast = useToast();
 
   const loadData = () => {
-    if (!providerId) {
+    if (!ready || !providerId) {
       setLoading(false);
       return;
     }
     setLoading(true);
     setError(null);
-    apiClient.getCqcIntelligence(providerId)
-      .then((response) => {
+    Promise.all([
+      apiClient.getCqcIntelligence(providerId),
+      apiClient.getProviderDashboard(providerId).catch(() => null),
+    ])
+      .then(([response, dashResponse]) => {
         validateConstitutionalRequirements(response, { strict: true });
         setData(response);
+        if (dashResponse) setProviderName(dashResponse.providerName);
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   };
 
-  useEffect(loadData, [providerId]);
+  useEffect(loadData, [providerId, ready]);
 
   const handleDismiss = async (alertId: string) => {
     if (!providerId) return;
     try {
       await apiClient.dismissCqcAlert(providerId, alertId);
-      loadData(); // Reload after dismiss
+      loadData();
     } catch (err: any) {
-      console.error('Failed to dismiss alert:', err.message);
+      toast.error(`Failed to dismiss alert: ${err.message}`);
     }
   };
 
   const handlePoll = async () => {
     setPolling(true);
-    setPollError(null);
     try {
       await apiClient.pollCqcIntelligence();
       loadData();
     } catch (err: any) {
-      setPollError(err.message);
+      toast.error(err.message);
     } finally {
       setPolling(false);
     }
@@ -93,15 +101,15 @@ export default function IntelligencePage() {
   if (loading) {
     return (
       <div className={styles.layout}>
-        <div className={styles.loading}>Loading intelligence...</div>
+        <LoadingSkeleton variant="page" />
       </div>
     );
   }
 
-  if (!providerId) {
+  if (!ready) {
     return (
       <div className={styles.layout}>
-        <div className={styles.error}>No provider specified. Add ?provider=your-provider-id to the URL.</div>
+        <LoadingSkeleton variant="page" />
       </div>
     );
   }
@@ -109,7 +117,7 @@ export default function IntelligencePage() {
   if (error || !data) {
     return (
       <div className={styles.layout}>
-        <div className={styles.error}>Error: {error || 'Failed to load intelligence'}</div>
+        <ErrorState message={error || 'Failed to load intelligence'} onRetry={loadData} />
       </div>
     );
   }
@@ -123,7 +131,7 @@ export default function IntelligencePage() {
   return (
     <div className={styles.layout}>
       <Sidebar
-        providerName=""
+        providerName={providerName}
         snapshotDate={data.snapshotTimestamp}
         topicCatalogVersion={data.topicCatalogVersion}
         prsLogicVersion={data.prsLogicVersion}
@@ -169,7 +177,6 @@ export default function IntelligencePage() {
             {polling ? 'Polling CQC...' : 'Refresh Intelligence'}
           </button>
         </div>
-        {pollError && <div className={styles.error}>{pollError}</div>}
 
         {/* Tabs */}
         <div className={styles.tabs}>

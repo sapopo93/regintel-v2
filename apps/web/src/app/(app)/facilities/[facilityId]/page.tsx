@@ -28,6 +28,9 @@ import { ReadinessChecklist } from '@/components/journey/ReadinessChecklist';
 import { apiClient, getValidatedApiBaseUrl } from '@/lib/api/client';
 import type { FacilityDetailResponse, EvidenceListResponse, ScanStatus, ReadinessJourneyResponse, DocumentAuditSummary } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
+import { LoadingSkeleton } from '@/components/layout/LoadingSkeleton';
+import { ErrorState } from '@/components/layout/ErrorState';
+import { useToast } from '@/components/toast/ToastProvider';
 import styles from './page.module.css';
 
 export default function FacilityDetailPage() {
@@ -64,6 +67,8 @@ export default function FacilityDetailPage() {
   // CQC report sync state
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  const toast = useToast();
 
   useEffect(() => {
     if (providerId && facilityId) {
@@ -217,6 +222,7 @@ export default function FacilityDetailPage() {
       setUploadError(`${failures.length} file(s) failed:\n${failures.join('\n')}`);
     } else {
       // All succeeded — reset form
+      toast.success('Evidence uploaded');
       setShowUploadForm(false);
       setDescription('');
       setExpiresAt('');
@@ -251,7 +257,7 @@ export default function FacilityDetailPage() {
       const evidence = await apiClient.getFacilityEvidence(facilityId);
       setEvidenceData(evidence);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to remove evidence');
+      toast.error(err instanceof Error ? err.message : 'Failed to remove evidence');
     }
   };
 
@@ -277,14 +283,14 @@ export default function FacilityDetailPage() {
       document.body.removeChild(a);
     } catch (err) {
       console.error('Download failed:', err);
-      alert('Failed to download file');
+      toast.error('Failed to download file');
     }
   };
 
   if (loading) {
     return (
       <div className={styles.layout}>
-        <div className={styles.loading}>Loading location...</div>
+        <LoadingSkeleton variant="detail" />
       </div>
     );
   }
@@ -292,7 +298,7 @@ export default function FacilityDetailPage() {
   if (error || !facilityData || !evidenceData) {
     return (
       <div className={styles.layout}>
-        <div className={styles.error}>Error: {error || 'Failed to load location'}</div>
+        <ErrorState message={error || 'Failed to load location'} />
       </div>
     );
   }
@@ -364,10 +370,10 @@ export default function FacilityDetailPage() {
             {providerId && (
               <button
                 className={styles.overviewButton}
-                onClick={() => router.push(`/overview?provider=${providerId}&facility=${facilityId}`)}
-                data-testid="continue-overview-button"
+                onClick={() => router.push(`/results?provider=${providerId}&facility=${facilityId}`)}
+                data-testid="continue-readiness-button"
               >
-                Continue to Overview
+                Continue to Readiness
               </button>
             )}
           </div>

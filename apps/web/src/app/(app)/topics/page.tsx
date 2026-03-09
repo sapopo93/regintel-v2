@@ -11,8 +11,11 @@ export const dynamic = "force-dynamic";
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { useRequireProviderAndFacility } from '@/lib/hooks/useRequireContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { ErrorState } from '@/components/layout/ErrorState';
+import { LoadingSkeleton } from '@/components/layout/LoadingSkeleton';
 import { DisclosurePanel } from '@/components/disclosure/DisclosurePanel';
 import { SimulationFrame } from '@/components/mock/SimulationFrame';
 import { apiClient } from '@/lib/api/client';
@@ -35,21 +38,20 @@ function getQuestionModeLabel(questionMode: string): string {
 
 export default function TopicsPage() {
   const searchParams = useSearchParams();
-  const providerId = searchParams.get('provider');
-  const facilityId = searchParams.get('facility');
+  const { providerId, facilityId, ready } = useRequireProviderAndFacility();
 
   const [overview, setOverview] = useState<ProviderOverviewResponse | null>(null);
   const [data, setData] = useState<TopicsListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!providerId || !facilityId) {
-      setError('Provider and facility are required');
+  const loadData = () => {
+    if (!ready || !providerId || !facilityId) {
       setLoading(false);
       return;
     }
-
+    setLoading(true);
+    setError(null);
     Promise.all([
       apiClient.getProviderOverview(providerId, facilityId),
       apiClient.getTopics(providerId, facilityId),
@@ -61,12 +63,14 @@ export default function TopicsPage() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [providerId, facilityId]);
+  };
+
+  useEffect(loadData, [providerId, facilityId, ready]);
 
   if (loading) {
     return (
       <div className={styles.layout}>
-        <div className={styles.loading}>Loading...</div>
+        <LoadingSkeleton variant="page" />
       </div>
     );
   }
@@ -74,7 +78,7 @@ export default function TopicsPage() {
   if (error || !data || !overview) {
     return (
       <div className={styles.layout}>
-        <div className={styles.error}>Error: {error || 'Failed to load data'}</div>
+        <ErrorState message={error || 'Failed to load data'} onRetry={loadData} />
       </div>
     );
   }

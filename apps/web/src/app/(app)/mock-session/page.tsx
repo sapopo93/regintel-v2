@@ -11,9 +11,14 @@ export const dynamic = "force-dynamic";
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { useRequireProviderAndFacility } from '@/lib/hooks/useRequireContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { ErrorState } from '@/components/layout/ErrorState';
+import { LoadingSkeleton } from '@/components/layout/LoadingSkeleton';
+import { EmptyState } from '@/components/layout/EmptyState';
 import { DisclosurePanel } from '@/components/disclosure/DisclosurePanel';
+import { PlayCircle } from 'lucide-react';
 import { MetadataBar } from '@/components/constitutional/MetadataBar';
 import { SimulationFrame } from '@/components/mock/SimulationFrame';
 import { apiClient } from '@/lib/api/client';
@@ -23,9 +28,10 @@ import styles from './page.module.css';
 
 export default function MockSessionsPage() {
   const searchParams = useSearchParams();
+  const { providerId: rawProviderId, facilityId: rawFacilityId, ready } = useRequireProviderAndFacility();
   // Decode URL-encoded params (colons in tenant:resource IDs get encoded as %3A)
-  const providerId = searchParams.get('provider') ? decodeURIComponent(searchParams.get('provider')!) : null;
-  const facilityId = searchParams.get('facility') ? decodeURIComponent(searchParams.get('facility')!) : null;
+  const providerId = rawProviderId ? decodeURIComponent(rawProviderId) : null;
+  const facilityId = rawFacilityId ? decodeURIComponent(rawFacilityId) : null;
 
   const [overview, setOverview] = useState<ProviderOverviewResponse | null>(null);
   const [data, setData] = useState<MockSessionsListResponse | null>(null);
@@ -37,13 +43,13 @@ export default function MockSessionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!providerId || !facilityId) {
-      setError('Provider and facility are required');
+  const loadData = () => {
+    if (!ready || !providerId || !facilityId) {
       setLoading(false);
       return;
     }
-
+    setLoading(true);
+    setError(null);
     Promise.all([
       apiClient.getProviderOverview(providerId, facilityId),
       apiClient.getMockSessions(providerId, facilityId),
@@ -58,7 +64,9 @@ export default function MockSessionsPage() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [providerId, facilityId]);
+  };
+
+  useEffect(loadData, [providerId, facilityId, ready]);
 
   const handleCreateSession = async () => {
     if (!providerId || !facilityId || !selectedTopic) {
@@ -88,7 +96,7 @@ export default function MockSessionsPage() {
   if (loading) {
     return (
       <div className={styles.layout}>
-        <div className={styles.loading}>Loading...</div>
+        <LoadingSkeleton variant="page" />
       </div>
     );
   }
@@ -96,7 +104,7 @@ export default function MockSessionsPage() {
   if (error || !data || !overview) {
     return (
       <div className={styles.layout}>
-        <div className={styles.error}>Error: {error || 'Failed to load data'}</div>
+        <ErrorState message={error || 'Failed to load data'} onRetry={loadData} />
       </div>
     );
   }
@@ -135,7 +143,11 @@ export default function MockSessionsPage() {
             summary={(
               <div className={styles.sessionsList}>
                 {data.sessions.length === 0 ? (
-                  <div className={styles.empty}>No practice sessions found</div>
+                  <EmptyState
+                    icon={PlayCircle}
+                    title="No practice sessions found"
+                    description="Start a practice inspection from the panel below to prepare for your CQC visit."
+                  />
                 ) : (
                   data.sessions.map((session) => (
                     <Link

@@ -12,6 +12,7 @@ export const dynamic = "force-dynamic";
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { useRequireProviderAndFacility } from '@/lib/hooks/useRequireContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DisclosurePanel } from '@/components/disclosure/DisclosurePanel';
@@ -21,25 +22,28 @@ import { apiClient } from '@/lib/api/client';
 import type { FindingsListResponse, ProviderOverviewResponse } from '@/lib/api/types';
 import { ORIGIN_LABELS } from '@/lib/constants';
 import { validateConstitutionalRequirements, validateFindingForDisplay } from '@/lib/validators';
+import { ErrorState } from '@/components/layout/ErrorState';
+import { LoadingSkeleton } from '@/components/layout/LoadingSkeleton';
+import { EmptyState } from '@/components/layout/EmptyState';
+import { FileSearch } from 'lucide-react';
 import styles from './page.module.css';
 
 export default function FindingsPage() {
   const searchParams = useSearchParams();
-  const providerId = searchParams.get('provider');
-  const facilityId = searchParams.get('facility');
+  const { providerId, facilityId, ready } = useRequireProviderAndFacility();
 
   const [overview, setOverview] = useState<ProviderOverviewResponse | null>(null);
   const [data, setData] = useState<FindingsListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!providerId || !facilityId) {
-      setError('Provider and facility are required');
+  const loadData = () => {
+    if (!ready || !providerId || !facilityId) {
       setLoading(false);
       return;
     }
-
+    setLoading(true);
+    setError(null);
     Promise.all([
       apiClient.getProviderOverview(providerId, facilityId),
       apiClient.getFindings(providerId, facilityId),
@@ -52,12 +56,14 @@ export default function FindingsPage() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [providerId, facilityId]);
+  };
+
+  useEffect(loadData, [providerId, facilityId, ready]);
 
   if (loading) {
     return (
       <div className={styles.layout}>
-        <div className={styles.loading}>Loading...</div>
+        <LoadingSkeleton variant="page" />
       </div>
     );
   }
@@ -65,7 +71,7 @@ export default function FindingsPage() {
   if (error || !data || !overview) {
     return (
       <div className={styles.layout}>
-        <div className={styles.error}>Error: {error || 'Failed to load data'}</div>
+        <ErrorState message={error || 'Failed to load data'} onRetry={loadData} />
       </div>
     );
   }
@@ -108,7 +114,16 @@ export default function FindingsPage() {
             summary={(
               <div className={styles.findingsList}>
                 {data.findings.length === 0 ? (
-                  <div className={styles.empty}>No findings found</div>
+                  <EmptyState
+                    icon={FileSearch}
+                    title="No findings found"
+                    description="Findings are generated during practice inspections."
+                    action={
+                      <Link href={`/mock-session?provider=${providerId}&facility=${facilityId}`} style={{ color: 'var(--color-primary, #2563eb)' }}>
+                        Start a Practice Inspection
+                      </Link>
+                    }
+                  />
                 ) : (
                   data.findings.map((finding) => (
                     <Link

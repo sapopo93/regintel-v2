@@ -105,6 +105,7 @@ const IGNORE_PATTERNS = [
   '.github', // CI configuration with test environment setup
   'test-results', // Playwright artifacts (binary traces/screenshots)
   'playwright-report', // Playwright HTML report output
+  '.claude', // Claude Code session transcripts and local settings
 ];
 
 /**
