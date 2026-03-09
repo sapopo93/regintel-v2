@@ -796,9 +796,12 @@ export async function auditDocument(
       max_tokens: 2000,
       messages: [{ role: 'user', content: messageContent }],
     });
-    const parsed = parseAuditPayload(extractResponseText(response));
+    const rawText = extractResponseText(response);
+    console.log('[AUDITOR] raw response (first 600 chars):', rawText.substring(0, 600));
+    const parsed = parseAuditPayload(rawText);
 
     if (!isMeaningfulAuditPayload(parsed)) {
+      console.log('[AUDITOR] parse failed — overallResult:', (parsed as any)?.overallResult, '| summary length:', asText((parsed as any)?.summary).length);
       throw new DocumentAuditExecutionError(
         'FAILED',
         'Audit response could not be parsed into a valid result.'
