@@ -125,7 +125,9 @@ function getAnthropicClient(): Anthropic | null {
   }
 
   if (!anthropicClient) {
-    anthropicClient = new Anthropic({ apiKey });
+    // 90-second timeout per request — prevents indefinite hangs on large PDFs
+    // maxRetries: 1 (SDK default is 2) → worst-case 180s instead of 10 min default
+    anthropicClient = new Anthropic({ apiKey, timeout: 90_000, maxRetries: 1 });
   }
 
   return anthropicClient;
@@ -741,12 +743,27 @@ export async function auditDocument(
     const prompt = AUDIT_PROMPTS[docType] ?? AUDIT_PROMPTS.OTHER;
     const facilityPrefix = `Facility: ${facilityName}\n\n`;
 
+    // PDFs over 20 MB are too large to send efficiently; fall back to text-only prompt
+    const PDF_MAX_BYTES = 20 * 1024 * 1024;
     if (isPdf) {
-      const b64 = fileBuffer.toString('base64');
-      messageContent = [
-        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } as any },
-        { type: 'text', text: facilityPrefix + prompt },
-      ];
+      if (fileBuffer.length > PDF_MAX_BYTES) {
+        const sizeMb = (fileBuffer.length / 1024 / 1024).toFixed(1);
+        messageContent = [
+          {
+            type: 'text',
+            text: `${facilityPrefix}Document: ${fileName} (${sizeMb} MB PDF — too large for direct analysis)\n` +
+              `Document type classification: ${docType}\n` +
+              `Perform a compliance risk assessment based on document type and provide a structured response.\n\n` +
+              prompt,
+          },
+        ];
+      } else {
+        const b64 = fileBuffer.toString('base64');
+        messageContent = [
+          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } as any },
+          { type: 'text', text: facilityPrefix + prompt },
+        ];
+      }
     } else if (isDocx) {
       const { value: docText } = await mammoth.extractRawText({ buffer: fileBuffer });
       messageContent = [

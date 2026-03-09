@@ -54,6 +54,7 @@ async function processPendingAudits() {
         da.tenant_id,
         da.facility_id,
         da.provider_id,
+        COALESCE(f.facility_name, da.facility_id) AS facility_name,
         da.original_file_name  AS file_name,
         da.document_type       AS evidence_type,
         eb.content_hash        AS blob_hash,
@@ -62,6 +63,7 @@ async function processPendingAudits() {
       FROM document_audits da
       JOIN evidence_records er ON er.id::text = da.evidence_record_id
       JOIN evidence_blobs eb ON eb.content_hash = er.content_hash
+      LEFT JOIN facilities f ON f.id = da.facility_id AND f.tenant_id = da.tenant_id
       WHERE da.status = 'PENDING'
       ORDER BY da.created_at ASC
       LIMIT 3
