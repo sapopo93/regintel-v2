@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
  */
 
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useProviderContext } from '@/lib/hooks/useProviderContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -33,7 +33,8 @@ import { validateConstitutionalRequirements } from '@/lib/validators';
 import styles from './page.module.css';
 
 export default function OverviewPage() {
-  useSearchParams(); // keep for Next.js dynamic rendering
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const { providerId, facilityId } = useProviderContext();
 
   const [data, setData] = useState<ProviderOverviewResponse | null>(null);
@@ -41,9 +42,13 @@ export default function OverviewPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Params may be null on first render before hydration — wait silently rather than
-    // showing an error that will flash away once the real URL params are available.
+    // If URL has no provider/facility params, redirect to root page which will
+    // resolve the correct provider/facility and redirect back with proper params.
     if (!providerId || !facilityId) {
+      if (!searchParams.get('provider') && !searchParams.get('facility')) {
+        router.replace('/');
+        return;
+      }
       setLoading(false);
       return;
     }

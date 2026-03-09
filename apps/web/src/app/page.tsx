@@ -24,7 +24,7 @@ export default async function HomePage() {
   if (userId) {
     try {
       const token = await getToken();
-      const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
+      const apiBase = process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
 
       const res = await fetch(`${apiBase}/v1/facilities`, {
         headers: {
