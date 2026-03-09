@@ -239,8 +239,14 @@
   font-size: var(--text-lg);
   font-weight: var(--font-semibold);
   color: var(--color-charcoal);
-  flex: 1;
   margin-right: var(--space-3);
+}
+
+.cardSubtitle {
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-slate, #64748b);
+  margin-top: var(--space-1, 0.25rem);
+  text-transform: capitalize;
 }
 
 .readinessBadge {

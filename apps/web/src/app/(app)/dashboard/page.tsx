@@ -285,7 +285,17 @@ export default function DashboardPage() {
                     data-testid={`facility-card-${facility.facilityId}`}
                   >
                     <div className={styles.cardHeader}>
-                      <h3 className={styles.facilityName}>{facility.facilityName}</h3>
+                      <div>
+                        <h3 className={styles.facilityName}>{facility.facilityName}</h3>
+                        {(facility.serviceType || facility.applicableTopicCount) && (
+                          <div className={styles.cardSubtitle}>
+                            {facility.serviceType && <span>{facility.serviceType.replace(/_/g, ' ').toLowerCase()}</span>}
+                            {facility.applicableTopicCount != null && (
+                              <span>{facility.serviceType ? ' · ' : ''}{facility.applicableTopicCount} topics</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
                       <div className={`${styles.readinessBadge} ${styles[`badge${level.charAt(0).toUpperCase() + level.slice(1)}`]}`}>
                         {Math.round(facility.readinessScore)}%
                       </div>

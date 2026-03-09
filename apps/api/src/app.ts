@@ -993,8 +993,12 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       ? Math.min(100, Math.round((evidenceCount / totalExpectedDocuments) * 100))
       : evidenceCount > 0 ? 100 : 0;
 
-    // Keep legacy field for backward compatibility with existing UI.
-    const evidenceCoverage = documentUploadPercentage;
+    // Evidence coverage: count how many required evidence types are satisfied (not raw upload count)
+    const uploadedTypes = new Set(facilityEvidence.map(e => e.evidenceType));
+    const matchedTypes = fCtx.requiredEvidenceTypes.filter(t => uploadedTypes.has(t));
+    const evidenceCoverage = fCtx.requiredEvidenceTypes.length > 0
+      ? Math.min(100, Math.round((matchedTypes.length / fCtx.requiredEvidenceTypes.length) * 100))
+      : evidenceCount > 0 ? 100 : 0;
 
     const baseReportContext = await resolveReportContextForFacility(ctx, providerId, facilityId);
     const reportContext = hasCqcReport
@@ -1065,8 +1069,10 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       const completedSessions = facilitySessions.filter(s => s.status === 'COMPLETED');
 
       const evidenceCount = evidence.length;
-      const evidenceCoverage = fCtx.expectedEvidenceCount > 0
-        ? Math.min(100, Math.round((evidenceCount / fCtx.expectedEvidenceCount) * 100))
+      const uploadedTypes = new Set(evidence.map(e => e.evidenceType));
+      const matchedTypes = fCtx.requiredEvidenceTypes.filter(t => uploadedTypes.has(t));
+      const evidenceCoverage = fCtx.requiredEvidenceTypes.length > 0
+        ? Math.min(100, Math.round((matchedTypes.length / fCtx.requiredEvidenceTypes.length) * 100))
         : evidenceCount > 0 ? 100 : 0;
 
       const findingsBySeverity = {
@@ -1293,8 +1299,10 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     const criticalFindings = findings.filter(f => f.severity === 'CRITICAL');
     const fCtx = buildFacilityContext(facility, provider ?? {});
     const totalExpectedDocuments = fCtx.expectedEvidenceCount;
-    const evidenceCoverage = totalExpectedDocuments > 0
-      ? Math.min(100, Math.round((evidence.length / totalExpectedDocuments) * 100))
+    const detailUploadedTypes = new Set(evidence.map(e => e.evidenceType));
+    const detailMatchedTypes = fCtx.requiredEvidenceTypes.filter(t => detailUploadedTypes.has(t));
+    const evidenceCoverage = fCtx.requiredEvidenceTypes.length > 0
+      ? Math.min(100, Math.round((detailMatchedTypes.length / fCtx.requiredEvidenceTypes.length) * 100))
       : evidence.length > 0 ? 100 : 0;
     const hasBlueOcean = exports.some(e => e.format === 'BLUE_OCEAN_BOARD' || e.format === 'BLUE_OCEAN_AUDIT');
 
