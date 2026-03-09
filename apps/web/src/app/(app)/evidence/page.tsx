@@ -6,9 +6,10 @@ export const dynamic = "force-dynamic";
  * Evidence Page
  *
  * Displays all evidence records for a provider.
+ * Supports uploading new evidence and deleting existing records.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useRequireProviderAndFacility } from '@/lib/hooks/useRequireContext';
 import { Sidebar } from '@/components/layout/Sidebar';
@@ -22,8 +23,20 @@ import { validateConstitutionalRequirements } from '@/lib/validators';
 import { ErrorState } from '@/components/layout/ErrorState';
 import { LoadingSkeleton } from '@/components/layout/LoadingSkeleton';
 import { EmptyState } from '@/components/layout/EmptyState';
-import { Upload } from 'lucide-react';
+import { Upload, Trash2, X } from 'lucide-react';
 import styles from './page.module.css';
+
+const EVIDENCE_TYPE_OPTIONS = [
+  { value: 'POLICY', label: 'Policy Document' },
+  { value: 'TRAINING', label: 'Training Record' },
+  { value: 'AUDIT', label: 'Audit Report' },
+  { value: 'ROTA', label: 'Staff Rota' },
+  { value: 'SKILLS_MATRIX', label: 'Skills Matrix' },
+  { value: 'SUPERVISION', label: 'Supervision Records' },
+  { value: 'CERTIFICATE', label: 'Certificate' },
+  { value: 'CQC_REPORT', label: 'CQC Inspection Report' },
+  { value: 'OTHER', label: 'Other' },
+];
 
 export default function EvidencePage() {
   const searchParams = useSearchParams();
@@ -33,6 +46,20 @@ export default function EvidencePage() {
   const [data, setData] = useState<EvidenceListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Upload modal state
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadType, setUploadType] = useState('POLICY');
+  const [uploadDescription, setUploadDescription] = useState('');
+  const [uploadExpiry, setUploadExpiry] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Delete state
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const loadData = () => {
     if (!ready || !providerId || !facilityId) {
@@ -55,6 +82,68 @@ export default function EvidencePage() {
   };
 
   useEffect(loadData, [providerId, facilityId, ready]);
+
+  const handleUpload = async () => {
+    if (!uploadFile || !facilityId) return;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      // Read file as base64
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          // Strip data URL prefix (e.g. "data:application/pdf;base64,")
+          const base64Part = result.split(',')[1];
+          resolve(base64Part);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(uploadFile);
+      });
+
+      // Step 1: Upload blob
+      const blobResponse = await apiClient.createEvidenceBlob({
+        contentBase64: base64,
+        mimeType: uploadFile.type || 'application/octet-stream',
+      });
+
+      // Step 2: Create evidence record
+      await apiClient.createFacilityEvidence({
+        facilityId,
+        blobHash: blobResponse.blobHash,
+        evidenceType: uploadType,
+        fileName: uploadFile.name,
+        description: uploadDescription || undefined,
+        expiresAt: uploadExpiry || undefined,
+      });
+
+      // Close modal and reload
+      setShowUploadModal(false);
+      setUploadFile(null);
+      setUploadDescription('');
+      setUploadExpiry('');
+      setUploadType('POLICY');
+      loadData();
+    } catch (err: any) {
+      setUploadError(err.message || 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (evidenceRecordId: string) => {
+    if (!facilityId) return;
+    setDeletingId(evidenceRecordId);
+    try {
+      await apiClient.deleteEvidence(facilityId, evidenceRecordId);
+      setConfirmDeleteId(null);
+      loadData();
+    } catch (err: any) {
+      alert(`Delete failed: ${err.message}`);
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -127,10 +216,21 @@ export default function EvidencePage() {
           <DisclosurePanel
             summary={(
               <div className={styles.summaryPanel}>
-                <h2 className={styles.sectionTitle}>Evidence Summary</h2>
-                <p className={styles.summaryText}>
-                  {data.totalCount} evidence items are currently registered for this provider.
-                </p>
+                <div className={styles.summaryRow}>
+                  <div>
+                    <h2 className={styles.sectionTitle}>Evidence Summary</h2>
+                    <p className={styles.summaryText}>
+                      {data.totalCount} evidence items are currently registered for this provider.
+                    </p>
+                  </div>
+                  <button
+                    className={styles.uploadBtn}
+                    onClick={() => setShowUploadModal(true)}
+                  >
+                    <Upload size={16} />
+                    Upload Evidence
+                  </button>
+                </div>
               </div>
             )}
             evidence={(
@@ -139,9 +239,15 @@ export default function EvidencePage() {
                   <EmptyState
                     icon={Upload}
                     title="No evidence records found"
-                    description="Upload evidence from the Locations page to demonstrate compliance."
+                    description="Upload evidence to demonstrate compliance."
                     action={
-                      <a href={`/facilities?provider=${providerId}`} style={{ color: 'var(--color-primary, #2563eb)' }}>Go to Locations</a>
+                      <button
+                        className={styles.uploadBtn}
+                        onClick={() => setShowUploadModal(true)}
+                      >
+                        <Upload size={16} />
+                        Upload Evidence
+                      </button>
                     }
                   />
                 ) : (
@@ -207,6 +313,37 @@ export default function EvidencePage() {
                             </div>
                           </div>
                         )}
+
+                        {/* Action buttons */}
+                        <div className={styles.cardActions}>
+                          {confirmDeleteId === record.evidenceRecordId ? (
+                            <div className={styles.deleteConfirm}>
+                              <span className={styles.deleteConfirmText}>Delete this record?</span>
+                              <button
+                                className={styles.deleteConfirmBtn}
+                                onClick={() => handleDelete(record.evidenceRecordId)}
+                                disabled={deletingId === record.evidenceRecordId}
+                              >
+                                {deletingId === record.evidenceRecordId ? 'Deleting…' : 'Yes, delete'}
+                              </button>
+                              <button
+                                className={styles.cancelBtn}
+                                onClick={() => setConfirmDeleteId(null)}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              className={styles.deleteBtn}
+                              onClick={() => setConfirmDeleteId(record.evidenceRecordId)}
+                              title="Delete this evidence record"
+                            >
+                              <Trash2 size={14} />
+                              Delete
+                            </button>
+                          )}
+                        </div>
                       </div>
                     );
                   })
@@ -231,6 +368,109 @@ export default function EvidencePage() {
           />
         </main>
       </div>
+
+      {/* Upload Modal */}
+      {showUploadModal && (
+        <div className={styles.modalOverlay} onClick={() => !uploading && setShowUploadModal(false)}>
+          <div className={styles.modal} onClick={e => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h2 className={styles.modalTitle}>Upload Evidence</h2>
+              <button
+                className={styles.modalClose}
+                onClick={() => setShowUploadModal(false)}
+                disabled={uploading}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className={styles.modalBody}>
+              {/* File picker */}
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>File *</label>
+                <div
+                  className={styles.dropZone}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {uploadFile ? (
+                    <span className={styles.dropZoneFile}>{uploadFile.name} ({formatBytes(uploadFile.size)})</span>
+                  ) : (
+                    <span className={styles.dropZonePlaceholder}>
+                      <Upload size={20} />
+                      Click to select a file
+                    </span>
+                  )}
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  style={{ display: 'none' }}
+                  onChange={e => setUploadFile(e.target.files?.[0] ?? null)}
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.html,.png,.jpg,.jpeg"
+                />
+              </div>
+
+              {/* Evidence type */}
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>Evidence Type *</label>
+                <select
+                  className={styles.formSelect}
+                  value={uploadType}
+                  onChange={e => setUploadType(e.target.value)}
+                >
+                  {EVIDENCE_TYPE_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Description */}
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>Description (optional)</label>
+                <input
+                  type="text"
+                  className={styles.formInput}
+                  placeholder="Brief description of this document"
+                  value={uploadDescription}
+                  onChange={e => setUploadDescription(e.target.value)}
+                />
+              </div>
+
+              {/* Expiry date */}
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>Expiry Date (optional)</label>
+                <input
+                  type="date"
+                  className={styles.formInput}
+                  value={uploadExpiry}
+                  onChange={e => setUploadExpiry(e.target.value)}
+                />
+              </div>
+
+              {uploadError && (
+                <div className={styles.uploadErrorMsg}>{uploadError}</div>
+              )}
+            </div>
+
+            <div className={styles.modalFooter}>
+              <button
+                className={styles.cancelBtn}
+                onClick={() => setShowUploadModal(false)}
+                disabled={uploading}
+              >
+                Cancel
+              </button>
+              <button
+                className={styles.uploadSubmitBtn}
+                onClick={handleUpload}
+                disabled={!uploadFile || uploading}
+              >
+                {uploading ? 'Uploading…' : 'Upload'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </SimulationFrame>
   );
 }
