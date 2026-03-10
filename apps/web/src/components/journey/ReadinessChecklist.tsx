@@ -112,6 +112,9 @@ export function ReadinessChecklist({
             <div className={styles.stepContent}>
               <span className={styles.stepLabel}>{step.label}</span>
               <span className={styles.stepDescription}>{step.description}</span>
+              {step.guidance && (
+                <p className={styles.stepGuidance}>{step.guidance}</p>
+              )}
             </div>
             {step.actionLabel && step.actionHref && (
               <Link href={step.actionHref as Route} className={styles.stepAction}>

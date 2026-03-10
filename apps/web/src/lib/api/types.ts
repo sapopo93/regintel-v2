@@ -631,6 +631,7 @@ export interface ReadinessStep {
   id: string;
   label: string;
   description: string;
+  guidance?: string;
   status: 'complete' | 'in-progress' | 'not-started';
   actionLabel?: string;
   actionHref?: string;

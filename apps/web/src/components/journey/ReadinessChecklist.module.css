@@ -161,6 +161,14 @@
   color: var(--color-slate-600);
 }
 
+.stepGuidance {
+  font-size: var(--text-xs);
+  color: var(--color-slate-500);
+  font-style: italic;
+  margin: var(--space-1) 0 0 0;
+  line-height: 1.5;
+}
+
 .stepAction {
   flex-shrink: 0;
   align-self: center;
