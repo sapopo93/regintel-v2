@@ -146,9 +146,6 @@ function AuditDetail({ evidenceRecordId }: { evidenceRecordId: string }) {
 
   return (
     <div className={styles.auditDetail}>
-      {/* Summary */}
-      <p className={styles.auditSummary}>{result.summary}</p>
-
       {/* SAF Statements */}
       {result.safStatements.length > 0 && (
         <section className={styles.detailSection}>

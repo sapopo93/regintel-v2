@@ -138,55 +138,72 @@ export default function AuditPage() {
           />
 
           <DisclosurePanel
+            labels={{ summary: 'Activity Log', evidence: 'Hash Verification', trace: 'Metadata' }}
             summary={(
-              <div className={styles.integrity}>
-                <h2 className={styles.integrityTitle}>Activity Integrity</h2>
-                <p className={styles.integrityDescription}>
-                  This timeline records key provider actions in order so teams can review what happened and when.
-                </p>
+              <div>
+                <div className={styles.integrity}>
+                  <h2 className={styles.integrityTitle}>Activity Integrity</h2>
+                  <p className={styles.integrityDescription}>
+                    This timeline records key provider actions in order so teams can review what happened and when.
+                  </p>
+                </div>
+
+                <div className={styles.auditList}>
+                  {data.events.length === 0 ? (
+                    <EmptyState
+                      icon={ScrollText}
+                      title="No audit events found"
+                      description="Activity will appear here as you use the platform."
+                    />
+                  ) : (
+                    data.events.map((event, index) => (
+                      <div key={event.eventId} className={styles.auditCard}>
+                        <div className={styles.auditHeader}>
+                          <span className={styles.eventNumber}>#{index + 1}</span>
+                          <span className={styles.eventType}>{toActivityLabel(event.eventType)}</span>
+                          <span className={styles.timestamp}>
+                            {new Date(event.timestamp).toLocaleString()}
+                          </span>
+                        </div>
+
+                        <dl className={styles.auditMeta}>
+                          <dt>Recorded By</dt>
+                          <dd>{event.userId}</dd>
+                        </dl>
+
+                        {event.payload && (
+                          <div className={styles.payloadDetails}>
+                            {Object.entries(event.payload)
+                              .filter(([key]) => DISPLAY_PAYLOAD_KEYS.has(key))
+                              .map(([key, value]) => (
+                                <span key={key} className={styles.payloadTag}>
+                                  {key.replace(/([A-Z])/g, ' $1').trim()}: {formatPayloadDetail(key, value)}
+                                </span>
+                              ))}
+                          </div>
+                        )}
+
+                        {event.previousEventHash && <div className={styles.chainIndicator}>Linked to previous activity</div>}
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             )}
             evidence={(
-              <div className={styles.auditList}>
-                {data.events.length === 0 ? (
-                  <EmptyState
-                    icon={ScrollText}
-                    title="No audit events found"
-                    description="Activity will appear here as you use the platform."
-                  />
-                ) : (
-                  data.events.map((event, index) => (
-                    <div key={event.eventId} className={styles.auditCard}>
-                      <div className={styles.auditHeader}>
-                        <span className={styles.eventNumber}>#{index + 1}</span>
-                        <span className={styles.eventType}>{toActivityLabel(event.eventType)}</span>
-                        <span className={styles.timestamp}>
-                          {new Date(event.timestamp).toLocaleString()}
-                        </span>
-                      </div>
-
-                      <dl className={styles.auditMeta}>
-                        <dt>Recorded By</dt>
-                        <dd>{event.userId}</dd>
-                      </dl>
-
-                      {event.payload && (
-                        <div className={styles.payloadDetails}>
-                          {Object.entries(event.payload)
-                            .filter(([key]) => DISPLAY_PAYLOAD_KEYS.has(key))
-                            .map(([key, value]) => (
-                              <span key={key} className={styles.payloadTag}>
-                                {key.replace(/([A-Z])/g, ' $1').trim()}: {formatPayloadDetail(key, value)}
-                              </span>
-                            ))}
-                        </div>
-                      )}
-
-                      {event.previousEventHash && <div className={styles.chainIndicator}>Linked to previous activity</div>}
-                    </div>
-                  ))
-                )}
-              </div>
+              <MetadataBar
+                topicCatalogVersion={data.topicCatalogVersion}
+                topicCatalogHash={data.topicCatalogHash}
+                prsLogicVersion={data.prsLogicVersion}
+                prsLogicHash={data.prsLogicHash}
+                snapshotTimestamp={data.snapshotTimestamp}
+                domain={data.domain}
+                reportingDomain={data.reportingDomain}
+                mode={data.mode}
+                reportSource={data.reportSource}
+                snapshotId={data.snapshotId}
+                ingestionStatus={data.ingestionStatus}
+              />
             )}
             trace={(
               <MetadataBar
