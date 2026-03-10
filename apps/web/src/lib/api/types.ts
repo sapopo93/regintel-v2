@@ -168,6 +168,13 @@ export interface DocumentAuditResult {
     priority: 'IMMEDIATE' | 'THIS_WEEK' | 'THIS_MONTH';
     exampleWording?: string;
   }>;
+  riskMatrix: Array<{
+    domain: string;
+    regulation: string;
+    evidence: string;
+    riskLevel: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+    enforcementLikelihood: 'ALMOST_CERTAIN' | 'LIKELY' | 'POSSIBLE' | 'UNLIKELY';
+  }>;
   summary: string;
 }
 

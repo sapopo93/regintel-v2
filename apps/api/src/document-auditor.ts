@@ -29,6 +29,14 @@ export interface AuditCorrection {
   exampleWording?: string;
 }
 
+export interface RiskMatrixEntry {
+  domain: string;
+  regulation: string;
+  evidence: string;
+  riskLevel: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  enforcementLikelihood: 'ALMOST_CERTAIN' | 'LIKELY' | 'POSSIBLE' | 'UNLIKELY';
+}
+
 export interface DocumentAuditResult {
   documentType: string;
   auditDate: string;
@@ -37,6 +45,7 @@ export interface DocumentAuditResult {
   safStatements: SAFStatementResult[];
   findings: AuditFinding[];
   corrections: AuditCorrection[];
+  riskMatrix: RiskMatrixEntry[];
   summary: string;
 }
 
@@ -89,6 +98,18 @@ const STATEMENT_RATINGS = new Set<SAFStatementResult['rating']>([
   'PARTIALLY_MET',
   'NOT_MET',
   'NOT_APPLICABLE',
+]);
+const RISK_LEVELS = new Set<RiskMatrixEntry['riskLevel']>([
+  'CRITICAL',
+  'HIGH',
+  'MEDIUM',
+  'LOW',
+]);
+const ENFORCEMENT_LIKELIHOODS = new Set<RiskMatrixEntry['enforcementLikelihood']>([
+  'ALMOST_CERTAIN',
+  'LIKELY',
+  'POSSIBLE',
+  'UNLIKELY',
 ]);
 const DOCUMENT_TYPE_BY_EVIDENCE_TYPE: Record<string, string> = {
   [EvidenceType.CQC_REPORT]: 'CQC_REPORT',
@@ -182,12 +203,26 @@ Key principles:
 - Restrictive practices (bed rails, locked doors, covert medication) require documented best-interest decisions
 - Distinguish individual staff competency gaps from systemic organisational failures
 - Cite the specific Health and Social Care Act 2008 regulation breached (Reg 9-20)
+- RIDDOR reporting threshold is 7 consecutive days of incapacity (not 3 days). Reference current RIDDOR 2013 requirements accurately.
+
+Tone and language — use CQC inspector style:
+- Do NOT state absolute legal conclusions (e.g., "violates Regulation 17"). Instead describe the impact on demonstrable compliance.
+- Use phrases like "The provider could not demonstrate compliance with..." or "Systems were not sufficiently robust to ensure compliance with..." or "The policy did not demonstrate that requirements were being met."
+- Be evidence-based: describe what the document states or omits, then explain why this is a concern.
+- Avoid accusatory language. Focus on what the documentation shows rather than assigning blame.
 
 Severity calibration:
 - CRITICAL: Immediate risk to life/safety, unlawful restriction of liberty without DoLS, active abuse/neglect indicators, medication errors causing or risking harm
 - HIGH: Missing MCA assessments for capacity-lacking individuals, no review dates on care plans >1 month old, unresolved safeguarding concerns, staffing below safe levels
 - MEDIUM: Generic template documentation not personalised, missing signatures on completed records, incomplete risk assessments, policies past review date
 - LOW: Minor formatting issues, best-practice recommendations, meets minimum but could improve
+
+Severity count consistency:
+- The summary text MUST accurately reflect the severity counts. If the findings array contains 7 CRITICAL, 4 HIGH, and 1 MEDIUM, the summary must mention all three categories — do not omit any.
+
+Regulatory Risk Assessment Matrix:
+- In addition to findings and corrections, generate a "riskMatrix" array. Each entry maps a compliance domain to its regulation, the evidence observed, the risk level, and the likelihood of enforcement action.
+- enforcementLikelihood values: ALMOST_CERTAIN (active harm or unlawful restriction), LIKELY (systemic governance failure with no mitigation), POSSIBLE (gaps that could be addressed before inspection), UNLIKELY (minor documentation issues).
 
 Where possible, include exampleWording in corrections showing the provider what corrected text could look like.
 
@@ -219,7 +254,7 @@ Flag as CRITICAL: No review for >3 months; restrictive interventions without bes
 Flag as HIGH: Generic template not personalised; no capacity assessment referenced for person lacking capacity; no consent record.
 Flag as MEDIUM: Missing review date; no cultural/communication preferences recorded.
 
-Return JSON: {"documentType":"CARE_PLAN","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"MET|PARTIALLY_MET|NOT_MET|NOT_APPLICABLE","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"...","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"CARE_PLAN","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"MET|PARTIALLY_MET|NOT_MET|NOT_APPLICABLE","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"...","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   RISK_ASSESSMENT: `Audit this risk assessment against SAF Quality Statements:
 - S4 (Involving people to manage risks): Is the person involved in the risk assessment? Are positive risk-taking decisions documented?
@@ -231,7 +266,7 @@ Check for: named individual, specific hazards identified, risk scoring (likeliho
 Flag as HIGH: No person involvement documented; risk assessment >3 months without review; hazards identified but no control measures.
 Flag as MEDIUM: Missing signature or date; no link to care plan; scoring incomplete.
 
-Return JSON: {"documentType":"RISK_ASSESSMENT","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 12","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"RISK_ASSESSMENT","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 12","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   INCIDENT_REPORT: `Audit this incident report against SAF Quality Statements:
 - S1 (Learning culture): Is learning from the incident captured and shared? Are actions to prevent recurrence documented?
@@ -245,7 +280,7 @@ Flag as CRITICAL: Notifiable incident without CQC notification; safeguarding con
 Flag as HIGH: No root cause analysis; no actions to prevent recurrence; no management sign-off.
 Flag as MEDIUM: Missing follow-up date; incomplete witness statements.
 
-Return JSON: {"documentType":"INCIDENT_REPORT","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 20","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"INCIDENT_REPORT","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 20","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   AUDIT_REPORT: `Audit this internal audit report against SAF Quality Statements:
 - W4 (Governance, management and sustainability): Does the audit demonstrate effective governance? Are findings actioned with named owners?
@@ -257,7 +292,7 @@ Check for: audit scope and methodology, sample size, findings with severity, act
 Flag as HIGH: No action plan for identified non-compliance; no evidence of follow-up from previous audit.
 Flag as MEDIUM: Missing target dates or named owners; no trend analysis.
 
-Return JSON: {"documentType":"AUDIT_REPORT","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 17","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"AUDIT_REPORT","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 17","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   DAILY_NOTES: `Audit these daily notes / progress notes against SAF Quality Statements:
 - R1 (Person-centred care): Are notes personalised and person-centred, or generic and task-focused?
@@ -269,7 +304,7 @@ Check for: date and time of each entry, staff name/signature, person-centred lan
 Flag as HIGH: Notes read as task checklists with no person-centred content; no entries for >24 hours.
 Flag as MEDIUM: Missing timestamps or signatures; generic language across multiple residents.
 
-Return JSON: {"documentType":"DAILY_NOTES","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 17","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"DAILY_NOTES","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 17","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   HANDOVER_NOTES: `Audit these handover notes against SAF Quality Statements:
 - S2 (Safe systems, pathways and transitions): Are all residents covered with key information for safe transition between shifts?
@@ -281,7 +316,7 @@ Check for: all residents listed, key priorities per resident, medication changes
 Flag as HIGH: Residents omitted from handover; medication changes not highlighted; safeguarding concerns not flagged.
 Flag as MEDIUM: Missing signature; incomplete task handover.
 
-Return JSON: {"documentType":"HANDOVER_NOTES","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 12","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"HANDOVER_NOTES","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 12","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   SIGN_IN_OUT: `Audit this rota or sign-in/out record against SAF Quality Statements:
 - S6 (Safe and effective staffing): Are staffing levels safe? Are gaps covered? Are qualifications appropriate?
@@ -292,7 +327,7 @@ Check for: date range, all shifts covered, staff names and roles, start/end time
 Flag as HIGH: Shifts with no staff allocated; staffing below safe minimum; no qualified nurse on shift when required.
 Flag as MEDIUM: Missing signatures; agency staff without induction noted.
 
-Return JSON: {"documentType":"SIGN_IN_OUT","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 18","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"SIGN_IN_OUT","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 18","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   SUPERVISION_RECORD: `Audit this supervision record against SAF Quality Statements:
 - E8 (Workforce wellbeing and enablement): Is staff wellbeing discussed? Are development needs identified and supported?
@@ -304,7 +339,7 @@ Check for: date, supervisee and supervisor names, frequency (at least 6-weekly),
 Flag as HIGH: No supervision for >3 months; safeguarding not discussed; performance concerns not actioned.
 Flag as MEDIUM: Missing signatures; no follow-up from previous session; no development plan.
 
-Return JSON: {"documentType":"SUPERVISION_RECORD","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 18","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"SUPERVISION_RECORD","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 18","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   TRAINING_MATRIX: `Audit this training matrix against SAF Quality Statements:
 - S6 (Safe and effective staffing): Are all mandatory training requirements met? Are expired certifications flagged?
@@ -316,7 +351,7 @@ Check for: all staff listed, mandatory courses (safeguarding, moving and handlin
 Flag as HIGH: Mandatory training compliance <80%; safeguarding or medication training expired for >1 month; new staff without completed induction.
 Flag as MEDIUM: Individual courses expired but within 1-month grace; no role-specific training tracked.
 
-Return JSON: {"documentType":"TRAINING_MATRIX","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 18","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"TRAINING_MATRIX","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 18","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   MEDICATION_PROTOCOL: `Audit this medication protocol/policy against SAF Quality Statements:
 - S8 (Medicines optimisation): Does the protocol cover safe handling, storage, administration, and disposal?
@@ -328,7 +363,7 @@ Check for: version number, author, approval date, review date, scope (which staf
 Flag as HIGH: Protocol past review date by >6 months; no controlled drugs procedure; no error reporting process.
 Flag as MEDIUM: Missing version control; no named author; no competency requirements specified.
 
-Return JSON: {"documentType":"MEDICATION_PROTOCOL","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 12","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"MEDICATION_PROTOCOL","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 12","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   POLICY_DOCUMENT: `Audit this policy or procedure document against SAF Quality Statements:
 - W4 (Governance, management and sustainability): Is the policy properly governed with version control, named author, and review schedule?
@@ -340,11 +375,11 @@ Check for: document title, version number, named author, approval signature, iss
 Flag as HIGH: No review date or past review date by >12 months; no regulatory references; no version control.
 Flag as MEDIUM: Missing author or approval signature; no monitoring arrangements described.
 
-Return JSON: {"documentType":"POLICY_DOCUMENT","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 17","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"POLICY_DOCUMENT","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 17","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   CQC_REPORT: `Review this CQC inspection report to identify compliance themes and action priorities against SAF Quality Statements. Map each finding to the relevant QS (S1-S9, E1-E9, C1-C4, R1-R4, W1-W8). Identify recurring themes, areas rated Requires Improvement or Inadequate, and any enforcement actions or conditions.
 
-Return JSON: {"documentType":"CQC_REPORT","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"...","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"CQC_REPORT","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"...","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   CERTIFICATE: `Review this certificate against SAF Quality Statements:
 - S6 (Safe and effective staffing): Is the certificate current and valid?
@@ -355,7 +390,7 @@ Check for: certificate holder name, issuing body, qualification/course title, da
 Flag as HIGH: Certificate expired; issuing body not recognised; no named holder.
 Flag as MEDIUM: No expiry date shown; scope unclear.
 
-Return JSON: {"documentType":"CERTIFICATE","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"...","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"CERTIFICATE","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"...","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   DOLS_MCA_ASSESSMENT: `Audit this Mental Capacity Act / Deprivation of Liberty Safeguards assessment against SAF Quality Statements:
 - E6 (Consent to care and treatment): Is consent sought in line with Mental Capacity Act 2005?
@@ -366,7 +401,7 @@ Check for: named individual, specific decision assessed, dated two-stage test (d
 Flag as CRITICAL: No capacity assessment for a person subject to restrictions; DoLS expired without renewal.
 Flag as HIGH: Generic assessment not decision-specific; no consultee involvement in best-interest decision.
 
-Return JSON: {"documentType":"DOLS_MCA_ASSESSMENT","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 11","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"DOLS_MCA_ASSESSMENT","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 11","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   SAFEGUARDING_RECORD: `Audit this safeguarding record against SAF Quality Statements:
 - S3 (Safeguarding): Is the concern clearly described? Was a referral made to the local authority? Is the outcome recorded?
@@ -378,7 +413,7 @@ Check for: date/time of concern, description of what happened, who raised it, bo
 Flag as CRITICAL: Safeguarding concern not referred to local authority; no action taken on allegation of abuse.
 Flag as HIGH: CQC notification not submitted for notifiable event; no body map for unexplained injury.
 
-Return JSON: {"documentType":"SAFEGUARDING_RECORD","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 13","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"SAFEGUARDING_RECORD","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 13","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   COMPLAINTS_LOG: `Audit this complaints log against SAF Quality Statements:
 - R4 (Listening to and involving people): Are complaints investigated and responded to within policy timeframes?
@@ -390,7 +425,7 @@ Check for: date received, complainant details, nature of complaint, date acknowl
 Flag as HIGH: Complaints not responded to within policy timeframe; recurring complaint themes without action plan.
 Flag as MEDIUM: No lessons learned documented; no pattern analysis.
 
-Return JSON: {"documentType":"COMPLAINTS_LOG","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 16","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"COMPLAINTS_LOG","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 16","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   STAFF_MEETING_MINUTES: `Audit these staff meeting minutes against SAF Quality Statements:
 - W1 (Shared direction and culture): Is there evidence of leadership communicating vision and priorities?
@@ -402,7 +437,7 @@ Check for: date, attendees, apologies, agenda items, discussion of incidents/com
 Flag as HIGH: No meetings held for >3 months; safeguarding/incidents not discussed.
 Flag as MEDIUM: No actions recorded; no follow-up from previous meeting; poor attendance without follow-up.
 
-Return JSON: {"documentType":"STAFF_MEETING_MINUTES","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 17","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"STAFF_MEETING_MINUTES","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 17","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   RECRUITMENT_FILE: `Audit this recruitment file against SAF Quality Statements:
 - S6 (Safe and effective staffing): Does the file demonstrate fit and proper persons checks (Reg 19)?
@@ -413,7 +448,7 @@ Flag as CRITICAL: No DBS check or DBS check expired; employed without references
 Flag as HIGH: Only one reference; gaps in employment history unexplained; no right to work evidence.
 Flag as MEDIUM: Missing health declaration; interview notes incomplete.
 
-Return JSON: {"documentType":"RECRUITMENT_FILE","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 19","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"RECRUITMENT_FILE","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 19","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   FIRE_SAFETY_CHECK: `Audit this fire safety or environmental check against SAF Quality Statements:
 - S5 (Safe environments): Is the environment safe, well-maintained, and suitable?
@@ -423,7 +458,7 @@ Check for: date of check, areas inspected, fire alarm test records, fire drill r
 Flag as HIGH: Fire alarm not tested weekly; no fire drill in >6 months; fire extinguishers out of service.
 Flag as MEDIUM: Missing PEEPs; environmental checks incomplete.
 
-Return JSON: {"documentType":"FIRE_SAFETY_CHECK","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 15","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"FIRE_SAFETY_CHECK","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 15","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   INFECTION_CONTROL_AUDIT: `Audit this infection prevention and control record against SAF Quality Statements:
 - S7 (Infection prevention and control): Are IPC standards maintained? Are audits scheduled and completed?
@@ -434,7 +469,7 @@ Check for: audit date, areas assessed, scoring/compliance %, hand hygiene compli
 Flag as HIGH: No IPC audit completed in the last quarter; hand hygiene compliance below 90%.
 Flag as MEDIUM: Missing action plan for identified non-compliance; no named IPC lead.
 
-Return JSON: {"documentType":"INFECTION_CONTROL_AUDIT","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 12","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"INFECTION_CONTROL_AUDIT","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 12","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   EQUIPMENT_MAINTENANCE_LOG: `Audit this equipment maintenance log against SAF Quality Statements:
 - S5 (Safe environments): Is equipment properly maintained and serviced?
@@ -444,7 +479,7 @@ Check for: equipment inventory, service dates, next service due, LOLER records (
 Flag as HIGH: Equipment overdue for service by >1 month; hoists without current LOLER certification.
 Flag as MEDIUM: Incomplete records; no fault reporting process documented.
 
-Return JSON: {"documentType":"EQUIPMENT_MAINTENANCE_LOG","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 15","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"EQUIPMENT_MAINTENANCE_LOG","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 15","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   NUTRITIONAL_ASSESSMENT: `Audit this nutritional assessment (MUST or equivalent) against SAF Quality Statements:
 - E2 (Delivering evidence-based care): Is a validated screening tool used (MUST, MNA)?
@@ -455,7 +490,7 @@ Check for: named individual, validated screening tool (MUST score), BMI/weight, 
 Flag as HIGH: High-risk MUST score without dietitian referral; no nutritional assessment for new admission >48 hours.
 Flag as MEDIUM: No review date; screening tool not validated; incomplete assessment.
 
-Return JSON: {"documentType":"NUTRITIONAL_ASSESSMENT","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 14","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"NUTRITIONAL_ASSESSMENT","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 14","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   WOUND_CARE_RECORD: `Audit this wound care record against SAF Quality Statements:
 - E2 (Delivering evidence-based care): Is wound care evidence-based with validated assessment tools?
@@ -466,7 +501,7 @@ Check for: wound location and type, wound assessment tool (e.g., PUSH, TIME), me
 Flag as HIGH: Wound deteriorating without escalation; no wound assessment tool used; pressure ulcer without prevention plan.
 Flag as MEDIUM: Missing measurements; no photographs for tracking; incomplete assessment.
 
-Return JSON: {"documentType":"WOUND_CARE_RECORD","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 12","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"WOUND_CARE_RECORD","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 12","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   BODY_MAP: `Audit this body map against SAF Quality Statements:
 - S3 (Safeguarding): Are marks, bruises, or injuries accurately documented for safeguarding purposes?
@@ -476,7 +511,7 @@ Check for: named individual, date and time, staff completing the map, clear mark
 Flag as CRITICAL: Unexplained marks without safeguarding referral; no body map for reported injury.
 Flag as HIGH: Incomplete documentation; no explanation recorded; no follow-up.
 
-Return JSON: {"documentType":"BODY_MAP","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 13","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"BODY_MAP","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 13","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   FLUID_FOOD_CHART: `Audit this fluid/food intake chart against SAF Quality Statements:
 - E2 (Delivering evidence-based care): Is intake monitoring clinically appropriate and acted upon?
@@ -486,7 +521,7 @@ Check for: named individual, date, target intake (fluid ml per 24 hours), actual
 Flag as HIGH: Target intake consistently not met without escalation; no monitoring for at-risk individual.
 Flag as MEDIUM: Missing entries; no target set; no staff initials.
 
-Return JSON: {"documentType":"FLUID_FOOD_CHART","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 14","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"FLUID_FOOD_CHART","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 14","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   ACTIVITY_PROGRAMME: `Audit this activity programme against SAF Quality Statements:
 - C3 (Independence, choice and control): Do activities promote independence and reflect individual preferences?
@@ -495,7 +530,7 @@ Check for: range of activities (physical, social, cognitive, creative), individu
 
 Flag as MEDIUM: Generic programme not reflecting individual preferences; no evaluation of engagement; no adapted activities.
 
-Return JSON: {"documentType":"ACTIVITY_PROGRAMME","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 9","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"ACTIVITY_PROGRAMME","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 9","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   SERVICE_USER_AGREEMENT: `Audit this service user agreement against SAF Quality Statements:
 - R3 (Providing information): Does the agreement clearly explain terms of care, rights, and fees?
@@ -505,7 +540,7 @@ Check for: named individual, services provided, fees and payment terms, notice p
 Flag as HIGH: No complaints procedure referenced; fees structure unclear; unsigned by service user or representative.
 Flag as MEDIUM: Missing review clause; no data protection statement.
 
-Return JSON: {"documentType":"SERVICE_USER_AGREEMENT","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 19","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"SERVICE_USER_AGREEMENT","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 19","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   RESIDENT_SURVEY: `Audit this resident or family survey against SAF Quality Statements. Map responses to relevant Quality Statements across all five key questions. Identify themes of satisfaction and concern.
 
@@ -514,11 +549,11 @@ Check for: response rate, anonymity option, questions covering all five key ques
 Flag as HIGH: Response rate below 30% with no plan to improve; concerns raised without action plan.
 Flag as MEDIUM: No analysis of results; no feedback to respondents; no comparison with previous surveys.
 
-Return JSON: {"documentType":"RESIDENT_SURVEY","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 17","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"RESIDENT_SURVEY","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 17","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   OTHER: `Review this care home document against CQC Regulations 9-20 of the Health and Social Care Act 2008. Map findings to relevant SAF Quality Statements (S1-S9, E1-E9, C1-C4, R1-R4, W1-W8). Identify compliance concerns, missing signatures, gaps, and areas for improvement.
 
-Return JSON: {"documentType":"OTHER","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"...","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"summary":"..."}`,
+Return JSON: {"documentType":"OTHER","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"...","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 };
 
 function createFallbackResult(
@@ -533,6 +568,7 @@ function createFallbackResult(
     safStatements: [],
     findings: [],
     corrections: [],
+    riskMatrix: [],
     summary,
   };
 }
@@ -630,6 +666,31 @@ function normalizeCorrections(value: unknown): AuditCorrection[] {
     });
 }
 
+function normalizeRiskMatrix(value: unknown): RiskMatrixEntry[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter(isRecord)
+    .map((entry) => {
+      const riskLevel = asText(entry.riskLevel).toUpperCase();
+      const enforcementLikelihood = asText(entry.enforcementLikelihood).toUpperCase();
+
+      return {
+        domain: asText(entry.domain) || 'General',
+        regulation: asText(entry.regulation) || 'Not specified',
+        evidence: asText(entry.evidence) || 'See findings.',
+        riskLevel: RISK_LEVELS.has(riskLevel as RiskMatrixEntry['riskLevel'])
+          ? (riskLevel as RiskMatrixEntry['riskLevel'])
+          : 'MEDIUM',
+        enforcementLikelihood: ENFORCEMENT_LIKELIHOODS.has(enforcementLikelihood as RiskMatrixEntry['enforcementLikelihood'])
+          ? (enforcementLikelihood as RiskMatrixEntry['enforcementLikelihood'])
+          : 'POSSIBLE',
+      };
+    });
+}
+
 function parseAuditPayload(rawText: string): unknown {
   const cleaned = rawText.replace(/```json|```/gi, '').trim();
   if (!cleaned) {
@@ -675,6 +736,7 @@ function normalizeAuditResult(payload: unknown, defaultDocumentType: string): Do
     safStatements: normalizeSafStatements(payload.safStatements),
     findings,
     corrections: normalizeCorrections(payload.corrections),
+    riskMatrix: normalizeRiskMatrix(payload.riskMatrix),
     summary: summary || fallback.summary,
   };
 }

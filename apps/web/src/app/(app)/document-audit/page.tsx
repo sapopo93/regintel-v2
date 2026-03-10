@@ -75,6 +75,30 @@ function priorityLabel(p: string) {
   return map[p] ?? p;
 }
 
+function riskLevelClass(level: string) {
+  if (level === 'CRITICAL') return styles.sevCritical;
+  if (level === 'HIGH') return styles.sevHigh;
+  if (level === 'MEDIUM') return styles.sevMedium;
+  return styles.sevLow;
+}
+
+function enforcementClass(likelihood: string) {
+  if (likelihood === 'ALMOST_CERTAIN') return styles.enfAlmostCertain;
+  if (likelihood === 'LIKELY') return styles.enfLikely;
+  if (likelihood === 'POSSIBLE') return styles.enfPossible;
+  return styles.enfUnlikely;
+}
+
+function enforcementLabel(likelihood: string) {
+  const map: Record<string, string> = {
+    ALMOST_CERTAIN: 'Almost Certain',
+    LIKELY: 'Likely',
+    POSSIBLE: 'Possible',
+    UNLIKELY: 'Unlikely',
+  };
+  return map[likelihood] ?? likelihood;
+}
+
 function overallResultClass(r: string | undefined) {
   if (r === 'PASS') return styles.resultPass;
   if (r === 'NEEDS_IMPROVEMENT') return styles.resultAmber;
@@ -193,6 +217,41 @@ function AuditDetail({ evidenceRecordId }: { evidenceRecordId: string }) {
                     <p className={styles.exampleText}>{c.exampleWording}</p>
                   </div>
                 )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Risk Matrix */}
+      {result.riskMatrix && result.riskMatrix.length > 0 && (
+        <section className={styles.detailSection}>
+          <h4 className={styles.detailSectionTitle}>
+            Regulatory Risk Assessment Matrix
+          </h4>
+          <div className={styles.riskMatrixTable}>
+            <div className={styles.riskMatrixHeader}>
+              <span className={styles.riskMatrixCol}>Domain</span>
+              <span className={styles.riskMatrixCol}>Regulation</span>
+              <span className={styles.riskMatrixCol}>Evidence</span>
+              <span className={styles.riskMatrixCol}>Risk Level</span>
+              <span className={styles.riskMatrixCol}>Enforcement Likelihood</span>
+            </div>
+            {result.riskMatrix.map((entry, i) => (
+              <div key={i} className={styles.riskMatrixRow}>
+                <span className={styles.riskMatrixCell}>{entry.domain}</span>
+                <span className={styles.riskMatrixCell}>{entry.regulation}</span>
+                <span className={`${styles.riskMatrixCell} ${styles.riskMatrixEvidence}`}>{entry.evidence}</span>
+                <span className={styles.riskMatrixCell}>
+                  <span className={`${styles.severityBadge} ${riskLevelClass(entry.riskLevel)}`}>
+                    {entry.riskLevel}
+                  </span>
+                </span>
+                <span className={styles.riskMatrixCell}>
+                  <span className={`${styles.enforcementBadge} ${enforcementClass(entry.enforcementLikelihood)}`}>
+                    {enforcementLabel(entry.enforcementLikelihood)}
+                  </span>
+                </span>
               </div>
             ))}
           </div>
