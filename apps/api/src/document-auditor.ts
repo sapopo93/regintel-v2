@@ -142,6 +142,8 @@ const DOCUMENT_TYPE_BY_EVIDENCE_TYPE: Record<string, string> = {
   [EvidenceType.ACTIVITY_PROGRAMME]: 'ACTIVITY_PROGRAMME',
   [EvidenceType.SERVICE_USER_AGREEMENT]: 'SERVICE_USER_AGREEMENT',
   [EvidenceType.RESIDENT_SURVEY]: 'RESIDENT_SURVEY',
+  [EvidenceType.VISIT_LOG]: 'VISIT_LOG',
+  [EvidenceType.MISSED_VISIT_RECORD]: 'MISSED_VISIT_RECORD',
   [EvidenceType.OTHER]: 'OTHER',
 };
 
@@ -225,6 +227,15 @@ Regulatory Risk Assessment Matrix:
 - enforcementLikelihood values: ALMOST_CERTAIN (active harm or unlawful restriction), LIKELY (systemic governance failure with no mitigation), POSSIBLE (gaps that could be addressed before inspection), UNLIKELY (minor documentation issues).
 
 Where possible, include exampleWording in corrections showing the provider what corrected text could look like.
+
+Service type context (provided per audit):
+- RESIDENTIAL: Full premises, fire safety, equipment, staffing checks apply.
+- NURSING: All residential checks PLUS NMC registration, clinical observations, nursing care plans, clinical escalation protocols. Medication admin must be by NMC-registered staff.
+- DOMICILIARY: No premises checks (fire drills, PEEP, equipment maintenance). Focus on visit scheduling, continuity of carer, travel time, missed visits. Service users manage own environment.
+- SUPPORTED_LIVING: Tenants control own homes. Limited premises checks. Focus on person-centred support, independence, tenancy rights.
+- HOSPICE: All nursing checks PLUS end-of-life care, DNACPR, symptom management, preferred place of care, bereavement support.
+
+Adjust your audit based on the service type provided. Do not flag premises-related gaps for domiciliary services. Do not skip NMC-related checks for nursing services.
 
 Respond with JSON only. No markdown, no commentary outside the JSON object.`;
 
@@ -328,6 +339,34 @@ Flag as HIGH: Shifts with no staff allocated; staffing below safe minimum; no qu
 Flag as MEDIUM: Missing signatures; agency staff without induction noted.
 
 Return JSON: {"documentType":"SIGN_IN_OUT","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 18","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
+
+  VISIT_LOG: `Audit this visit log (domiciliary care) against SAF Quality Statements:
+- S2 (Safe systems, pathways and transitions): Are visits planned and delivered safely with appropriate handover between carers?
+- S6 (Safe and effective staffing): Are visits adequately staffed with appropriately skilled carers?
+- R1 (Person-centred care): Are visits tailored to the individual's care plan and preferences?
+- C1 (Kindness, compassion and dignity): Do visit records reflect dignified, person-centred care?
+
+Check for: scheduled vs actual visit times, visit duration vs care plan allocation, carer continuity (same carers where possible), tasks completed per care plan, service user confirmation or signature, travel time between visits, electronic call monitoring (ECM) data if applicable, notes on service user condition and mood, escalation of concerns.
+
+Flag as CRITICAL: No evidence of attendance at a scheduled visit; vulnerable person left without planned care.
+Flag as HIGH: Visits systematically shorter than allocated time without explanation; no continuity of carer rationale; no service user confirmation of visit.
+Flag as MEDIUM: Missing visit notes; incomplete task records; no ECM data where expected.
+
+Return JSON: {"documentType":"VISIT_LOG","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 9","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
+
+  MISSED_VISIT_RECORD: `Audit this missed visit record (domiciliary care) against SAF Quality Statements:
+- S2 (Safe systems, pathways and transitions): Was the missed visit identified and escalated promptly?
+- S3 (Safeguarding): Was a safeguarding referral made if the missed visit left a vulnerable person at risk?
+- W4 (Governance, management and sustainability): Is there management oversight and governance of missed visits?
+- R4 (Listening to and involving people): Was the service user or their representative notified and their concerns addressed?
+
+Check for: date and time of missed visit, reason for missed visit, notification timing to service user and family, investigation and root cause analysis, safeguarding referral if vulnerable person left without essential care, replacement visit arranged, trend analysis of missed visits, management sign-off, actions to prevent recurrence.
+
+Flag as CRITICAL: Vulnerable person left without essential care (e.g., medication, personal care) and no safeguarding referral made; repeated pattern of missed visits without management action.
+Flag as HIGH: No root cause analysis for missed visit; no management oversight or sign-off; no notification to service user or family.
+Flag as MEDIUM: Missing trend analysis; no replacement visit documented; incomplete investigation.
+
+Return JSON: {"documentType":"MISSED_VISIT_RECORD","auditDate":"<today>","overallResult":"PASS|NEEDS_IMPROVEMENT|CRITICAL_GAPS","complianceScore":<0-100>,"safStatements":[{"statementId":"...","statementName":"...","rating":"...","evidence":"..."}],"findings":[{"severity":"...","category":"...","description":"...","regulation":"Reg 12","safStatement":"..."}],"corrections":[{"finding":"...","correction":"...","policyReference":"...","priority":"...","exampleWording":"..."}],"riskMatrix":[{"domain":"...","regulation":"Reg ...","evidence":"...","riskLevel":"CRITICAL|HIGH|MEDIUM|LOW","enforcementLikelihood":"ALMOST_CERTAIN|LIKELY|POSSIBLE|UNLIKELY"}],"summary":"..."}`,
 
   SUPERVISION_RECORD: `Audit this supervision record against SAF Quality Statements:
 - E8 (Workforce wellbeing and enablement): Is staff wellbeing discussed? Are development needs identified and supported?
@@ -1095,6 +1134,27 @@ export function detectDocumentType(
     return 'MAR_CHART';
   }
 
+  // Domiciliary care types — check before SIGN_IN_OUT to avoid false matches on 'sign'
+  if (
+    name.includes('missed call') ||
+    name.includes('missed visit') ||
+    name.includes('late call') ||
+    name.includes('late visit') ||
+    name.includes('unattended')
+  ) {
+    return 'MISSED_VISIT_RECORD';
+  }
+
+  if (
+    name.includes('visit log') ||
+    name.includes('visit record') ||
+    name.includes('call log') ||
+    name.includes('electronic call') ||
+    /\becm\b/.test(name)
+  ) {
+    return 'VISIT_LOG';
+  }
+
   if (
     name.includes('sign') ||
     name.includes('rota') ||
@@ -1217,7 +1277,8 @@ export async function auditDocument(
   blobPath: string,
   facilityName: string,
   mimeType: string = '',
-  fileName: string = ''
+  fileName: string = '',
+  serviceType?: string
 ): Promise<DocumentAuditResult> {
   const anthropic = getAnthropicClient();
   if (!anthropic) {
@@ -1248,7 +1309,7 @@ export async function auditDocument(
 
     let messageContent: any[];
     const prompt = AUDIT_PROMPTS[docType] ?? AUDIT_PROMPTS.OTHER;
-    const facilityPrefix = `Facility: ${facilityName}\n\n`;
+    const facilityPrefix = `Service type: ${serviceType || 'residential'}\nFacility: ${facilityName}\n\n`;
 
     // PDFs over 20 MB are too large to send efficiently; fall back to text-only prompt
     const PDF_MAX_BYTES = 20 * 1024 * 1024;
@@ -1347,6 +1408,7 @@ export async function runDocumentAuditForEvidence(params: {
   fileName: string;
   mimeType: string;
   evidenceType?: string;
+  serviceType?: string;
 }): Promise<DocumentAuditSummary> {
   const documentType = detectDocumentType(params.fileName, params.mimeType, params.evidenceType);
 
@@ -1356,7 +1418,8 @@ export async function runDocumentAuditForEvidence(params: {
       params.storagePath || getBlobPath(params.blobHash),
       params.facilityName,
       params.mimeType,
-      params.fileName
+      params.fileName,
+      params.serviceType
     );
 
     await saveDocumentAudit({

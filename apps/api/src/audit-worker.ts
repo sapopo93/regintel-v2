@@ -24,6 +24,7 @@ export interface DocumentAuditJobData {
   fileName: string;
   mimeType: string;
   evidenceType?: string;
+  serviceType?: string;
 }
 
 const POLL_MS = 2000;
@@ -54,6 +55,7 @@ async function processPendingAudits() {
     file_name: string;
     mime_type: string;
     evidence_type: string | null;
+    service_type: string | null;
   }> = [];
 
   try {
@@ -67,7 +69,8 @@ async function processPendingAudits() {
         da.original_file_name  AS file_name,
         da.document_type       AS evidence_type,
         er.blob_hash           AS blob_hash,
-        er.mime_type            AS mime_type
+        er.mime_type            AS mime_type,
+        f.service_type         AS service_type
       FROM document_audits da
       JOIN evidence_records_v2 er ON er.id = da.evidence_record_id
       LEFT JOIN facilities f ON f.id = da.facility_id AND f.tenant_id = da.tenant_id
@@ -100,6 +103,7 @@ async function processPendingAudits() {
       fileName: row.file_name,
       mimeType: row.mime_type,
       evidenceType: row.evidence_type ?? undefined,
+      serviceType: row.service_type ?? undefined,
     });
     console.log(`[AUDIT-WORKER] Completed ${jobId}`);
   } catch (err) {

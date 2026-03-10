@@ -31,6 +31,10 @@ export enum EvidenceType {
   SKILLS_MATRIX = 'SKILLS_MATRIX',
   SUPERVISION = 'SUPERVISION',
 
+  // Domiciliary Care
+  VISIT_LOG = 'VISIT_LOG',
+  MISSED_VISIT_RECORD = 'MISSED_VISIT_RECORD',
+
   // Certifications
   CERTIFICATE = 'CERTIFICATE',
 
@@ -81,6 +85,8 @@ export const EVIDENCE_TYPE_LABELS: Record<EvidenceType, string> = {
   [EvidenceType.ROTA]: 'Staff Rota',
   [EvidenceType.SKILLS_MATRIX]: 'Skills Matrix',
   [EvidenceType.SUPERVISION]: 'Supervision Records',
+  [EvidenceType.VISIT_LOG]: 'Visit Log (Domiciliary)',
+  [EvidenceType.MISSED_VISIT_RECORD]: 'Missed Visit Record',
   [EvidenceType.CERTIFICATE]: 'Certificate',
   [EvidenceType.DOLS_MCA_ASSESSMENT]: 'DoLS / MCA Assessment',
   [EvidenceType.SAFEGUARDING_RECORD]: 'Safeguarding Record',
@@ -123,6 +129,10 @@ export function normalizeLegacyEvidenceType(legacyType: string): EvidenceType {
   if (normalized === 'SUPERVISION_RECORDS' || normalized === 'SUPERVISION') return EvidenceType.SUPERVISION;
   if (normalized === 'CQC_REPORT') return EvidenceType.CQC_REPORT;
   if (normalized === 'CERTIFICATE') return EvidenceType.CERTIFICATE;
+
+  // Domiciliary Care
+  if (normalized === 'VISIT_LOG' || normalized === 'VISIT LOG' || normalized === 'CALL_LOG' || normalized === 'ECM') return EvidenceType.VISIT_LOG;
+  if (normalized === 'MISSED_VISIT_RECORD' || normalized === 'MISSED_VISIT' || normalized === 'MISSED VISIT' || normalized === 'MISSED_CALL') return EvidenceType.MISSED_VISIT_RECORD;
 
   // Clinical records
   if (normalized === 'CARE_PLAN' || normalized === 'CARE PLAN' || normalized === 'CAREPLAN') return EvidenceType.CARE_PLAN;

@@ -2424,6 +2424,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
           fileName: record.fileName,
           mimeType: record.mimeType,
           evidenceType: record.evidenceType,
+          serviceType: facility.serviceType,
         } as DocumentAuditJobData);
         console.log(`[AUDIT] Queued job ${job.id} for evidence ${record.id}`);
       } catch (error) {
