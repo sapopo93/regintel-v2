@@ -20,6 +20,7 @@ export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { useRequireProviderAndFacility } from '@/lib/hooks/useRequireContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -123,26 +124,26 @@ export default function ResultsPage() {
   const gaps = saf34.statements.filter((s) => !s.covered);
 
   // Build next steps
-  const nextSteps: string[] = [];
+  const nextSteps: { text: string; href: string }[] = [];
   const remainingTopics = overview.totalTopics - overview.topicsCompleted;
   if (remainingTopics > 0) {
-    nextSteps.push(`Complete ${remainingTopics} remaining inspection area${remainingTopics > 1 ? 's' : ''}`);
+    nextSteps.push({ text: `Complete ${remainingTopics} remaining inspection area${remainingTopics > 1 ? 's' : ''}`, href: `/mock-session?provider=${providerId}&facility=${facilityId}` });
   }
   if (gaps.length > 0) {
     const gapKqs = [...new Set(gaps.map((g) => g.keyQuestion))];
-    nextSteps.push(`Address ${gaps.length} uncovered Quality Statement${gaps.length > 1 ? 's' : ''} across ${gapKqs.join(', ')}`);
+    nextSteps.push({ text: `Address ${gaps.length} uncovered Quality Statement${gaps.length > 1 ? 's' : ''} across ${gapKqs.join(', ')}`, href: `/evidence?provider=${providerId}&facility=${facilityId}` });
   }
   if (severityCounts.CRITICAL > 0) {
-    nextSteps.push(`Resolve ${severityCounts.CRITICAL} critical finding${severityCounts.CRITICAL > 1 ? 's' : ''} immediately`);
+    nextSteps.push({ text: `Resolve ${severityCounts.CRITICAL} critical finding${severityCounts.CRITICAL > 1 ? 's' : ''} immediately`, href: `/findings?provider=${providerId}&facility=${facilityId}` });
   }
   if (severityCounts.HIGH > 0) {
-    nextSteps.push(`Address ${severityCounts.HIGH} high-severity finding${severityCounts.HIGH > 1 ? 's' : ''}`);
+    nextSteps.push({ text: `Address ${severityCounts.HIGH} high-severity finding${severityCounts.HIGH > 1 ? 's' : ''}`, href: `/findings?provider=${providerId}&facility=${facilityId}` });
   }
   if (overview.evidenceCoverage < 100) {
-    nextSteps.push(`Upload evidence to improve coverage from ${overview.evidenceCoverage}% to 100%`);
+    nextSteps.push({ text: `Upload evidence to improve coverage from ${overview.evidenceCoverage}% to 100%`, href: `/evidence?provider=${providerId}&facility=${facilityId}` });
   }
   if (nextSteps.length === 0) {
-    nextSteps.push('All areas covered — review results and schedule your practice inspection');
+    nextSteps.push({ text: 'All areas covered — review results and schedule your practice inspection', href: `/exports?provider=${providerId}&facility=${facilityId}` });
   }
 
   function getFillClass(pct: number): string {
@@ -360,10 +361,10 @@ export default function ResultsPage() {
             <h2 className={styles.sectionTitle}>Next Steps</h2>
             <div className={styles.nextSteps}>
               {nextSteps.map((step, i) => (
-                <div key={i} className={styles.stepItem}>
+                <Link key={i} href={step.href as any} className={styles.stepItem} style={{ textDecoration: 'none', color: 'inherit' }}>
                   <span className={styles.stepNumber}>{i + 1}</span>
-                  <span>{step}</span>
-                </div>
+                  <span>{step.text}</span>
+                </Link>
               ))}
             </div>
           </section>

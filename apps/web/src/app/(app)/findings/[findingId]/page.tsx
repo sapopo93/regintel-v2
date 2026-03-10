@@ -24,6 +24,7 @@ import { apiClient } from '@/lib/api/client';
 import type { FindingDetailResponse, ProviderOverviewResponse } from '@/lib/api/types';
 import { ORIGIN_LABELS } from '@/lib/constants';
 import { validateConstitutionalRequirements, validateFindingForDisplay } from '@/lib/validators';
+import { formatTopicId } from '@/lib/format';
 import styles from './page.module.css';
 
 export default function FindingDetailPage() {
@@ -132,7 +133,7 @@ export default function FindingDetailPage() {
                   <dd>{data.finding.compositeRiskScore}</dd>
 
                   <dt>Inspection Area</dt>
-                  <dd>{data.finding.topicId}</dd>
+                  <dd>{formatTopicId(data.finding.topicId)}</dd>
 
                   <dt>Regulation Section</dt>
                   <dd>{data.finding.regulationSectionId}</dd>

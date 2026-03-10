@@ -31,7 +31,7 @@ import { validateConstitutionalRequirements } from '@/lib/validators';
 import { ErrorState } from '@/components/layout/ErrorState';
 import { LoadingSkeleton } from '@/components/layout/LoadingSkeleton';
 import { EmptyState } from '@/components/layout/EmptyState';
-import { FileSearch, ChevronDown, ChevronUp } from 'lucide-react';
+import { FileSearch, ChevronDown, ChevronUp, Upload } from 'lucide-react';
 import styles from './page.module.css';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -418,6 +418,17 @@ export default function DocumentAuditPage() {
             snapshotId={data.snapshotId}
             ingestionStatus={data.ingestionStatus}
           />
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 'var(--space-4)' }}>
+            <a
+              href={`/evidence?provider=${providerId}&facility=${facilityId}`}
+              className={styles.evidenceLink}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 16px', backgroundColor: 'var(--color-slate-900)', color: 'var(--color-white)', borderRadius: 'var(--radius-sm)', textDecoration: 'none', fontWeight: 600, fontSize: 'var(--text-sm)' }}
+            >
+              <Upload size={16} />
+              Upload Evidence
+            </a>
+          </div>
 
           <DisclosurePanel
             summary={(

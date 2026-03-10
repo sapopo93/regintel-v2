@@ -1626,7 +1626,15 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       likelihoodScore: adjusted.adjustedLikelihood,
       compositeRiskScore: adjusted.composite,
       title: `Practice finding: ${topic?.title ?? 'Mock inspection'} (${topic?.regulationSectionId ?? 'Reg 12(2)(a)'})`,
-      description: `During practice inspection of ${topic?.title ?? 'this topic'}, the provider response was evaluated against ${topic?.regulationSectionId ?? 'Reg 12(2)(a)'}. Provider response summary: ${answer.slice(0, 200)}`,
+      description: (() => {
+        const prefix = `During practice inspection of ${topic?.title ?? 'this topic'}, the provider response was evaluated against ${topic?.regulationSectionId ?? 'Reg 12(2)(a)'}. Provider response summary: `;
+        const maxLen = 500;
+        const remaining = maxLen - prefix.length;
+        const summary = remaining >= answer.length
+          ? answer
+          : answer.slice(0, answer.lastIndexOf(' ', remaining)) + '...';
+        return prefix + summary;
+      })(),
       evidenceRequired,
       evidenceProvided,
       evidenceMissing,
@@ -2570,7 +2578,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
           exportId: latestExport.id,
           format: latestExport.format,
           generatedAt: latestExport.generatedAt,
-          downloadUrl: `${req.protocol}://${req.get('host')}/v1/exports/${latestExport.id}.${getExportExtension(latestExport.format)}`
+          downloadUrl: `/v1/exports/${latestExport.id}.${getExportExtension(latestExport.format)}`
         }
         : undefined,
     }, reportContext);
@@ -2675,7 +2683,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       });
 
       const fileExtension = getExportExtension(safeFormat);
-      const downloadUrl = `${req.protocol}://${req.get('host')}/v1/exports/${exportRecord.id}.${fileExtension}`;
+      const downloadUrl = `/v1/exports/${exportRecord.id}.${fileExtension}`;
 
       sendWithMetadata(res, {
         exportId: exportRecord.id,
@@ -2788,7 +2796,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       });
 
       const fileExtension = getExportExtension(safeFormat);
-      const downloadUrl = `${req.protocol}://${req.get('host')}/v1/exports/${exportRecord.id}.${fileExtension}`;
+      const downloadUrl = `/v1/exports/${exportRecord.id}.${fileExtension}`;
 
       sendWithMetadata(res, {
         exportId: exportRecord.id,
@@ -2937,7 +2945,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     });
 
     const fileExtension = getExportExtension(safeFormat);
-    const downloadUrl = `${req.protocol}://${req.get('host')}/v1/exports/${exportRecord.id}.${fileExtension}`;
+    const downloadUrl = `/v1/exports/${exportRecord.id}.${fileExtension}`;
 
     sendWithMetadata(res, {
       exportId: exportRecord.id,

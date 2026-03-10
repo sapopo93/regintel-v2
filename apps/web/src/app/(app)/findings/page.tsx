@@ -22,6 +22,7 @@ import { apiClient } from '@/lib/api/client';
 import type { FindingsListResponse, ProviderOverviewResponse } from '@/lib/api/types';
 import { ORIGIN_LABELS } from '@/lib/constants';
 import { validateConstitutionalRequirements, validateFindingForDisplay } from '@/lib/validators';
+import { formatTopicId } from '@/lib/format';
 import { ErrorState } from '@/components/layout/ErrorState';
 import { LoadingSkeleton } from '@/components/layout/LoadingSkeleton';
 import { EmptyState } from '@/components/layout/EmptyState';
@@ -142,7 +143,7 @@ export default function FindingsPage() {
                       </div>
                       <p className={styles.findingDescription}>{finding.description}</p>
                       <div className={styles.findingMeta}>
-                        <span>Topic: {finding.topicId}</span>
+                        <span>Topic: {formatTopicId(finding.topicId)}</span>
                         <span>Regulation: {finding.regulationSectionId}</span>
                         <span>Risk Score: {finding.compositeRiskScore}</span>
                       </div>

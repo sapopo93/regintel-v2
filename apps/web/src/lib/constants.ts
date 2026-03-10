@@ -81,13 +81,13 @@ export const SIDEBAR_GROUPS: readonly SidebarGroup[] = [
       { id: 'findings', label: 'Findings', href: '/findings' },
       { id: 'evidence', label: 'Evidence', href: '/evidence' },
       { id: 'document-audit', label: 'Document Audit', href: '/document-audit' },
+      { id: 'exports', label: 'Exports', href: '/exports' },
     ],
   },
   {
     label: 'REPORTS',
     items: [
       { id: 'results', label: 'Readiness', href: '/results' },
-      { id: 'exports', label: 'Exports', href: '/exports' },
     ],
   },
   {

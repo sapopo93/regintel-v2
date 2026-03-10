@@ -22,6 +22,7 @@ import { SimulationFrame } from '@/components/mock/SimulationFrame';
 import { apiClient } from '@/lib/api/client';
 import type { MockInspectionSession, ConstitutionalMetadata, ProviderOverviewResponse } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
+import { formatTopicId } from '@/lib/format';
 import styles from './page.module.css';
 
 const PRS_LABELS: Record<string, string> = {
@@ -43,6 +44,7 @@ export default function MockSessionDetailPage() {
 
   const [overview, setOverview] = useState<ProviderOverviewResponse | null>(null);
   const [data, setData] = useState<(MockInspectionSession & ConstitutionalMetadata) | null>(null);
+  const [topic, setTopic] = useState<{ title: string; questionMode: string; regulationSectionId: string } | null>(null);
   const [answer, setAnswer] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -59,10 +61,16 @@ export default function MockSessionDetailPage() {
       apiClient.getProviderOverview(providerId, facilityId),
       apiClient.getMockSession(providerId, sessionId, facilityId),
     ])
-      .then(([overviewResponse, sessionResponse]) => {
+      .then(async ([overviewResponse, sessionResponse]) => {
         validateConstitutionalRequirements(sessionResponse, { strict: true });
         setOverview(overviewResponse);
         setData(sessionResponse);
+        try {
+          const topicData = await apiClient.getTopic(providerId, sessionResponse.topicId, facilityId);
+          setTopic(topicData);
+        } catch {
+          // Topic fetch is non-critical
+        }
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -145,12 +153,13 @@ export default function MockSessionDetailPage() {
           />
 
           <DisclosurePanel
+            labels={{ evidence: 'Provider Context' }}
             summary={(
               <div className={styles.section}>
                 <h2 className={styles.sectionTitle}>Session Information</h2>
                 <dl className={styles.definitionList}>
                   <dt>Inspection Area</dt>
-                  <dd>{data.topicId}</dd>
+                  <dd>{formatTopicId(data.topicId)}</dd>
 
                   <dt>Status</dt>
                   <dd className={styles[data.status.toLowerCase()]}>{data.status}</dd>
@@ -208,26 +217,55 @@ export default function MockSessionDetailPage() {
             )}
           />
 
-          <div className={styles.section}>
-            <h2 className={styles.sectionTitle}>Submit Answer</h2>
-            <textarea
-              className={styles.answerInput}
-              value={answer}
-              onChange={(event) => setAnswer(event.target.value)}
-              placeholder="Provide a response to complete the session..."
-              aria-label="Your response to the inspection question"
-              rows={4}
-              data-testid="mock-session-answer"
-            />
-            <button
-              className={styles.submitButton}
-              onClick={handleSubmitAnswer}
-              disabled={submitting || !answer.trim()}
-              data-testid="primary-submit-answer"
-            >
-              {submitting ? 'Submitting...' : 'Submit Answer'}
-            </button>
-          </div>
+          {data.status === 'IN_PROGRESS' ? (
+            <>
+              {topic && (
+                <div className={styles.questionCard}>
+                  <h2 className={styles.questionTitle}>{topic.title}</h2>
+                  <p className={styles.questionRef}>{topic.regulationSectionId}</p>
+                  <p className={styles.questionPrompt}>
+                    {topic.questionMode === 'evidence_first'
+                      ? `Please provide evidence demonstrating compliance with ${topic.title}. Include specific documents, records, or examples.`
+                      : topic.questionMode === 'narrative_first'
+                      ? `Describe how your service addresses ${topic.title}. Explain your processes, procedures, and oversight.`
+                      : `Please explain how you meet the requirements of ${topic.title}. Be specific about evidence and outcomes.`}
+                  </p>
+                </div>
+              )}
+              <div className={styles.section}>
+                <h2 className={styles.sectionTitle}>Submit Answer</h2>
+                <textarea
+                  className={styles.answerInput}
+                  value={answer}
+                  onChange={(event) => setAnswer(event.target.value)}
+                  placeholder="Provide a response to complete the session..."
+                  aria-label="Your response to the inspection question"
+                  rows={4}
+                  data-testid="mock-session-answer"
+                />
+                <button
+                  className={styles.submitButton}
+                  onClick={handleSubmitAnswer}
+                  disabled={submitting || !answer.trim()}
+                  data-testid="primary-submit-answer"
+                >
+                  {submitting ? 'Submitting...' : 'Submit Answer'}
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className={styles.completedSection}>
+              <h2 className={styles.sectionTitle}>Session Complete</h2>
+              <p>This practice inspection session has been completed. View the generated findings to see your results.</p>
+              <Link
+                href={`/findings?provider=${providerId}&facility=${facilityId}`}
+                className={styles.submitButton}
+                style={{ display: 'inline-block', textDecoration: 'none', textAlign: 'center', marginTop: 'var(--space-4)' }}
+              >
+                View Findings
+              </Link>
+            </div>
+          )}
 
           <div className={styles.actions}>
             <Link

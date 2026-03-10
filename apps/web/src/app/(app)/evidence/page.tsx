@@ -24,6 +24,7 @@ import { ErrorState } from '@/components/layout/ErrorState';
 import { LoadingSkeleton } from '@/components/layout/LoadingSkeleton';
 import { EmptyState } from '@/components/layout/EmptyState';
 import { Upload, Trash2, X } from 'lucide-react';
+import { formatMimeType, suggestEvidenceType } from '@/lib/format';
 import styles from './page.module.css';
 
 const EVIDENCE_TYPE_GROUPS = [
@@ -370,7 +371,7 @@ export default function EvidencePage() {
 
                         <dl className={styles.evidenceMeta}>
                           <dt>File Type</dt>
-                          <dd>{record.mimeType}</dd>
+                          <dd>{formatMimeType(record.mimeType)}</dd>
 
                           <dt>Uploaded At</dt>
                           <dd>{new Date(record.uploadedAt).toLocaleString()}</dd>
@@ -484,7 +485,14 @@ export default function EvidencePage() {
                   ref={fileInputRef}
                   type="file"
                   style={{ display: 'none' }}
-                  onChange={e => setUploadFile(e.target.files?.[0] ?? null)}
+                  onChange={e => {
+                    const file = e.target.files?.[0] ?? null;
+                    setUploadFile(file);
+                    if (file) {
+                      const suggested = suggestEvidenceType(file.name);
+                      if (suggested) setUploadType(suggested);
+                    }
+                  }}
                   accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.html,.png,.jpg,.jpeg"
                 />
               </div>
