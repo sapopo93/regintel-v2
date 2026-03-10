@@ -41,7 +41,7 @@ import {
   buildCqcReportSummary,
   isWebsiteReportNewer,
 } from '@regintel/domain/cqc-scraper';
-import { EvidenceType, getAllRequiredEvidenceTypes } from '@regintel/domain/evidence-types';
+import { EvidenceType } from '@regintel/domain/evidence-types';
 import { resolveFacilityContext, type FacilityContext } from '@regintel/domain/facility-context';
 import { computeAdjustedSeverityScore } from '@regintel/domain/prs-logic-profile';
 import { getQualityStatementCoverage, SAF_34_QUALITY_STATEMENTS } from '@regintel/domain/saf34';

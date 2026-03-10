@@ -100,7 +100,10 @@ export const SERVICE_TYPE_TOPIC_MAP: Record<CqcServiceType, Set<string>> = {
 export function getApplicableTopicIds(serviceType: string | undefined): string[] {
   if (!serviceType) return [...ALL_TOPIC_IDS];
   const mapped = SERVICE_TYPE_TOPIC_MAP[serviceType as CqcServiceType];
-  if (!mapped) return [...ALL_TOPIC_IDS];
+  if (!mapped) {
+    console.warn(`[SERVICE-TYPE] Unknown service type "${serviceType}" — falling back to all ${ALL_TOPIC_IDS.length} topics`);
+    return [...ALL_TOPIC_IDS];
+  }
   return [...mapped];
 }
 

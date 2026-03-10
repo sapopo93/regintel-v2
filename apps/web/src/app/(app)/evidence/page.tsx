@@ -64,6 +64,13 @@ const EVIDENCE_TYPE_GROUPS = [
     ],
   },
   {
+    label: 'Domiciliary Care',
+    options: [
+      { value: 'VISIT_LOG', label: 'Visit Log' },
+      { value: 'MISSED_VISIT_RECORD', label: 'Missed Visit Record' },
+    ],
+  },
+  {
     label: 'Legal / Safeguarding',
     options: [
       { value: 'DOLS_MCA_ASSESSMENT', label: 'DoLS / MCA Assessment' },

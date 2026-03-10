@@ -95,6 +95,9 @@ export const EVIDENCE_TYPE_TO_QS: Record<string, string[]> = {
   ROTA:          ['S6', 'E3'],
   SKILLS_MATRIX: ['S6', 'E8'],
   SUPERVISION:   ['E8', 'S6', 'W3'],
+  // Domiciliary Care
+  VISIT_LOG:              ['S2', 'S6', 'R1', 'C1'],
+  MISSED_VISIT_RECORD:    ['S2', 'S3', 'W4', 'R4'],
   CERTIFICATE:   ['S6', 'E8'],
   CQC_REPORT:    [],
   // Clinical records

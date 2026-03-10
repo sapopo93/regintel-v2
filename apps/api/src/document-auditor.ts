@@ -1134,22 +1134,19 @@ export function detectDocumentType(
     return 'MAR_CHART';
   }
 
-  // Domiciliary care types — check before SIGN_IN_OUT to avoid false matches on 'sign'
+  // Domiciliary care types — require co-occurrence of care-relevant keywords
+  // to avoid false positives (e.g. "GP latest call notes" matching on 'late call')
   if (
-    name.includes('missed call') ||
-    name.includes('missed visit') ||
-    name.includes('late call') ||
-    name.includes('late visit') ||
-    name.includes('unattended')
+    (name.includes('missed') && (name.includes('visit') || name.includes('call'))) ||
+    (name.includes('late') && name.includes('visit')) ||
+    (name.includes('unattended') && name.includes('visit'))
   ) {
     return 'MISSED_VISIT_RECORD';
   }
 
   if (
-    name.includes('visit log') ||
-    name.includes('visit record') ||
-    name.includes('call log') ||
-    name.includes('electronic call') ||
+    (name.includes('visit') && (name.includes('log') || name.includes('record'))) ||
+    name.includes('electronic call monitoring') ||
     /\becm\b/.test(name)
   ) {
     return 'VISIT_LOG';

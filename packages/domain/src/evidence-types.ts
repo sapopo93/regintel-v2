@@ -172,16 +172,3 @@ export function normalizeLegacyEvidenceType(legacyType: string): EvidenceType {
   return EvidenceType.OTHER;
 }
 
-/**
- * Get all evidence types required across all topics
- */
-export function getAllRequiredEvidenceTypes(): EvidenceType[] {
-  return [
-    EvidenceType.POLICY,
-    EvidenceType.TRAINING,
-    EvidenceType.AUDIT,
-    EvidenceType.ROTA,
-    EvidenceType.SKILLS_MATRIX,
-    EvidenceType.SUPERVISION,
-  ];
-}
