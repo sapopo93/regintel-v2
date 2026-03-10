@@ -24,6 +24,7 @@ import { SimulationFrame } from '@/components/mock/SimulationFrame';
 import { apiClient } from '@/lib/api/client';
 import type { MockSessionsListResponse, ProviderOverviewResponse, Topic } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
+import { formatTopicId } from '@/lib/format';
 import styles from './page.module.css';
 
 export default function MockSessionsPage() {
@@ -207,7 +208,7 @@ export default function MockSessionsPage() {
                         </div>
                       </div>
                       <div className={styles.sessionMeta}>
-                        <span>Inspection area selected</span>
+                        <span>{topics.find((t) => t.id === session.topicId)?.title ?? formatTopicId(session.topicId)}</span>
                         <span>Follow-ups: {session.followUpsUsed}/{session.maxFollowUps}</span>
                       </div>
                       <div className={styles.sessionDate}>
