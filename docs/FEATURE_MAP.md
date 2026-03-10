@@ -135,6 +135,15 @@ Source of truth for UI routes and API endpoints. Update this file when navigatio
       ]
     },
     {
+      "route": "/document-audit?provider=:providerId&facility=:facilityId",
+      "status": "LIVE",
+      "endpoints": [
+        "GET /v1/providers/:providerId/overview?facility=:facilityId",
+        "GET /v1/providers/:providerId/evidence?facility=:facilityId",
+        "GET /v1/evidence/:evidenceRecordId/document-audit"
+      ]
+    },
+    {
       "route": "/exports?provider=:providerId&facility=:facilityId",
       "status": "LIVE",
       "endpoints": [
