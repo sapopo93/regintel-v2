@@ -304,6 +304,61 @@ function computeContributingFactors(
     });
   }
 
+  // SAF-aligned systematic factor: Governance erosion
+  const governanceGapFindings: FindingId[] = [];
+  for (const rca of rcaAnalyses) {
+    for (const hypothesis of rca.hypotheses) {
+      if (hypothesis.hypothesis.includes('Governance erosion')) {
+        governanceGapFindings.push(rca.findingId);
+      }
+    }
+  }
+  if (governanceGapFindings.length > 0) {
+    factors.push({
+      factor: 'Governance erosion: internal audit and quality monitoring gaps (W4, W6)',
+      findingIds: Array.from(new Set(governanceGapFindings)).sort(),
+    });
+  }
+
+  // SAF-aligned systematic factor: Cultural/systemic issues
+  const culturalGapFindings: FindingId[] = [];
+  for (const rca of rcaAnalyses) {
+    for (const hypothesis of rca.hypotheses) {
+      if (hypothesis.hypothesis.includes('Cultural gap')) {
+        culturalGapFindings.push(rca.findingId);
+      }
+    }
+  }
+  if (culturalGapFindings.length > 0) {
+    factors.push({
+      factor: 'Cultural indicators: safety culture may not support open reporting and learning (W1, W3)',
+      findingIds: Array.from(new Set(culturalGapFindings)).sort(),
+    });
+  }
+
+  // SAF-aligned: Medication management cluster
+  const medicationFindings = findings
+    .filter(f => f.regulationSectionId.includes('Reg 12') &&
+      (f.title.toLowerCase().includes('medic') || f.title.toLowerCase().includes('mar') || f.title.toLowerCase().includes('drug')))
+    .map(f => f.id);
+  if (medicationFindings.length > 0) {
+    factors.push({
+      factor: 'Medication management concerns (S8 Medicines optimisation)',
+      findingIds: Array.from(new Set(medicationFindings)).sort(),
+    });
+  }
+
+  // SAF-aligned: Staffing fragility
+  const staffingFindings = findings
+    .filter(f => f.regulationSectionId.includes('Reg 18') || f.regulationSectionId.includes('Reg 19'))
+    .map(f => f.id);
+  if (staffingFindings.length > 0) {
+    factors.push({
+      factor: 'Staffing fragility: recruitment, training, or capacity concerns (S6 Safe staffing)',
+      findingIds: Array.from(new Set(staffingFindings)).sort(),
+    });
+  }
+
   // Remediation backlog
   const backlogFindingIds = actions
     .filter((action) =>
@@ -635,6 +690,12 @@ export function generateBlueOceanReport(input: BlueOceanReportInput): BlueOceanR
         reportingDomain === ReportingDomain.MOCK_SIMULATION
           ? 'Mock simulation output; not regulatory history.'
           : 'Regulatory history output.',
+        (() => {
+          const avg = riskOutlook.averageCompositeRiskScore;
+          if (avg >= 70) return 'Estimated SAF position: documentary evidence suggests significant shortfalls — Inadequate territory. Based on Processes evidence category only; actual CQC ratings consider 6 evidence categories.';
+          if (avg >= 40) return 'Estimated SAF position: documentary evidence suggests not meeting all expectations — Requires Improvement territory. Based on Processes evidence category only; actual CQC ratings consider 6 evidence categories.';
+          return 'Estimated SAF position: documentary evidence suggests expectations broadly met — Good territory. Based on Processes evidence category only; actual CQC ratings consider 6 evidence categories.';
+        })(),
       ],
     },
   };

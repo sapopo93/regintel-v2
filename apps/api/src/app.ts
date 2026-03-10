@@ -1315,6 +1315,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         label: 'Location registered',
         description: 'Location has been added to the system',
         status: 'complete' as const,
+        guidance: 'Your location is registered and ready for evidence collection.',
       },
       {
         id: 'cqc-synced',
@@ -1323,6 +1324,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         status: hasCqcReport ? 'complete' as const : 'not-started' as const,
         actionLabel: hasCqcReport ? undefined : 'Sync CQC Report',
         actionHref: hasCqcReport ? undefined : `/facilities/${encodeURIComponent(facilityId)}?${facilityQuery}`,
+        guidance: 'Syncing your latest CQC report allows the system to identify existing compliance gaps and track improvements over time.',
       },
       {
         id: 'first-evidence',
@@ -1331,6 +1333,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         status: evidence.length > 0 ? 'complete' as const : 'not-started' as const,
         actionLabel: evidence.length > 0 ? undefined : 'Upload Evidence',
         actionHref: evidence.length > 0 ? undefined : `/facilities/${encodeURIComponent(facilityId)}?${facilityQuery}`,
+        guidance: 'Start with your highest-risk area. Uploading a policy document covers W1 (Shared direction) and W4 (Governance) — two of the eight Well-Led Quality Statements.',
       },
       {
         id: 'evidence-critical-mass',
@@ -1339,12 +1342,14 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         status: evidence.length >= 3 ? 'complete' as const : evidence.length > 0 ? 'in-progress' as const : 'not-started' as const,
         actionLabel: evidence.length < 3 ? 'Upload More Evidence' : undefined,
         actionHref: evidence.length < 3 ? `/facilities/${encodeURIComponent(facilityId)}?${facilityQuery}` : undefined,
+        guidance: 'Three documents gives the AI enough context to cross-reference and identify patterns. Prioritise one from each area: a policy (Well-Led), a training record (Safe staffing), and a clinical document like a care plan (Effective).',
       },
       {
         id: 'first-audit',
         label: 'First document audit complete',
         description: 'AI has reviewed at least one uploaded document',
         status: completedAudits.length > 0 ? 'complete' as const : evidence.length > 0 ? 'in-progress' as const : 'not-started' as const,
+        guidance: 'Document audits map your evidence to SAF Quality Statements automatically. A completed audit for a care plan will assess E1 (Assessing needs), E6 (Consent), and R1 (Person-centred care).',
       },
       {
         id: 'first-mock',
@@ -1353,6 +1358,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         status: completedSessions.length > 0 ? 'complete' as const : sessions.length > 0 ? 'in-progress' as const : 'not-started' as const,
         actionLabel: completedSessions.length === 0 ? 'Start Practice Inspection' : undefined,
         actionHref: completedSessions.length === 0 ? `/mock-session?${facilityQuery}` : undefined,
+        guidance: 'A practice inspection simulates CQC questioning across your key risk areas and generates findings with regulatory references.',
       },
       {
         id: 'critical-addressed',
@@ -1363,18 +1369,21 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
           : criticalFindings.length > 0 ? 'in-progress' as const : 'not-started' as const,
         actionLabel: criticalFindings.length > 0 ? 'View Findings' : undefined,
         actionHref: criticalFindings.length > 0 ? `/findings?${facilityQuery}` : undefined,
+        guidance: 'Critical findings indicate immediate risk to people using the service. Addressing these first demonstrates a responsive safety culture (S1 Learning culture).',
       },
       {
         id: 'coverage-50',
         label: 'Evidence coverage reaches 50%',
         description: 'Half of required evidence types have been uploaded',
         status: evidenceCoverage >= 50 ? 'complete' as const : evidenceCoverage > 0 ? 'in-progress' as const : 'not-started' as const,
+        guidance: 'At 50% coverage, you likely have gaps in Safe and Effective domains. Prioritise: MAR charts (S8 Medicines), risk assessments (S4 Involving people in risks), and training matrices (S6 Safe staffing).',
       },
       {
         id: 'coverage-80',
         label: 'Evidence coverage reaches 80%',
         description: 'Strong evidence base — approaching inspection readiness',
         status: evidenceCoverage >= 80 ? 'complete' as const : evidenceCoverage >= 50 ? 'in-progress' as const : 'not-started' as const,
+        guidance: 'At 80% coverage, focus on the remaining Quality Statements. Check your Inspector Evidence Pack to see which specific statements still lack evidence.',
       },
       {
         id: 'blue-ocean',
@@ -1383,6 +1392,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         status: hasBlueOcean ? 'complete' as const : completedSessions.length > 0 ? 'not-started' as const : 'not-started' as const,
         actionLabel: !hasBlueOcean && completedSessions.length > 0 ? 'Generate Report' : undefined,
         actionHref: !hasBlueOcean && completedSessions.length > 0 ? `/exports?${facilityQuery}` : undefined,
+        guidance: 'The Blue Ocean report provides a PhD-level analysis including root cause analysis, SMART actions, and regulatory mapping across all 34 Quality Statements.',
       },
     ];
 
@@ -1615,8 +1625,8 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       impactScore: adjusted.adjustedImpact,
       likelihoodScore: adjusted.adjustedLikelihood,
       compositeRiskScore: adjusted.composite,
-      title: 'Mock finding generated',
-      description: `Automated mock finding from answer: ${answer.slice(0, 120)}`,
+      title: `Practice finding: ${topic?.title ?? 'Mock inspection'} (${topic?.regulationSectionId ?? 'Reg 12(2)(a)'})`,
+      description: `During practice inspection of ${topic?.title ?? 'this topic'}, the provider response was evaluated against ${topic?.regulationSectionId ?? 'Reg 12(2)(a)'}. Provider response summary: ${answer.slice(0, 200)}`,
       evidenceRequired,
       evidenceProvided,
       evidenceMissing,

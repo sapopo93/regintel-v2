@@ -72,10 +72,10 @@ function buildHypotheses(finding: InspectionFinding): RootCauseHypothesis[] {
         'is missing, outdated, or not enforced.',
       rationale:
         `Regulation ${finding.regulationSectionId} is unmet; ` +
-        `finding evidence: ${finding.description}`,
+        `finding evidence: ${finding.description} Link: W4 (Governance)`,
       disconfirmingTests: [
-        `Locate a current procedure covering ${finding.regulationSectionId}.`,
-        `Sample recent records proving adherence to ${finding.regulationSectionId}.`,
+        `Locate a dated, version-controlled procedure for ${finding.regulationSectionId} with named author and review date within the last 12 months.`,
+        `Sample 5 records from the last 30 days demonstrating ${finding.regulationSectionId} compliance with signatures and timestamps.`,
       ],
       confidence: 'medium',
     },
@@ -85,16 +85,16 @@ function buildHypotheses(finding: InspectionFinding): RootCauseHypothesis[] {
         `to meet "${finding.title}".`,
       rationale:
         `Impact ${finding.impactScore} and likelihood ${finding.likelihoodScore} ` +
-        'suggest sustained operational strain.',
+        'suggest sustained operational strain. Link: S6 (Safe staffing), E8 (Workforce wellbeing)',
       disconfirmingTests: [
-        `Verify training completion for roles tied to ${finding.regulationSectionId}.`,
-        `Review staffing coverage against required ratios for the last 90 days.`,
+        `Check training matrix for ${finding.regulationSectionId}-related competencies: % completion, any expired certifications, last assessment dates.`,
+        `Review staffing rotas and dependency assessments against required ratios for the last 90 days.`,
       ],
-      confidence: 'low',
+      confidence: finding.severity === 'CRITICAL' ? 'medium' : 'low',
     },
   ];
 
-  return templates.map((template, index) => ({
+  const hypotheses = templates.map((template, index) => ({
     ...template,
     hypothesisId: computeHypothesisId({
       findingId: finding.id,
@@ -102,6 +102,64 @@ function buildHypotheses(finding: InspectionFinding): RootCauseHypothesis[] {
       index,
     }),
   }));
+
+  // INVARIANT: Existing hypotheses at index 0-1 must not be reordered. New hypotheses append at index 2+.
+
+  // Hypothesis 3: Governance erosion — triggered when finding touches Safe domain
+  if (finding.regulationSectionId.includes('Reg 12') ||
+      finding.regulationSectionId.includes('Reg 13') ||
+      finding.regulationSectionId.includes('Reg 15') ||
+      finding.regulationSectionId.includes('Reg 18') ||
+      finding.severity === 'CRITICAL') {
+    const govHypothesis: Omit<RootCauseHypothesis, 'hypothesisId'> = {
+      hypothesis:
+        `Governance erosion: leadership oversight gap — internal audit or quality monitoring ` +
+        `failed to detect "${finding.title}" before external assessment.`,
+      rationale:
+        `Regulation ${finding.regulationSectionId} breach suggests governance monitoring gap. ` +
+        `Link: W4 (Governance), W6 (Learning and innovation)`,
+      disconfirmingTests: [
+        `Review internal audit schedule and last completed cycle for ${finding.regulationSectionId}.`,
+        `Verify management action log shows this area was monitored in the last 90 days.`,
+      ],
+      confidence: finding.severity === 'CRITICAL' ? 'high' : 'medium',
+    };
+    hypotheses.push({
+      ...govHypothesis,
+      hypothesisId: computeHypothesisId({
+        findingId: finding.id,
+        hypothesis: govHypothesis.hypothesis,
+        index: hypotheses.length,
+      }),
+    });
+  }
+
+  // Hypothesis 4: Cultural/systemic gap — triggered for CRITICAL severity
+  if (finding.severity === 'CRITICAL') {
+    const culturalHypothesis: Omit<RootCauseHypothesis, 'hypothesisId'> = {
+      hypothesis:
+        `Cultural gap: the organisation's safety culture may not support staff in ` +
+        `raising concerns or learning from incidents related to "${finding.title}".`,
+      rationale:
+        `Critical severity finding suggests potential systemic issue beyond individual performance. ` +
+        `Link: W1 (Shared direction), W3 (Freedom to speak up)`,
+      disconfirmingTests: [
+        `Review Freedom to Speak Up records for the last 12 months.`,
+        `Check staff survey results or exit interview themes for fear/blame indicators.`,
+      ],
+      confidence: 'medium',
+    };
+    hypotheses.push({
+      ...culturalHypothesis,
+      hypothesisId: computeHypothesisId({
+        findingId: finding.id,
+        hypothesis: culturalHypothesis.hypothesis,
+        index: hypotheses.length,
+      }),
+    });
+  }
+
+  return hypotheses;
 }
 
 /**

@@ -88,14 +88,43 @@ export interface InspectorEvidencePack {
  * Tier 2 fallback: static mapping from evidence type to quality statements.
  */
 export const EVIDENCE_TYPE_TO_QS: Record<string, string[]> = {
+  // Original mappings (improved)
   POLICY:        ['W1', 'W4'],
-  TRAINING:      ['E3', 'E4', 'W8'],
-  AUDIT:         ['W4', 'W5'],
-  ROTA:          ['S5'],
-  SKILLS_MATRIX: ['E3', 'W8'],
-  SUPERVISION:   ['E4'],
-  CERTIFICATE:   ['E3'],
+  TRAINING:      ['S6', 'E8', 'W6'],
+  AUDIT:         ['W4', 'W6', 'E5'],
+  ROTA:          ['S6', 'E3'],
+  SKILLS_MATRIX: ['S6', 'E8'],
+  SUPERVISION:   ['E8', 'S6', 'W3'],
+  CERTIFICATE:   ['S6', 'E8'],
   CQC_REPORT:    [],
+  // Clinical records
+  CARE_PLAN:           ['E1', 'R1', 'C2', 'E6'],
+  MAR_CHART:           ['S8', 'S1', 'S9'],
+  RISK_ASSESSMENT:     ['S4', 'S1', 'E1'],
+  INCIDENT_REPORT:     ['S1', 'S3', 'W4', 'W6'],
+  DAILY_NOTES:         ['R1', 'C1', 'C4'],
+  HANDOVER_NOTES:      ['S2', 'S8', 'E3'],
+  MEDICATION_PROTOCOL: ['S8', 'S1', 'W4'],
+  // Legal/Safeguarding
+  DOLS_MCA_ASSESSMENT:  ['E6', 'E7'],
+  SAFEGUARDING_RECORD:  ['S3', 'S1', 'W4'],
+  COMPLAINTS_LOG:       ['R4', 'W4', 'W6'],
+  // Governance
+  STAFF_MEETING_MINUTES: ['W1', 'W3', 'W6'],
+  RECRUITMENT_FILE:      ['S6'],
+  // Safety & Environment
+  FIRE_SAFETY_CHECK:          ['S5'],
+  INFECTION_CONTROL_AUDIT:    ['S7', 'S5'],
+  EQUIPMENT_MAINTENANCE_LOG:  ['S5'],
+  // Clinical Monitoring
+  NUTRITIONAL_ASSESSMENT: ['E2', 'E4'],
+  WOUND_CARE_RECORD:      ['E2', 'E5'],
+  BODY_MAP:               ['S3'],
+  FLUID_FOOD_CHART:       ['E2'],
+  // Person-Centred
+  ACTIVITY_PROGRAMME:       ['C3'],
+  SERVICE_USER_AGREEMENT:   ['R3'],
+  RESIDENT_SURVEY:          ['R4'],
   OTHER:         [],
 };
 
@@ -253,6 +282,44 @@ export const OUTSTANDING_INDICATORS: OutstandingIndicatorDef[] = [
     description: 'Evidence of systematic quality improvement, lessons learned, and action planning.',
     evidenceTypes: ['AUDIT'],
     matchPatterns: [/action\s*plan/i, /improvement/i, /lessons?\s*learn/i, /quality\s*improv/i, /qip/i],
+  },
+  {
+    id: 'learning-culture',
+    label: 'Embedded Learning Culture',
+    description: 'Evidence of incident → learning → improvement cycles, not just incident recording.',
+    safStatementIds: ['S1', 'W6'],
+    evidenceTypes: ['INCIDENT_REPORT', 'AUDIT'],
+    matchPatterns: [/lessons?\s*learn/i, /root\s*cause/i, /learning\s*from/i, /improvement\s*cycle/i, /after\s*action/i],
+  },
+  {
+    id: 'mdt-integration',
+    label: 'MDT Integration',
+    description: 'Evidence of multi-disciplinary team coordination and collaborative working.',
+    safStatementIds: ['E3', 'R2'],
+    matchPatterns: [/multi.?disciplin/i, /mdt/i, /joint\s*working/i, /team\s*around/i, /collaborative/i],
+  },
+  {
+    id: 'carer-engagement',
+    label: 'Carer & Family Engagement',
+    description: 'Evidence of carer support programmes, family feedback mechanisms, and involvement in care planning.',
+    safStatementIds: ['R4', 'C1'],
+    evidenceTypes: ['RESIDENT_SURVEY'],
+    matchPatterns: [/carer/i, /family\s*(meeting|forum|feedback|survey)/i, /relative/i, /next\s*of\s*kin/i],
+  },
+  {
+    id: 'proactive-risk',
+    label: 'Proactive Risk Management',
+    description: 'Evidence of risk assessments that involve the person, positive risk-taking, and person-centred safety.',
+    safStatementIds: ['S4', 'W4'],
+    evidenceTypes: ['RISK_ASSESSMENT'],
+    matchPatterns: [/positive\s*risk/i, /person.?centred\s*risk/i, /involve.*risk/i, /proactive/i],
+  },
+  {
+    id: 'health-equity',
+    label: 'Health Inequalities Awareness',
+    description: 'Evidence addressing equity in access and outcomes for diverse populations.',
+    safStatementIds: ['E9'],
+    matchPatterns: [/health\s*inequalit/i, /equity/i, /divers/i, /inclusion/i, /accessible\s*information/i, /easy\s*read/i],
   },
 ];
 

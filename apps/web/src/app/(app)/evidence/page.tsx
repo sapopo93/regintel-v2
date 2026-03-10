@@ -26,16 +26,88 @@ import { EmptyState } from '@/components/layout/EmptyState';
 import { Upload, Trash2, X } from 'lucide-react';
 import styles from './page.module.css';
 
-const EVIDENCE_TYPE_OPTIONS = [
-  { value: 'POLICY', label: 'Policy Document' },
-  { value: 'TRAINING', label: 'Training Record' },
-  { value: 'AUDIT', label: 'Audit Report' },
-  { value: 'ROTA', label: 'Staff Rota' },
-  { value: 'SKILLS_MATRIX', label: 'Skills Matrix' },
-  { value: 'SUPERVISION', label: 'Supervision Records' },
-  { value: 'CERTIFICATE', label: 'Certificate' },
-  { value: 'CQC_REPORT', label: 'CQC Inspection Report' },
-  { value: 'OTHER', label: 'Other' },
+const EVIDENCE_TYPE_GROUPS = [
+  {
+    label: 'Regulatory Reports',
+    options: [
+      { value: 'CQC_REPORT', label: 'CQC Inspection Report' },
+    ],
+  },
+  {
+    label: 'Core Compliance',
+    options: [
+      { value: 'POLICY', label: 'Policy Document' },
+      { value: 'AUDIT', label: 'Audit Report' },
+    ],
+  },
+  {
+    label: 'Clinical Records',
+    options: [
+      { value: 'CARE_PLAN', label: 'Care Plan' },
+      { value: 'MAR_CHART', label: 'MAR Chart' },
+      { value: 'RISK_ASSESSMENT', label: 'Risk Assessment' },
+      { value: 'INCIDENT_REPORT', label: 'Incident Report' },
+      { value: 'DAILY_NOTES', label: 'Daily Notes' },
+      { value: 'HANDOVER_NOTES', label: 'Handover Notes' },
+      { value: 'MEDICATION_PROTOCOL', label: 'Medication Protocol' },
+    ],
+  },
+  {
+    label: 'Staffing',
+    options: [
+      { value: 'TRAINING', label: 'Training Record' },
+      { value: 'ROTA', label: 'Staff Rota' },
+      { value: 'SKILLS_MATRIX', label: 'Skills Matrix' },
+      { value: 'SUPERVISION', label: 'Supervision Records' },
+      { value: 'CERTIFICATE', label: 'Certificate' },
+      { value: 'RECRUITMENT_FILE', label: 'Recruitment File (DBS, References)' },
+    ],
+  },
+  {
+    label: 'Legal / Safeguarding',
+    options: [
+      { value: 'DOLS_MCA_ASSESSMENT', label: 'DoLS / MCA Assessment' },
+      { value: 'SAFEGUARDING_RECORD', label: 'Safeguarding Record' },
+      { value: 'COMPLAINTS_LOG', label: 'Complaints Log' },
+    ],
+  },
+  {
+    label: 'Governance',
+    options: [
+      { value: 'STAFF_MEETING_MINUTES', label: 'Staff Meeting Minutes' },
+    ],
+  },
+  {
+    label: 'Safety & Environment',
+    options: [
+      { value: 'FIRE_SAFETY_CHECK', label: 'Fire Safety / Environmental Check' },
+      { value: 'INFECTION_CONTROL_AUDIT', label: 'Infection Control Audit' },
+      { value: 'EQUIPMENT_MAINTENANCE_LOG', label: 'Equipment Maintenance Log' },
+    ],
+  },
+  {
+    label: 'Clinical Monitoring',
+    options: [
+      { value: 'NUTRITIONAL_ASSESSMENT', label: 'Nutritional Assessment (MUST)' },
+      { value: 'WOUND_CARE_RECORD', label: 'Wound Care Record' },
+      { value: 'BODY_MAP', label: 'Body Map' },
+      { value: 'FLUID_FOOD_CHART', label: 'Fluid / Food Chart' },
+    ],
+  },
+  {
+    label: 'Person-Centred',
+    options: [
+      { value: 'ACTIVITY_PROGRAMME', label: 'Activity Programme' },
+      { value: 'SERVICE_USER_AGREEMENT', label: 'Service User Agreement' },
+      { value: 'RESIDENT_SURVEY', label: 'Resident / Family Survey' },
+    ],
+  },
+  {
+    label: 'Other',
+    options: [
+      { value: 'OTHER', label: 'Other' },
+    ],
+  },
 ];
 
 export default function EvidencePage() {
@@ -418,8 +490,12 @@ export default function EvidencePage() {
                   value={uploadType}
                   onChange={e => setUploadType(e.target.value)}
                 >
-                  {EVIDENCE_TYPE_OPTIONS.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  {EVIDENCE_TYPE_GROUPS.map(group => (
+                    <optgroup key={group.label} label={group.label}>
+                      {group.options.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
               </div>

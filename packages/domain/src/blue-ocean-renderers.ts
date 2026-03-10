@@ -165,6 +165,35 @@ export function serializeBlueOceanBoardMarkdown(report: BlueOceanReport): string
   lines.push(`- Traceability: ${assuranceStatus(gates.domainConsistencyScore, report.reportingDomain)}`);
   lines.push(`- Consistency: ${assuranceStatus(gates.rcaCoverageScore, report.reportingDomain)}`);
   lines.push(`- Safety: ${assuranceStatus(gates.mockWatermarkScore, report.reportingDomain)}`);
+
+  // SAF Key Question summary for board members
+  lines.push('');
+  lines.push('## Regulatory Position (Documentary Evidence)');
+  lines.push('');
+  lines.push('> *Based on documentary evidence only (CQC Evidence Category: Processes). This does not reflect the full 6-category SAF assessment. Actual CQC ratings also consider People\'s Experience, Staff Feedback, Partner Feedback, Observation, and Outcomes.*');
+  lines.push('');
+
+  // Compute domain-level finding counts for SAF key questions
+  const findingRegSections = report.sections.majorFindings.map(f => f.regulationSectionId);
+  const safeIssues = findingRegSections.filter(s => s.includes('Reg 12') || s.includes('Reg 13') || s.includes('Reg 15') || s.includes('Reg 18') || s.includes('Reg 19')).length;
+  const effectiveIssues = findingRegSections.filter(s => s.includes('Reg 9') || s.includes('Reg 11') || s.includes('Reg 14')).length;
+  const caringIssues = findingRegSections.filter(s => s.includes('Reg 10')).length;
+  const responsiveIssues = findingRegSections.filter(s => s.includes('Reg 16') || s.includes('Reg 20')).length;
+  const wellLedIssues = findingRegSections.filter(s => s.includes('Reg 17')).length;
+
+  function estimateRating(issues: number): string {
+    if (issues >= 3) return 'Inadequate';
+    if (issues >= 1) return 'Requires Improvement';
+    return 'Good';
+  }
+
+  lines.push('| Domain | Major Findings | Documentary Evidence Position |');
+  lines.push('|--------|---------------|------------------------------|');
+  lines.push(`| Safe | ${safeIssues} | ${estimateRating(safeIssues)} |`);
+  lines.push(`| Effective | ${effectiveIssues} | ${estimateRating(effectiveIssues)} |`);
+  lines.push(`| Caring | ${caringIssues} | ${estimateRating(caringIssues)} |`);
+  lines.push(`| Responsive | ${responsiveIssues} | ${estimateRating(responsiveIssues)} |`);
+  lines.push(`| Well-Led | ${wellLedIssues} | ${estimateRating(wellLedIssues)} |`);
   lines.push('');
 
   lines.push('## Executive Summary');
@@ -187,6 +216,17 @@ export function serializeBlueOceanBoardMarkdown(report: BlueOceanReport): string
     }
   }
   lines.push('');
+
+  // Top 3 Risks to Rating
+  if (report.sections.majorFindings.length > 0) {
+    lines.push('## Top 3 Risks to Rating');
+    lines.push('');
+    const topRisks = report.sections.majorFindings.slice(0, 3);
+    for (const risk of topRisks) {
+      lines.push(`- **${risk.title}** could trigger ${risk.regulationSectionId} breach (risk score: ${risk.compositeRiskScore})`);
+    }
+    lines.push('');
+  }
 
   lines.push('## Action Plan');
   lines.push('');

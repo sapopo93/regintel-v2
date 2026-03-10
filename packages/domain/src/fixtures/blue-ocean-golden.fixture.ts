@@ -185,4 +185,4 @@ export const blueOceanFixtureInput: BlueOceanReportInput = {
 };
 
 export const blueOceanFixtureExpectedHash =
-  '60dea70e0274714c99a05da6b1a7f811d1df67546f16116cc7a676cb5ab29817';
+  'e28924682fa3a41f55200c6d505f0fc8101fc6eee7a9610d59a602cbbff4adfe';

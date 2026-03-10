@@ -60,7 +60,7 @@ describe('inspector-evidence-pack', () => {
 
       const { qsMap } = mapEvidenceToQualityStatements([evidence]);
 
-      // TRAINING maps to E3, E4, W8
+      // TRAINING maps to S6, E8, W6
       const expectedQs = EVIDENCE_TYPE_TO_QS['TRAINING'];
       for (const qsId of expectedQs) {
         expect(qsMap.get(qsId)!.length).toBe(1);
@@ -76,7 +76,7 @@ describe('inspector-evidence-pack', () => {
 
       const { qsMap } = mapEvidenceToQualityStatements([evidence]);
 
-      // AUDIT maps to W4, W5
+      // AUDIT maps to W4, W6, E5
       expect(qsMap.get('W4')!.length).toBe(1);
       expect(qsMap.get('W4')![0].mappingSource).toBe('type-inferred');
     });
@@ -89,10 +89,10 @@ describe('inspector-evidence-pack', () => {
 
       const { qsMap, awaitingAuditMap } = mapEvidenceToQualityStatements([evidence]);
 
-      // ROTA maps to S5 — should be in awaiting audit, not main map
-      expect(qsMap.get('S5')!.length).toBe(0);
-      expect(awaitingAuditMap.get('S5')!.length).toBe(1);
-      expect(awaitingAuditMap.get('S5')![0].auditStatus).toBe('PENDING');
+      // ROTA maps to S6, E3 — should be in awaiting audit, not main map
+      expect(qsMap.get('S6')!.length).toBe(0);
+      expect(awaitingAuditMap.get('S6')!.length).toBe(1);
+      expect(awaitingAuditMap.get('S6')![0].auditStatus).toBe('PENDING');
     });
   });
 
@@ -157,12 +157,12 @@ describe('inspector-evidence-pack', () => {
       const empty = detectOutstandingIndicators([]);
       expect(empty.overallScore).toBe(0);
 
-      // Evidence matching 2 of 4 indicators → 50%
+      // Evidence matching 2 of 9 indicators → 22%
       const twoMatches = detectOutstandingIndicators([
         makeEvidence({ fileName: 'governance-report.pdf' }), // leadership
         makeEvidence({ fileName: 'community-survey.pdf' }),  // community
       ]);
-      expect(twoMatches.overallScore).toBe(50);
+      expect(twoMatches.overallScore).toBe(22);
     });
   });
 
@@ -192,7 +192,7 @@ describe('inspector-evidence-pack', () => {
       expect(pack.keyQuestionSections.length).toBe(5);
       expect(pack.overallCoverage.total).toBe(34);
       expect(pack.overallCoverage.covered).toBeGreaterThan(0);
-      expect(pack.outstandingReadiness.indicators.length).toBe(4);
+      expect(pack.outstandingReadiness.indicators.length).toBe(9);
       expect(pack.metadata).toEqual(METADATA);
     });
   });
