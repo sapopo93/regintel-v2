@@ -769,7 +769,7 @@ export class PrismaStore extends InMemoryStore {
     };
 
     (prisma as any).auditEventV2
-      .create({ data })
+      .upsert({ where: { eventId: data.eventId }, create: data, update: {} })
       .catch((err: unknown) =>
         console.error('[PrismaStore] Failed to persist audit event:', err)
       );

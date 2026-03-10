@@ -1397,7 +1397,7 @@ export async function auditDocument(
     const response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       system: SYSTEM_PROMPT,
-      max_tokens: 4096,
+      max_tokens: 8192,
       messages: [{ role: 'user', content: messageContent }],
     });
     const rawText = extractResponseText(response);
