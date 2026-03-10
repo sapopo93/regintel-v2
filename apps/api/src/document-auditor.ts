@@ -736,21 +736,50 @@ function parseAuditPayload(rawText: string): unknown {
     return null;
   }
 
+  // Try direct parse first
   try {
-    return JSON.parse(cleaned);
+    return normalizePayloadKeys(JSON.parse(cleaned));
   } catch {
-    const firstBrace = cleaned.indexOf('{');
-    const lastBrace = cleaned.lastIndexOf('}');
-    if (firstBrace === -1 || lastBrace <= firstBrace) {
-      return null;
-    }
+    // Fall through
+  }
 
+  // Try extracting JSON object from surrounding text
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
     try {
-      return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
+      return normalizePayloadKeys(JSON.parse(cleaned.slice(firstBrace, lastBrace + 1)));
     } catch {
-      return null;
+      // Fall through
     }
   }
+
+  // Try extracting from markdown code block with different patterns
+  const codeBlockMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  if (codeBlockMatch) {
+    try {
+      return normalizePayloadKeys(JSON.parse(codeBlockMatch[1].trim()));
+    } catch {
+      // Fall through
+    }
+  }
+
+  return null;
+}
+
+function normalizePayloadKeys(obj: unknown): unknown {
+  if (!isRecord(obj)) return obj;
+  const normalized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    // Normalize common key variants: overall_result → overallResult, compliance_score → complianceScore
+    const camelKey = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+    normalized[camelKey] = value;
+  }
+  // Also check for nested result object (some models wrap in { result: { ... } })
+  if (!normalized.overallResult && isRecord(normalized.result)) {
+    return normalizePayloadKeys(normalized.result);
+  }
+  return normalized;
 }
 
 function normalizeAuditResult(payload: unknown, defaultDocumentType: string): DocumentAuditResult {
@@ -786,8 +815,17 @@ function isMeaningfulAuditPayload(payload: unknown): payload is Record<string, u
   }
 
   const overallResult = asText(payload.overallResult).toUpperCase();
-  return OVERALL_RESULTS.has(overallResult as DocumentAuditResult['overallResult'])
-    && asText(payload.summary).length > 0;
+  const hasValidResult = OVERALL_RESULTS.has(overallResult as DocumentAuditResult['overallResult']);
+  const hasSummary = asText(payload.summary).length > 0;
+
+  // Accept payloads that have at least findings or safStatements even if overallResult/summary are slightly off
+  const hasFindings = Array.isArray(payload.findings) && payload.findings.length > 0;
+  const hasSafStatements = Array.isArray(payload.safStatements) && payload.safStatements.length > 0;
+
+  if (hasValidResult && hasSummary) return true;
+  if ((hasFindings || hasSafStatements) && (hasValidResult || hasSummary)) return true;
+
+  return false;
 }
 
 const VALID_SAF_IDS = new Set([
@@ -1371,7 +1409,7 @@ export async function auditDocument(
     const parsed = parseAuditPayload(rawText);
 
     if (!isMeaningfulAuditPayload(parsed)) {
-      console.log('[AUDITOR] parse failed — overallResult:', (parsed as any)?.overallResult, '| summary length:', asText((parsed as any)?.summary).length);
+      console.log('[AUDITOR] parse failed — parsed type:', typeof parsed, '| overallResult:', (parsed as any)?.overallResult, '| summary length:', asText((parsed as any)?.summary).length, '| findings:', Array.isArray((parsed as any)?.findings) ? (parsed as any).findings.length : 'N/A', '| keys:', parsed ? Object.keys(parsed as any).join(',') : 'null');
       throw new DocumentAuditExecutionError(
         'FAILED',
         'Audit response could not be parsed into a valid result.'
