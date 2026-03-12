@@ -22,9 +22,26 @@ const isPublicRoute = createRouteMatcher([...PUBLIC_ROUTE_MATCHERS]);
 // In E2E mode without Clerk secrets, bypass Clerk middleware entirely.
 const e2eBypassMiddleware = () => NextResponse.next();
 
+// Redirect /facilities/* → /locations/* before auth checks
+function redirectFacilities(request: import('next/server').NextRequest): NextResponse | null {
+  const { pathname, search } = request.nextUrl;
+  if (pathname.startsWith('/facilities')) {
+    const newPath = pathname.replace(/^\/facilities/, '/locations');
+    const url = request.nextUrl.clone();
+    url.pathname = newPath;
+    url.search = search;
+    return NextResponse.redirect(url, 308);
+  }
+  return null;
+}
+
 export default isE2EMode && !hasClerkSecret
-  ? e2eBypassMiddleware
+  ? (request: import('next/server').NextRequest) => {
+      return redirectFacilities(request) ?? NextResponse.next();
+    }
   : clerkMiddleware(async (auth, request) => {
+      const redirect = redirectFacilities(request);
+      if (redirect) return redirect;
 
       if (!isPublicRoute(request)) {
         await auth.protect();
