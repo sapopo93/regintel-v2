@@ -241,6 +241,32 @@ export default function FacilityDetailPage() {
     try {
       const response = await apiClient.syncLatestReport(facilityId);
       setSyncMessage(response.message);
+
+      // Poll for a CQC_REPORT evidence record to appear (background job — can take 30-60s).
+      // Once found, refresh journey data so the green tick shows.
+      const startTime = Date.now();
+      const TIMEOUT_MS = 90_000;
+      const POLL_INTERVAL_MS = 5_000;
+
+      const pollForReport = async (): Promise<void> => {
+        if (Date.now() - startTime > TIMEOUT_MS) return;
+        try {
+          const [evidence, journey] = await Promise.all([
+            apiClient.getFacilityEvidence(facilityId),
+            apiClient.getReadinessJourney(facilityId).catch(() => null),
+          ]);
+          const hasCqcReport = evidence.evidence.some((e) => e.evidenceType === 'CQC_REPORT');
+          if (hasCqcReport) {
+            setEvidenceData(evidence);
+            if (journey) setJourneyData(journey);
+            return;
+          }
+        } catch { /* ignore polling errors */ }
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+        return pollForReport();
+      };
+
+      await pollForReport();
     } catch (err: unknown) {
       setSyncMessage(err instanceof Error ? err.message : 'Failed to sync report');
     } finally {

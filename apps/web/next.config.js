@@ -3,7 +3,10 @@
 // SECURITY HARDENING: Environment-aware CSP configuration
 // In production, localhost should NOT be in CSP connect-src
 const isProduction = process.env.NODE_ENV === 'production';
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
+// API_INTERNAL_URL is a server-only env var pointing to the Express API (no NEXT_PUBLIC_ prefix).
+// This is the proxy target used by Next.js rewrites — the browser never sees this URL.
+// NEXT_PUBLIC_API_BASE_URL should be left empty in production so the browser uses same-origin /v1/...
+const apiBaseUrl = process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
 
 // Clerk CSP domains (per https://clerk.com/docs/guides/secure/best-practices/csp-headers)
 // These domains are required for Clerk authentication to function properly
