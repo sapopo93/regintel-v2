@@ -93,6 +93,23 @@
   color: var(--color-slate-500);
 }
 
+.findingActions {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-slate-200);
+}
+
+.actionPlanLink {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-primary, #2563eb);
+  text-decoration: none;
+}
+
+.actionPlanLink:hover {
+  text-decoration: underline;
+}
+
 .evidencePanel {
   display: flex;
   flex-direction: column;

@@ -52,6 +52,7 @@ import {
   type EvidenceInput,
 } from '@regintel/domain/inspector-evidence-pack';
 import { fetchCqcLocations, fetchCqcLocationDetail, getNoteworthy } from '@regintel/domain/cqc-changes-client';
+import { ACTION_PLAN_TEMPLATES } from './action-plan-templates.js';
 import {
   generateAlerts,
   deduplicateAlerts,
@@ -68,6 +69,8 @@ import {
   type EvidenceRecordRecord,
   type MockSessionRecord,
   type FindingRecord,
+  type ActionRecord,
+  computePlanStatus,
 } from './store';
 import { PrismaStore } from './db-store';
 import { handleClerkWebhook } from './webhooks/clerk';
@@ -79,9 +82,13 @@ import {
   detectDocumentType,
   getDocumentAuditByEvidenceRecordId,
   listDocumentAuditSummariesByEvidenceRecordIds,
+  listCompletedAuditsByFacility,
   saveDocumentAuditFailure,
   savePendingDocumentAudit,
   type DocumentAuditSummary,
+  type StoredDocumentAudit,
+  type AuditFinding,
+  type AuditCorrection,
 } from './document-auditor';
 import type { DocumentAuditJobData } from './audit-worker';
 
@@ -497,6 +504,103 @@ function selectQuestion(topicId: string, questionNumber: number): string {
   return questions[idx];
 }
 
+// ── Action Plan Templates ──────────────────────────────────────────────────────
+// Fallback templates per topic. When document audits exist, their findings take priority.
+
+interface ActionTemplate {
+  title: string;
+  description: string;
+  category: ActionRecord['category'];
+  priority: ActionRecord['priority'];
+  defaultOwner: string;
+  defaultDueDays: number;
+}
+
+const ACTION_TEMPLATES: Record<string, ActionTemplate[]> = {
+  'safe-care-treatment': [
+    { title: 'Upload current risk assessment policy', description: 'Upload your risk assessment policy with most recent review date, named owner, and alignment with CQC Regulation 12(2)(a).', category: 'POLICY', priority: 'HIGH', defaultOwner: 'Registered Manager', defaultDueDays: 7 },
+    { title: 'Provide evidence of risk assessment audit', description: 'Upload your most recent risk assessment audit showing compliance rate, actions taken, and sign-off.', category: 'EVIDENCE', priority: 'HIGH', defaultOwner: 'Quality Lead', defaultDueDays: 14 },
+    { title: 'Confirm staff risk assessment training', description: 'Provide training records showing staff have completed risk assessment training within the last 12 months.', category: 'TRAINING', priority: 'MEDIUM', defaultOwner: 'Training Coordinator', defaultDueDays: 21 },
+  ],
+  'safeguarding': [
+    { title: 'Upload current safeguarding policy', description: 'Upload your safeguarding adults policy with most recent review date, owner, and local authority alignment.', category: 'POLICY', priority: 'HIGH', defaultOwner: 'Registered Manager', defaultDueDays: 7 },
+    { title: 'Provide safeguarding referral log', description: 'Upload your safeguarding referral log showing referrals made, outcomes, and learning actions.', category: 'EVIDENCE', priority: 'HIGH', defaultOwner: 'Safeguarding Lead', defaultDueDays: 14 },
+    { title: 'Confirm safeguarding training records', description: 'Provide evidence that all staff have completed safeguarding training within the required timeframe.', category: 'TRAINING', priority: 'HIGH', defaultOwner: 'Training Coordinator', defaultDueDays: 14 },
+    { title: 'Review DoLS tracker', description: 'Confirm all Deprivation of Liberty Safeguards authorisations are current and conditions are being met.', category: 'PROCESS', priority: 'MEDIUM', defaultOwner: 'Registered Manager', defaultDueDays: 7 },
+  ],
+  'medication-management': [
+    { title: 'Upload medicines management policy', description: 'Upload your medicines policy covering storage, administration, controlled drugs, and error reporting.', category: 'POLICY', priority: 'HIGH', defaultOwner: 'Registered Manager', defaultDueDays: 7 },
+    { title: 'Provide recent medicines audit', description: 'Upload your most recent medicines audit with findings, actions taken, and completion evidence.', category: 'EVIDENCE', priority: 'HIGH', defaultOwner: 'Clinical Lead', defaultDueDays: 14 },
+    { title: 'Confirm medicines competency assessments', description: 'Provide staff competency assessment records for medicines administration.', category: 'TRAINING', priority: 'MEDIUM', defaultOwner: 'Training Coordinator', defaultDueDays: 21 },
+  ],
+  'infection-prevention-control': [
+    { title: 'Upload IPC policy', description: 'Upload your infection prevention and control policy with named IPC lead and review date.', category: 'POLICY', priority: 'HIGH', defaultOwner: 'IPC Lead', defaultDueDays: 7 },
+    { title: 'Provide IPC audit evidence', description: 'Upload your most recent IPC audit showing areas covered, findings, and corrective actions.', category: 'EVIDENCE', priority: 'HIGH', defaultOwner: 'IPC Lead', defaultDueDays: 14 },
+    { title: 'Confirm IPC training compliance', description: 'Provide evidence that all staff have completed IPC training within the required period.', category: 'TRAINING', priority: 'MEDIUM', defaultOwner: 'Training Coordinator', defaultDueDays: 21 },
+  ],
+  'risk-assessment': [
+    { title: 'Upload risk assessment framework', description: 'Upload your risk assessment framework showing tools used, review frequencies, and governance links.', category: 'POLICY', priority: 'HIGH', defaultOwner: 'Registered Manager', defaultDueDays: 7 },
+    { title: 'Provide environmental risk assessment', description: 'Upload environmental and operational risk assessments covering premises, staffing, and equipment.', category: 'EVIDENCE', priority: 'MEDIUM', defaultOwner: 'Maintenance Manager', defaultDueDays: 14 },
+    { title: 'Document governance reporting on risk', description: 'Upload evidence of how senior management receives assurance that risk management is effective.', category: 'DOCUMENTATION', priority: 'MEDIUM', defaultOwner: 'Registered Manager', defaultDueDays: 21 },
+  ],
+  'premises-equipment': [
+    { title: 'Upload maintenance schedule', description: 'Upload your planned and reactive maintenance schedule with responsible person and tracking system.', category: 'DOCUMENTATION', priority: 'HIGH', defaultOwner: 'Maintenance Manager', defaultDueDays: 7 },
+    { title: 'Confirm statutory checks are current', description: 'Provide certificates for gas safety, electrical testing, fire risk assessment, and legionella.', category: 'EVIDENCE', priority: 'HIGH', defaultOwner: 'Maintenance Manager', defaultDueDays: 14 },
+    { title: 'Provide equipment servicing records', description: 'Upload servicing records for care equipment (hoists, pressure mattresses, call systems).', category: 'EVIDENCE', priority: 'MEDIUM', defaultOwner: 'Maintenance Manager', defaultDueDays: 21 },
+  ],
+  'deprivation-of-liberty': [
+    { title: 'Upload DoLS tracker', description: 'Upload your DoLS tracker showing all current authorisations, expiry dates, and conditions.', category: 'DOCUMENTATION', priority: 'HIGH', defaultOwner: 'Registered Manager', defaultDueDays: 7 },
+    { title: 'Confirm MCA/DoLS training', description: 'Provide evidence that staff have completed Mental Capacity Act and DoLS training.', category: 'TRAINING', priority: 'HIGH', defaultOwner: 'Training Coordinator', defaultDueDays: 14 },
+    { title: 'Upload example of conditions being met', description: 'Provide evidence showing how DoLS conditions are implemented for a current resident.', category: 'EVIDENCE', priority: 'MEDIUM', defaultOwner: 'Senior Carer', defaultDueDays: 14 },
+  ],
+  'person-centred-care': [
+    { title: 'Upload example care plan', description: 'Upload a care plan showing personalised goals, person involvement, consent, and review dates.', category: 'EVIDENCE', priority: 'HIGH', defaultOwner: 'Senior Carer', defaultDueDays: 7 },
+    { title: 'Provide feedback mechanisms evidence', description: 'Upload evidence of how residents and families provide feedback and how it leads to changes.', category: 'PROCESS', priority: 'MEDIUM', defaultOwner: 'Registered Manager', defaultDueDays: 14 },
+    { title: 'Document care plan monitoring process', description: 'Upload evidence of how care plans are verified as being followed in practice.', category: 'DOCUMENTATION', priority: 'MEDIUM', defaultOwner: 'Quality Lead', defaultDueDays: 21 },
+  ],
+  'consent': [
+    { title: 'Upload consent framework', description: 'Upload your consent policy covering capacity assessment, documentation, and review triggers.', category: 'POLICY', priority: 'HIGH', defaultOwner: 'Registered Manager', defaultDueDays: 7 },
+    { title: 'Provide best interests decision example', description: 'Upload a recent best interests decision record showing process followed and parties consulted.', category: 'EVIDENCE', priority: 'MEDIUM', defaultOwner: 'Senior Carer', defaultDueDays: 14 },
+    { title: 'Confirm consent audit results', description: 'Upload your most recent consent audit findings and actions taken.', category: 'EVIDENCE', priority: 'MEDIUM', defaultOwner: 'Quality Lead', defaultDueDays: 21 },
+  ],
+  'nutrition-hydration': [
+    { title: 'Upload nutrition policy', description: 'Upload your nutrition and hydration policy covering assessment tools, monitoring, and dietary accommodation.', category: 'POLICY', priority: 'HIGH', defaultOwner: 'Registered Manager', defaultDueDays: 7 },
+    { title: 'Provide MUST assessment evidence', description: 'Upload evidence of nutritional screening and assessment for at-risk residents.', category: 'EVIDENCE', priority: 'HIGH', defaultOwner: 'Clinical Lead', defaultDueDays: 14 },
+    { title: 'Document fluid monitoring process', description: 'Upload evidence of fluid and food intake recording for high-risk residents.', category: 'DOCUMENTATION', priority: 'MEDIUM', defaultOwner: 'Senior Carer', defaultDueDays: 14 },
+  ],
+  'staffing': [
+    { title: 'Upload staffing calculation tool', description: 'Upload your staffing dependency tool showing how levels are calculated and reviewed.', category: 'DOCUMENTATION', priority: 'HIGH', defaultOwner: 'Registered Manager', defaultDueDays: 7 },
+    { title: 'Provide supervision and appraisal records', description: 'Upload evidence of supervision cycle completion and appraisal compliance.', category: 'EVIDENCE', priority: 'MEDIUM', defaultOwner: 'Registered Manager', defaultDueDays: 14 },
+    { title: 'Upload training matrix', description: 'Provide your training matrix showing mandatory training compliance rates across all staff.', category: 'TRAINING', priority: 'MEDIUM', defaultOwner: 'Training Coordinator', defaultDueDays: 14 },
+  ],
+  'governance-leadership': [
+    { title: 'Upload governance framework', description: 'Upload your quality assurance framework showing audit schedule, reporting lines, and escalation routes.', category: 'POLICY', priority: 'HIGH', defaultOwner: 'Registered Manager', defaultDueDays: 7 },
+    { title: 'Provide quality assurance audit evidence', description: 'Upload evidence of your governance audit cycle including findings and sustained improvements.', category: 'EVIDENCE', priority: 'HIGH', defaultOwner: 'Quality Lead', defaultDueDays: 14 },
+    { title: 'Document learning from incidents', description: 'Upload evidence showing how learning from incidents and complaints leads to sustained improvement.', category: 'DOCUMENTATION', priority: 'MEDIUM', defaultOwner: 'Registered Manager', defaultDueDays: 21 },
+  ],
+  'dignity-respect': [
+    { title: 'Upload dignity and respect policy', description: 'Upload your policy on treating people with dignity and respect, with examples of embedding in practice.', category: 'POLICY', priority: 'HIGH', defaultOwner: 'Registered Manager', defaultDueDays: 7 },
+    { title: 'Provide observation or audit evidence', description: 'Upload evidence of dignity observations or audits showing how practice is monitored.', category: 'EVIDENCE', priority: 'MEDIUM', defaultOwner: 'Quality Lead', defaultDueDays: 14 },
+    { title: 'Document feedback mechanisms for dignity', description: 'Upload evidence of how feedback from residents on dignity is gathered and acted upon.', category: 'PROCESS', priority: 'MEDIUM', defaultOwner: 'Registered Manager', defaultDueDays: 21 },
+  ],
+};
+
+// Maps document audit finding categories to action categories
+function mapAuditCategoryToActionCategory(auditCategory: string): ActionRecord['category'] {
+  const lower = auditCategory.toLowerCase();
+  if (lower.includes('policy') || lower.includes('procedure')) return 'POLICY';
+  if (lower.includes('training') || lower.includes('competenc')) return 'TRAINING';
+  if (lower.includes('record') || lower.includes('document') || lower.includes('log')) return 'DOCUMENTATION';
+  if (lower.includes('process') || lower.includes('governance') || lower.includes('audit')) return 'PROCESS';
+  return 'EVIDENCE';
+}
+
+function mapAuditPriorityToActionPriority(correction: AuditCorrection): ActionRecord['priority'] {
+  if (correction.priority === 'IMMEDIATE') return 'HIGH';
+  if (correction.priority === 'THIS_WEEK') return 'MEDIUM';
+  return 'LOW';
+}
+
 // SAF 34 regulation key mappings for topics (maps topic IDs to CQC regulation keys)
 const SAF34_TOPIC_REGULATION_KEYS: Record<string, string[]> = {
   'safe-care-treatment': ['CQC:REG:SAFE_CARE', 'CQC:QS:SAFE', 'CQC:REG:SAFEGUARDING', 'CQC:REG:IPC', 'CQC:REG:MEDICINES', 'CQC:REG:PREMISES'],
@@ -906,6 +1010,117 @@ function buildDomainSession(session: {
     ...basePayload,
     sessionHash,
   };
+}
+
+/**
+ * Generate action items for a finding from:
+ * 1. Document audit findings (specific, evidence-based corrections from actual uploaded documents)
+ * 2. Fallback templates (generic per-topic when no audit data exists)
+ *
+ * Document audit actions always come first (they're specific to what the provider actually uploaded).
+ * Template actions fill remaining gaps.
+ */
+async function generateActionsForFinding(
+  ctx: TenantContext,
+  store: InMemoryStore,
+  finding: FindingRecord,
+  topicId: string,
+  facilityId: string
+): Promise<ActionRecord[]> {
+  const actions: ActionRecord[] = [];
+  let sortOrder = 0;
+
+  // 1. Pull document audit findings for this facility
+  const auditResults = await listCompletedAuditsByFacility(ctx.tenantId, facilityId);
+  const auditActions: Array<{ title: string; description: string; category: ActionRecord['category']; priority: ActionRecord['priority']; owner: string; dueDays: number }> = [];
+
+  for (const audit of auditResults) {
+    if (!audit.result) continue;
+    // Create actions from corrections (they have specific actionable guidance + example wording)
+    for (const correction of audit.result.corrections) {
+      const desc = correction.exampleWording
+        ? `${correction.correction}\n\nExample: ${correction.exampleWording}\n\nPolicy reference: ${correction.policyReference}`
+        : `${correction.correction}\n\nPolicy reference: ${correction.policyReference}`;
+      auditActions.push({
+        title: correction.finding.length > 120 ? correction.finding.slice(0, 117) + '...' : correction.finding,
+        description: desc,
+        category: mapAuditCategoryToActionCategory(correction.policyReference),
+        priority: mapAuditPriorityToActionPriority(correction),
+        owner: 'Registered Manager',
+        dueDays: correction.priority === 'IMMEDIATE' ? 3 : correction.priority === 'THIS_WEEK' ? 7 : 30,
+      });
+    }
+  }
+
+  // Create actions from document audit corrections (capped at 10 to avoid overwhelming)
+  const cappedAuditActions = auditActions.slice(0, 10);
+  for (const aa of cappedAuditActions) {
+    try {
+      const record = await store.addAction(ctx, {
+        providerId: finding.providerId,
+        facilityId,
+        findingId: finding.id,
+        topicId,
+        domain: 'CQC',
+        reportingDomain: 'MOCK_SIMULATION',
+        title: aa.title,
+        description: aa.description,
+        category: aa.category,
+        priority: aa.priority,
+        assignedTo: aa.owner,
+        targetCompletionDate: new Date(Date.now() + aa.dueDays * 86400_000).toISOString(),
+        status: 'OPEN',
+        verificationEvidenceIds: [],
+        sortOrder: sortOrder++,
+        createdBy: ctx.actorId,
+        source: 'DOCUMENT_AUDIT',
+      });
+      actions.push(record);
+    } catch (err) {
+      console.error(`[ACTION_PLAN] Failed to create audit-derived action:`, err);
+    }
+  }
+
+  // 2. Add template actions (always — they cover areas docs might not)
+  const templates = ACTION_PLAN_TEMPLATES[topicId] ?? [];
+  for (const template of templates) {
+    try {
+      const record = await store.addAction(ctx, {
+        providerId: finding.providerId,
+        facilityId,
+        findingId: finding.id,
+        topicId,
+        domain: 'CQC',
+        reportingDomain: 'MOCK_SIMULATION',
+        title: template.title,
+        description: template.description,
+        category: template.category,
+        priority: template.priority,
+        assignedTo: template.defaultOwner,
+        targetCompletionDate: new Date(Date.now() + template.defaultDueDays * 86400_000).toISOString(),
+        status: 'OPEN',
+        verificationEvidenceIds: [],
+        sortOrder: sortOrder++,
+        createdBy: ctx.actorId,
+        source: 'TEMPLATE',
+      });
+      actions.push(record);
+    } catch (err) {
+      console.error(`[ACTION_PLAN] Failed to create template action:`, err);
+    }
+  }
+
+  if (actions.length > 0) {
+    await store.appendAuditEvent(ctx, finding.providerId, 'ACTION_PLAN_GENERATED', {
+      findingId: finding.id,
+      topicId,
+      actionCount: actions.length,
+      fromDocumentAudits: cappedAuditActions.length,
+      fromTemplates: templates.length,
+    });
+  }
+
+  return actions;
 }
 
 export function createApp(): { app: express.Express; store: InMemoryStore } {
@@ -1779,6 +1994,13 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       questionsAsked: newFollowUpsUsed,
     });
 
+    // Auto-generate action plan from templates + document audit findings
+    try {
+      await generateActionsForFinding(ctx, store, finding, session.topicId, session.facilityId);
+    } catch (err) {
+      console.error(`[ACTION_PLAN] Failed to generate actions for finding ${finding.id}:`, err);
+    }
+
     if (process.env.ENABLE_AI_INSIGHTS !== 'false') {
       try {
         const job = await aiInsightQueue.add({
@@ -1802,7 +2024,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     }
 
     const reportContext = resolveReportContextForSession(updated);
-    sendWithMetadata(res, updated, reportContext);
+    sendWithMetadata(res, { ...updated, findingId: finding.id }, reportContext);
   });
 
   /**
@@ -1863,6 +2085,8 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       sendError(res, 500, 'Failed to fetch AI insights');
     }
   });
+
+  // ── Old action plan endpoints removed — see new endpoints below findings ──
 
   // ── SAF 34 Quality Statement Coverage ──────────────────────────
   app.get('/v1/providers/:providerId/saf34-coverage', async (req, res) => {
@@ -1959,6 +2183,294 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         'Regulation 12(2)(a): Care and treatment must be provided in a safe way for service users.',
     }, reportContext);
   });
+
+  // ── Action Plans ──────────────────────────────────────────────────────────
+
+  /**
+   * GET /v1/providers/:providerId/findings/:findingId/action-plan
+   *
+   * Retrieve the action plan for a specific finding.
+   * Returns empty actions array if no plan has been generated yet.
+   */
+  app.get('/v1/providers/:providerId/findings/:findingId/action-plan', async (req, res) => {
+    const ctx = getContext(req);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId, findingId: zFindingId }).strip(),
+    });
+    if (!parsed) return;
+    const { providerId, findingId } = parsed.params as { providerId: string; findingId: string };
+
+    const finding = await store.getFindingById(ctx, findingId);
+    if (!finding || finding.providerId !== providerId) {
+      sendError(res, 404, 'Finding not found');
+      return;
+    }
+
+    const actions = store.listActionsByFinding(ctx, findingId);
+    const reportContext = resolveReportContextForFinding(finding);
+
+    sendWithMetadata(res, {
+      findingId,
+      finding,
+      actions,
+      planStatus: computePlanStatus(actions),
+      totalActions: actions.length,
+      completedActions: actions.filter(a => a.status === 'VERIFIED_CLOSED').length,
+      overdueActions: actions.filter(a =>
+        a.targetCompletionDate && a.targetCompletionDate < new Date().toISOString() && a.status !== 'VERIFIED_CLOSED'
+      ).length,
+    }, reportContext);
+  });
+
+  /**
+   * POST /v1/providers/:providerId/findings/:findingId/action-plan/generate
+   *
+   * Auto-generate action plan items from the finding's topic template.
+   * Idempotent: if actions already exist for this finding, returns existing plan.
+   */
+  app.post('/v1/providers/:providerId/findings/:findingId/action-plan/generate', async (req, res) => {
+    const ctx = getContext(req);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId, findingId: zFindingId }).strip(),
+    });
+    if (!parsed) return;
+    const { providerId, findingId } = parsed.params as { providerId: string; findingId: string };
+
+    const finding = await store.getFindingById(ctx, findingId);
+    if (!finding || finding.providerId !== providerId) {
+      sendError(res, 404, 'Finding not found');
+      return;
+    }
+
+    // Idempotent: return existing actions if already generated
+    const existing = store.listActionsByFinding(ctx, findingId);
+    if (existing.length > 0) {
+      const reportContext = resolveReportContextForFinding(finding);
+      sendWithMetadata(res, {
+        findingId,
+        finding,
+        actions: existing,
+        planStatus: computePlanStatus(existing),
+        totalActions: existing.length,
+        completedActions: existing.filter(a => a.status === 'VERIFIED_CLOSED').length,
+        overdueActions: 0,
+        generated: false,
+      }, reportContext);
+      return;
+    }
+
+    const templates = ACTION_PLAN_TEMPLATES[finding.topicId] ?? [];
+    const now = new Date();
+    const actions = templates.map((template, index) => {
+      const dueDate = new Date(now);
+      dueDate.setDate(dueDate.getDate() + template.defaultDueDays);
+      return store.addAction(ctx, {
+        providerId: finding.providerId,
+        facilityId: finding.facilityId,
+        findingId,
+        topicId: finding.topicId,
+        domain: 'CQC',
+        reportingDomain: finding.reportingDomain as 'MOCK_SIMULATION' | 'REGULATORY_HISTORY',
+        title: template.title,
+        description: template.description,
+        category: template.category,
+        priority: template.priority,
+        assignedTo: template.defaultOwner,
+        targetCompletionDate: dueDate.toISOString(),
+        status: 'OPEN',
+        verificationEvidenceIds: [],
+        sortOrder: index,
+        createdBy: ctx.actorId,
+        source: 'TEMPLATE',
+      });
+    });
+
+    const reportContext = resolveReportContextForFinding(finding);
+    sendWithMetadata(res, {
+      findingId,
+      finding,
+      actions,
+      planStatus: computePlanStatus(actions),
+      totalActions: actions.length,
+      completedActions: 0,
+      overdueActions: 0,
+      generated: true,
+    }, reportContext);
+  });
+
+  /**
+   * PATCH /v1/providers/:providerId/actions/:actionId
+   *
+   * Update an action item (status, owner, due date, notes).
+   */
+  app.patch('/v1/providers/:providerId/actions/:actionId', async (req, res) => {
+    const ctx = getContext(req);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId, actionId: zId }).strip(),
+      body: z.object({
+        status: z.enum(['OPEN', 'IN_PROGRESS', 'VERIFIED_CLOSED']).optional(),
+        assignedTo: z.string().trim().optional(),
+        targetCompletionDate: z.string().optional(),
+        notes: z.string().trim().optional(),
+      }).strip(),
+    });
+    if (!parsed) return;
+    const { providerId, actionId: rawActionId } = parsed.params as { providerId: string; actionId: string };
+    const updates = parsed.body as {
+      status?: 'OPEN' | 'IN_PROGRESS' | 'VERIFIED_CLOSED';
+      assignedTo?: string;
+      targetCompletionDate?: string;
+      notes?: string;
+    };
+
+    const actionId = decodeURIComponent(rawActionId);
+    const existing = store.getActionById(ctx, actionId);
+    if (!existing || existing.providerId !== providerId) {
+      sendError(res, 404, 'Action not found');
+      return;
+    }
+
+    // Validate status transitions
+    if (updates.status) {
+      const valid: Record<string, string[]> = {
+        'OPEN': ['IN_PROGRESS'],
+        'IN_PROGRESS': ['VERIFIED_CLOSED'],
+        'VERIFIED_CLOSED': ['OPEN'],
+        'REJECTED': ['OPEN'],
+      };
+      const allowed = valid[existing.status] ?? [];
+      if (!allowed.includes(updates.status)) {
+        sendError(res, 409, `Cannot transition from ${existing.status} to ${updates.status}`);
+        return;
+      }
+    }
+
+    const now = new Date().toISOString();
+    const patchData: Parameters<typeof store.updateAction>[2] = {};
+
+    if (updates.status) patchData.status = updates.status;
+    if (updates.assignedTo !== undefined) patchData.assignedTo = updates.assignedTo;
+    if (updates.targetCompletionDate !== undefined) patchData.targetCompletionDate = updates.targetCompletionDate;
+    if (updates.notes !== undefined) patchData.notes = updates.notes;
+
+    if (updates.status === 'VERIFIED_CLOSED') {
+      patchData.completedAt = now;
+      patchData.verifiedAt = now;
+    } else if (updates.status === 'OPEN' && existing.status === 'VERIFIED_CLOSED') {
+      patchData.completedAt = undefined;
+      patchData.verifiedAt = undefined;
+    }
+
+    const updated = store.updateAction(ctx, actionId, patchData);
+    if (!updated) {
+      sendError(res, 500, 'Failed to update action');
+      return;
+    }
+
+    // Audit the transition
+    if (updates.status) {
+      const eventTypes: Record<string, string> = {
+        'IN_PROGRESS': 'ACTION_STARTED',
+        'VERIFIED_CLOSED': 'ACTION_VERIFIED',
+        'OPEN': existing.status === 'VERIFIED_CLOSED' ? 'ACTION_REOPENED' : 'ACTION_UPDATED',
+      };
+      await store.appendAuditEvent(ctx, providerId, eventTypes[updates.status] ?? 'ACTION_UPDATED', {
+        actionId,
+        findingId: existing.findingId,
+        previousStatus: existing.status,
+        newStatus: updates.status,
+      });
+    }
+
+    const reportContext = {
+      mode: 'MOCK' as const,
+      reportingDomain: ReportingDomain.MOCK_SIMULATION,
+      reportSource: { type: 'mock' as const, id: existing.findingId, asOf: now },
+    };
+    sendWithMetadata(res, updated, reportContext);
+  });
+
+  /**
+   * GET /v1/providers/:providerId/action-plans
+   *
+   * List all action plans for a provider (grouped by finding).
+   * Each plan includes the finding context and action counts.
+   */
+  app.get('/v1/providers/:providerId/action-plans', async (req, res) => {
+    const ctx = getContext(req);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId }).strip(),
+      query: z.object({ facility: zOptionalQueryString }).strip(),
+    });
+    if (!parsed) return;
+    const { providerId } = parsed.params as { providerId: string };
+    const { facility: facilityId } = parsed.query as { facility?: string };
+
+    const allActions = store.listActionsByProvider(ctx, providerId).filter(a =>
+      !facilityId || a.facilityId === facilityId
+    );
+
+    // Group by findingId
+    const byFinding = new Map<string, typeof allActions>();
+    for (const action of allActions) {
+      const existing = byFinding.get(action.findingId) ?? [];
+      existing.push(action);
+      byFinding.set(action.findingId, existing);
+    }
+
+    const plans = await Promise.all(
+      Array.from(byFinding.entries()).map(async ([findingId, actions]) => {
+        const finding = await store.getFindingById(ctx, findingId);
+        return {
+          findingId,
+          topicId: actions[0].topicId,
+          findingTitle: finding?.title ?? findingId,
+          findingSeverity: finding?.severity ?? 'MEDIUM',
+          actions,
+          computedStatus: computePlanStatus(actions),
+          totalActions: actions.length,
+          completedActions: actions.filter(a => a.status === 'VERIFIED_CLOSED').length,
+        };
+      })
+    );
+
+    sendWithMetadata(res, { plans });
+  });
+
+  /**
+   * GET /v1/providers/:providerId/action-plans/summary
+   *
+   * Summary of all action plans across all findings for a provider.
+   * Used by dashboard and roadmap views.
+   */
+  app.get('/v1/providers/:providerId/action-plans/summary', async (req, res) => {
+    const ctx = getContext(req);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ providerId: zProviderId }).strip(),
+      query: z.object({ facility: zOptionalQueryString }).strip(),
+    });
+    if (!parsed) return;
+    const { providerId } = parsed.params as { providerId: string };
+    const { facility: facilityId } = parsed.query as { facility?: string };
+
+    const allActions = store.listActionsByProvider(ctx, providerId).filter(a =>
+      !facilityId || a.facilityId === facilityId
+    );
+    const now = new Date().toISOString();
+
+    sendWithMetadata(res, {
+      totalActions: allActions.length,
+      openActions: allActions.filter(a => a.status === 'OPEN').length,
+      inProgressActions: allActions.filter(a => a.status === 'IN_PROGRESS').length,
+      completedActions: allActions.filter(a => a.status === 'VERIFIED_CLOSED').length,
+      overdueActions: allActions.filter(a =>
+        a.targetCompletionDate && a.targetCompletionDate < now && a.status !== 'VERIFIED_CLOSED'
+      ).length,
+      highPriorityOpen: allActions.filter(a => a.priority === 'HIGH' && a.status !== 'VERIFIED_CLOSED').length,
+    });
+  });
+
+  // ── Evidence ───────────────────────────────────────────────────────────────
 
   app.get('/v1/providers/:providerId/evidence', async (req, res) => {
     const ctx = getContext(req);

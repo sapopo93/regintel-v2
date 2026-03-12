@@ -117,6 +117,49 @@ export interface FindingRecord {
   createdAt: string;
 }
 
+export interface ActionRecord {
+  id: string;
+  tenantId: string;
+  providerId: string;
+  facilityId: string;
+  findingId: string;
+  topicId: string;
+  domain: 'CQC' | 'IMMIGRATION';
+  reportingDomain: 'MOCK_SIMULATION' | 'REGULATORY_HISTORY';
+  title: string;
+  description: string;
+  category: 'POLICY' | 'EVIDENCE' | 'TRAINING' | 'PROCESS' | 'DOCUMENTATION';
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  assignedTo?: string;
+  targetCompletionDate?: string;
+  status: 'OPEN' | 'IN_PROGRESS' | 'PENDING_VERIFICATION' | 'VERIFIED_CLOSED' | 'REJECTED';
+  verificationEvidenceIds: string[];
+  sortOrder: number;
+  createdAt: string;
+  createdBy: string;
+  completedAt?: string;
+  verifiedAt?: string;
+  notes?: string;
+  source: 'TEMPLATE' | 'DOCUMENT_AUDIT';
+}
+
+export function computePlanStatus(actions: ActionRecord[]): 'OPEN' | 'IN_PROGRESS' | 'COMPLETED' | 'OVERDUE' {
+  if (actions.length === 0) return 'OPEN';
+  const now = new Date().toISOString();
+  const allClosed = actions.every(a => a.status === 'VERIFIED_CLOSED');
+  if (allClosed) return 'COMPLETED';
+  const anyOverdue = actions.some(a =>
+    a.targetCompletionDate && a.targetCompletionDate < now &&
+    a.status !== 'VERIFIED_CLOSED'
+  );
+  if (anyOverdue) return 'OVERDUE';
+  const anyActive = actions.some(a =>
+    a.status === 'IN_PROGRESS' || a.status === 'PENDING_VERIFICATION'
+  );
+  if (anyActive) return 'IN_PROGRESS';
+  return 'OPEN';
+}
+
 export interface ExportRecord {
   id: string;
   tenantId: string;
@@ -199,6 +242,10 @@ export class InMemoryStore {
   private findings = new TenantIsolatedStore<FindingRecord>();
   private exports = new TenantIsolatedStore<ExportRecord>();
   private audits = new TenantIsolatedStore<AuditEventRecord[]>();
+
+  private actions = new TenantIsolatedStore<ActionRecord>();
+  private actionsByFinding = new Map<string, string[]>();
+  private actionsByProvider = new Map<string, string[]>();
 
   private cqcAlerts = new TenantIsolatedStore<CqcIntelligenceAlertRecord>();
   private cqcPollState = new TenantIsolatedStore<CqcPollStateRecord>();
@@ -993,6 +1040,79 @@ export class InMemoryStore {
     const updated = [...events, record];
     this.audits.writeByKey(ctx, providerId, updated);
     return record;
+  }
+
+  // ── Actions ─────────────────────────────────────────────────────
+
+  addAction(ctx: TenantContext, input: Omit<ActionRecord, 'id' | 'tenantId' | 'createdAt'>): ActionRecord {
+    const id = `action-${this.nextSequence(ctx, 'action')}`;
+    const actionId = scopeKey(ctx, id);
+    const now = new Date().toISOString();
+
+    const record: ActionRecord = {
+      id: actionId,
+      tenantId: ctx.tenantId,
+      createdAt: now,
+      ...input,
+    };
+
+    this.actions.write(ctx, id, record);
+
+    const byFinding = this.actionsByFinding.get(record.findingId) ?? [];
+    byFinding.push(record.id);
+    this.actionsByFinding.set(record.findingId, byFinding);
+
+    const byProvider = this.actionsByProvider.get(record.providerId) ?? [];
+    byProvider.push(record.id);
+    this.actionsByProvider.set(record.providerId, byProvider);
+
+    return record;
+  }
+
+  /** Direct hydration helper — accepts a pre-built record (used by PrismaStore) */
+  addActionDirect(ctx: TenantContext, record: ActionRecord): void {
+    const unscopedId = unscopeKey(ctx, record.id);
+    if (!unscopedId) return;
+    this.actions.write(ctx, unscopedId, record);
+
+    const byFinding = this.actionsByFinding.get(record.findingId) ?? [];
+    byFinding.push(record.id);
+    this.actionsByFinding.set(record.findingId, byFinding);
+
+    const byProvider = this.actionsByProvider.get(record.providerId) ?? [];
+    byProvider.push(record.id);
+    this.actionsByProvider.set(record.providerId, byProvider);
+  }
+
+  getActionById(ctx: TenantContext, actionId: string): ActionRecord | undefined {
+    return this.actions.readByKey(ctx, actionId);
+  }
+
+  listActionsByFinding(ctx: TenantContext, findingId: string): ActionRecord[] {
+    const ids = this.actionsByFinding.get(findingId) ?? [];
+    return ids.map((id) => this.actions.readByKey(ctx, id))
+      .filter((record): record is ActionRecord => Boolean(record))
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+  }
+
+  listActionsByProvider(ctx: TenantContext, providerId: string): ActionRecord[] {
+    const ids = this.actionsByProvider.get(providerId) ?? [];
+    return ids.map((id) => this.actions.readByKey(ctx, id))
+      .filter((record): record is ActionRecord => Boolean(record));
+  }
+
+  updateAction(ctx: TenantContext, actionId: string, updates: Partial<Pick<ActionRecord,
+    'status' | 'assignedTo' | 'targetCompletionDate' | 'notes' | 'completedAt' | 'verifiedAt' | 'verificationEvidenceIds'
+  >>): ActionRecord | undefined {
+    const existing = this.actions.readByKey(ctx, actionId);
+    if (!existing) return undefined;
+
+    const updated: ActionRecord = { ...existing, ...updates };
+
+    const unscopedId = unscopeKey(ctx, actionId);
+    if (!unscopedId) return undefined;
+    this.actions.write(ctx, unscopedId, updated);
+    return updated;
   }
 
   // ── CQC Intelligence ─────────────────────────────────────────────

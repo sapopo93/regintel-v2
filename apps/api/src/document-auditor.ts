@@ -66,7 +66,7 @@ export interface DocumentAuditSummary {
   result?: DocumentAuditResult;
 }
 
-interface StoredDocumentAudit extends DocumentAuditSummary {
+export interface StoredDocumentAudit extends DocumentAuditSummary {
   facilityId: string;
   providerId: string;
 }
@@ -1125,6 +1125,33 @@ export async function listDocumentAuditSummariesByEvidenceRecordIds(
   } catch (error) {
     console.error('[AUDITOR] Failed to load document audit summaries:', error);
     return new Map();
+  }
+}
+
+export async function listCompletedAuditsByFacility(
+  tenantId: string,
+  facilityId: string
+): Promise<StoredDocumentAudit[]> {
+  const pool = await getPgPool();
+  if (!pool) return [];
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT evidence_record_id, facility_id, provider_id, document_type, original_file_name,
+              status, overall_result, compliance_score, critical_findings, high_findings,
+              audit_result_json, failure_reason, audited_at
+         FROM document_audits
+        WHERE tenant_id = $1
+          AND facility_id = $2
+          AND status = 'COMPLETED'
+        ORDER BY audited_at DESC`,
+      [tenantId, facilityId]
+    );
+
+    return rows.map((row: Record<string, unknown>) => mapDocumentAuditRow(row));
+  } catch (error) {
+    console.error('[AUDITOR] Failed to list document audits by facility:', error);
+    return [];
   }
 }
 

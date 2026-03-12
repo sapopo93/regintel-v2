@@ -26,7 +26,7 @@ import { EmptyState } from '@/components/layout/EmptyState';
 import { MetadataBar } from '@/components/constitutional/MetadataBar';
 import { Building2 } from 'lucide-react';
 import { apiClient } from '@/lib/api/client';
-import type { ProviderDashboardResponse, FacilitySummary, CqcIntelligenceResponse } from '@/lib/api/types';
+import type { ProviderDashboardResponse, FacilitySummary, CqcIntelligenceResponse, ActionPlanSummaryStats } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
 import styles from './page.module.css';
 
@@ -62,6 +62,7 @@ export default function DashboardPage() {
 
   const [data, setData] = useState<ProviderDashboardResponse | null>(null);
   const [intelligence, setIntelligence] = useState<CqcIntelligenceResponse | null>(null);
+  const [actionPlans, setActionPlans] = useState<ActionPlanSummaryStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,11 +76,13 @@ export default function DashboardPage() {
     Promise.all([
       apiClient.getProviderDashboard(providerId),
       apiClient.getCqcIntelligence(providerId).catch(() => null),
+      apiClient.getActionPlanSummary(providerId).catch(() => null),
     ])
-      .then(([dashResponse, intelResponse]) => {
+      .then(([dashResponse, intelResponse, plansResponse]) => {
         validateConstitutionalRequirements(dashResponse, { strict: true });
         setData(dashResponse);
         setIntelligence(intelResponse);
+        setActionPlans(plansResponse);
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -187,6 +190,23 @@ export default function DashboardPage() {
                 {data.totals.totalFindings.critical + data.totals.totalFindings.high + data.totals.totalFindings.medium + data.totals.totalFindings.low}
               </div>
             </div>
+            {actionPlans && actionPlans.totalActions > 0 && (() => {
+              const openActions = (actionPlans.openActions ?? 0) + (actionPlans.inProgressActions ?? 0);
+              const overdue = actionPlans.overdueActions ?? 0;
+              return (
+                <Link href={`/action-plan?provider=${providerId}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                  <div className={styles.totalCard}>
+                    <div className={styles.totalLabel}>Open Actions</div>
+                    <div className={styles.totalValue}>{openActions}</div>
+                    {overdue > 0 && (
+                      <div style={{ fontSize: '0.75rem', color: '#dc2626', marginTop: '0.25rem' }}>
+                        {overdue} overdue
+                      </div>
+                    )}
+                  </div>
+                </Link>
+              );
+            })()}
           </div>
           {data.totals.facilitiesNeedingAttention > 0 && (
             <div className={styles.attentionBanner} data-testid="attention-banner">

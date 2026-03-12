@@ -63,6 +63,8 @@ function normalizeEndpoint(endpoint: string): string {
   normalized = normalized.replace(/\$\{request\.facilityId\}/g, ':facilityId');
   normalized = normalized.replace(/\$\{request\.providerId\}/g, ':providerId');
   normalized = normalized.replace(/\$\{alertId\}/g, ':alertId');
+  // Handle encodeURIComponent-wrapped variables
+  normalized = normalized.replace(/\$\{encodeURIComponent\((\w+)\)\}/g, ':$1');
   normalized = normalized.replace(/\$\{query\}/g, '?facility=:facilityId');
 
   return normalized;

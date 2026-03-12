@@ -337,12 +337,21 @@ export default function MockSessionDetailPage() {
                 A finding has been generated based on your responses. It shows your compliance position, any evidence gaps, and what a real inspector would look for. Use it to prepare before your next CQC visit.
               </p>
               <div className={styles.completedActions}>
-                <Link
-                  href={`/findings?provider=${providerId}&facility=${facilityId}`}
-                  className={styles.primaryActionButton}
-                >
-                  View my results →
-                </Link>
+                {data.findingId ? (
+                  <Link
+                    href={`/action-plan/${encodeURIComponent(data.findingId)}?provider=${providerId}&facility=${facilityId}`}
+                    className={styles.primaryActionButton}
+                  >
+                    View your action plan →
+                  </Link>
+                ) : (
+                  <Link
+                    href={`/findings?provider=${providerId}&facility=${facilityId}`}
+                    className={styles.primaryActionButton}
+                  >
+                    View my results →
+                  </Link>
+                )}
                 <Link
                   href={`/mock-session?provider=${providerId}&facility=${facilityId}`}
                   className={styles.secondaryActionButton}

@@ -179,6 +179,24 @@ Source of truth for UI routes and API endpoints. Update this file when navigatio
         "POST /v1/providers/:providerId/cqc-intelligence/:alertId/dismiss",
         "POST /v1/cqc-intelligence/poll"
       ]
+    },
+    {
+      "route": "/action-plan?provider=:providerId&facility=:facilityId",
+      "status": "LIVE",
+      "endpoints": [
+        "GET /v1/providers/:providerId/overview?facility=:facilityId",
+        "GET /v1/providers/:providerId/action-plans?facility=:facilityId"
+      ]
+    },
+    {
+      "route": "/action-plan/[findingId]?provider=:providerId&facility=:facilityId",
+      "status": "LIVE",
+      "endpoints": [
+        "GET /v1/providers/:providerId/overview?facility=:facilityId",
+        "GET /v1/providers/:providerId/findings/:findingId/action-plan",
+        "POST /v1/providers/:providerId/findings/:findingId/action-plan/generate",
+        "PATCH /v1/providers/:providerId/actions/:actionId"
+      ]
     }
   ],
   "clientEndpoints": [
@@ -211,7 +229,7 @@ Source of truth for UI routes and API endpoints. Update this file when navigatio
     "/v1/facilities/:facilityId/sync-latest-report",
     "/v1/facilities/onboard-bulk",
     "/v1/providers/:providerId/saf34-coverage?facility=:facilityId",
-    "/v1/cqc/locations/${encodeURIComponent(locationId)}",
+    "/v1/cqc/locations/:locationId",
     "/v1/facilities/:facilityId/evidence/${evidenceId}",
     "/v1/evidence/${evidenceRecordId}/document-audit",
     "/v1/providers/:providerId/dashboard",
@@ -219,7 +237,12 @@ Source of truth for UI routes and API endpoints. Update this file when navigatio
     "/v1/facilities/:facilityId/readiness-journey",
     "/v1/providers/:providerId/cqc-intelligence",
     "/v1/providers/:providerId/cqc-intelligence/:alertId/dismiss",
-    "/v1/cqc-intelligence/poll"
+    "/v1/cqc-intelligence/poll",
+    "/v1/providers/:providerId/findings/:findingId/action-plan",
+    "/v1/providers/:providerId/action-plans",
+    "/v1/providers/:providerId/action-plans/summary",
+    "/v1/providers/:providerId/findings/:findingId/action-plan/generate",
+    "/v1/providers/:providerId/actions/:actionId"
   ]
 }
 ```

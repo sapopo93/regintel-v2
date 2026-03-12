@@ -15,6 +15,7 @@ import {
   type FacilityRecord,
   type MockSessionRecord,
   type FindingRecord,
+  type ActionRecord,
   type EvidenceBlobRecord,
   type EvidenceRecordRecord,
   type ExportRecord,
@@ -371,12 +372,47 @@ export class PrismaStore extends InMemoryStore {
         });
       }
 
+      // --- Hydrate Actions ---
+      const dbActions = await (prisma as any).actionV2.findMany();
+      for (const row of dbActions) {
+        const ctx: TenantContext = { tenantId: row.tenantId, actorId: row.createdBy };
+        const record: ActionRecord = {
+          id: row.id,
+          tenantId: row.tenantId,
+          providerId: row.providerId,
+          facilityId: row.facilityId,
+          findingId: row.findingId,
+          topicId: row.topicId,
+          domain: row.domain as ActionRecord['domain'],
+          reportingDomain: row.reportingDomain as ActionRecord['reportingDomain'],
+          title: row.title,
+          description: row.description,
+          category: row.category as ActionRecord['category'],
+          priority: row.priority as ActionRecord['priority'],
+          assignedTo: row.assignedTo ?? undefined,
+          targetCompletionDate: row.targetCompletionDate ?? undefined,
+          status: row.status as ActionRecord['status'],
+          verificationEvidenceIds: row.verificationEvidenceIds ?? [],
+          sortOrder: row.sortOrder,
+          createdAt: row.createdAt,
+          createdBy: row.createdBy,
+          completedAt: row.completedAt ?? undefined,
+          verifiedAt: row.verifiedAt ?? undefined,
+          notes: row.notes ?? undefined,
+          source: (row.source ?? 'TEMPLATE') as ActionRecord['source'],
+        };
+        this.addActionDirect(ctx, record);
+
+        const match = record.id.match(/action-(\d+)$/);
+        if (match) this.advanceCounter(counters, row.tenantId, 'action', parseInt(match[1], 10));
+      }
+
       console.log(
         `[PrismaStore] Hydrated ${dbProviders.length} providers, ${dbFacilities.length} facilities, ` +
         `${dbSessions.length} sessions, ${dbFindings.length} findings, ${dbBlobs.length} blobs, ` +
         `${dbEvidenceRecords.length} evidence records, ${dbExports.length} exports, ` +
         `${dbAuditEvents.length} audit events, ${dbCqcAlerts.length} CQC alerts, ` +
-        `${dbPollStates.length} poll states`
+        `${dbPollStates.length} poll states, ${dbActions.length} actions`
       );
     } catch (err) {
       console.error('[PrismaStore] Hydration failed:', err);
@@ -500,6 +536,27 @@ export class PrismaStore extends InMemoryStore {
     (prisma as any).evidenceRecordV2
       .delete({ where: { id: evidenceRecordId } })
       .catch((err: unknown) => console.error('[PrismaStore] Failed to delete evidence record:', err));
+    return record;
+  }
+
+  // --- Action overrides ---
+
+  override addAction(
+    ctx: TenantContext,
+    input: Parameters<InMemoryStore['addAction']>[1]
+  ): ActionRecord {
+    const record = super.addAction(ctx, input);
+    this.persistAction(record);
+    return record;
+  }
+
+  override updateAction(
+    ctx: TenantContext,
+    actionId: string,
+    updates: Parameters<InMemoryStore['updateAction']>[2]
+  ): ActionRecord | undefined {
+    const record = super.updateAction(ctx, actionId, updates);
+    if (record) this.persistAction(record);
     return record;
   }
 
@@ -799,6 +856,52 @@ export class PrismaStore extends InMemoryStore {
       })
       .catch((err: unknown) =>
         console.error('[PrismaStore] Failed to sync provider stats:', err)
+      );
+  }
+
+  private persistAction(record: ActionRecord): void {
+    const data = {
+      id: record.id,
+      tenantId: record.tenantId,
+      providerId: record.providerId,
+      facilityId: record.facilityId,
+      findingId: record.findingId,
+      topicId: record.topicId,
+      domain: record.domain,
+      reportingDomain: record.reportingDomain,
+      title: record.title,
+      description: record.description,
+      category: record.category,
+      priority: record.priority,
+      assignedTo: record.assignedTo ?? null,
+      targetCompletionDate: record.targetCompletionDate ?? null,
+      status: record.status,
+      verificationEvidenceIds: record.verificationEvidenceIds,
+      sortOrder: record.sortOrder,
+      createdAt: record.createdAt,
+      createdBy: record.createdBy,
+      completedAt: record.completedAt ?? null,
+      verifiedAt: record.verifiedAt ?? null,
+      notes: record.notes ?? null,
+      source: record.source,
+    };
+
+    (prisma as any).actionV2
+      .upsert({
+        where: { id: data.id },
+        create: data,
+        update: {
+          status: data.status,
+          assignedTo: data.assignedTo,
+          targetCompletionDate: data.targetCompletionDate,
+          completedAt: data.completedAt,
+          verifiedAt: data.verifiedAt,
+          verificationEvidenceIds: data.verificationEvidenceIds,
+          notes: data.notes,
+        },
+      })
+      .catch((err: unknown) =>
+        console.error('[PrismaStore] Failed to persist action:', err)
       );
   }
 

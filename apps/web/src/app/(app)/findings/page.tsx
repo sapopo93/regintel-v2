@@ -121,36 +121,48 @@ export default function FindingsPage() {
                     description="Findings are generated during practice inspections."
                     action={
                       <Link href={`/mock-session?provider=${providerId}&facility=${facilityId}`} style={{ color: 'var(--color-primary, #2563eb)' }}>
-                        Start a Practice Inspection
+                        Start a Mock Inspection
                       </Link>
                     }
                   />
                 ) : (
                   data.findings.map((finding) => (
-                    <Link
+                    <div
                       key={finding.id}
-                      href={`/findings/${finding.id}?provider=${providerId}&facility=${facilityId}`}
                       className={`${styles.findingCard} ${finding.origin === 'SYSTEM_MOCK' ? styles.mock : ''}`}
                     >
-                      <div className={styles.findingHeader}>
-                        <h3 className={styles.findingTitle}>{finding.title}</h3>
-                        <div className={styles.badges}>
-                          {finding.origin === 'SYSTEM_MOCK' && (
-                            <div className={styles.originBadge}>{ORIGIN_LABELS.SYSTEM_MOCK}</div>
-                          )}
-                          <div className={styles.severityBadge}>{finding.severity}</div>
+                      <Link
+                        href={`/findings/${finding.id}?provider=${providerId}&facility=${facilityId}`}
+                        style={{ textDecoration: 'none', color: 'inherit' }}
+                      >
+                        <div className={styles.findingHeader}>
+                          <h3 className={styles.findingTitle}>{finding.title}</h3>
+                          <div className={styles.badges}>
+                            {finding.origin === 'SYSTEM_MOCK' && (
+                              <div className={styles.originBadge}>{ORIGIN_LABELS.SYSTEM_MOCK}</div>
+                            )}
+                            <div className={styles.severityBadge}>{finding.severity}</div>
+                          </div>
                         </div>
+                        <p className={styles.findingDescription}>{finding.description}</p>
+                        <div className={styles.findingMeta}>
+                          <span>Topic: {formatTopicId(finding.topicId)}</span>
+                          <span>Regulation: {finding.regulationSectionId}</span>
+                          <span>Risk Score: {finding.compositeRiskScore}</span>
+                        </div>
+                        <div className={styles.findingEvidence}>
+                          Evidence: {finding.evidenceProvided.length} provided, {finding.evidenceMissing.length} missing
+                        </div>
+                      </Link>
+                      <div className={styles.findingActions}>
+                        <Link
+                          href={`/action-plan/${encodeURIComponent(finding.id)}?provider=${providerId}&facility=${facilityId}`}
+                          className={styles.actionPlanLink}
+                        >
+                          View Action Plan →
+                        </Link>
                       </div>
-                      <p className={styles.findingDescription}>{finding.description}</p>
-                      <div className={styles.findingMeta}>
-                        <span>Topic: {formatTopicId(finding.topicId)}</span>
-                        <span>Regulation: {finding.regulationSectionId}</span>
-                        <span>Risk Score: {finding.compositeRiskScore}</span>
-                      </div>
-                      <div className={styles.findingEvidence}>
-                        Evidence: {finding.evidenceProvided.length} provided, {finding.evidenceMissing.length} missing
-                      </div>
-                    </Link>
+                    </div>
                   ))
                 )}
               </div>

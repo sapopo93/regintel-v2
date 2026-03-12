@@ -163,6 +163,27 @@ export default function EvidencePage() {
 
   useEffect(loadData, [providerId, facilityId, ready]);
 
+  // Poll silently while any audit is in-progress so the badge updates without a manual refresh
+  const hasPendingAudits = (data?.evidence ?? []).some(
+    (e) => e.documentAudit?.status === 'PENDING'
+  );
+  useEffect(() => {
+    if (!hasPendingAudits || !ready || !providerId || !facilityId) return;
+    const id = setInterval(async () => {
+      try {
+        const [overviewRes, evidenceRes] = await Promise.all([
+          apiClient.getProviderOverview(providerId, facilityId),
+          apiClient.getEvidence(providerId, facilityId),
+        ]);
+        setOverview(overviewRes);
+        setData(evidenceRes);
+      } catch {
+        // Silently swallow poll errors — loadData handles real errors
+      }
+    }, 5_000);
+    return () => clearInterval(id);
+  }, [hasPendingAudits, ready, providerId, facilityId]);
+
   const handleUpload = async () => {
     if (!uploadFile || !facilityId) return;
     setUploading(true);

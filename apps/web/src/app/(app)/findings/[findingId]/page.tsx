@@ -220,6 +220,12 @@ export default function FindingDetailPage() {
             >
               ← Back to Findings
             </Link>
+            <Link
+              href={`/action-plan/${encodeURIComponent(findingId)}?provider=${providerId}&facility=${facilityId}`}
+              className={styles.actionPlanButton}
+            >
+              View Action Plan →
+            </Link>
           </div>
         </main>
       </div>

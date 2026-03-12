@@ -47,6 +47,10 @@ import type {
   ReadinessJourneyResponse,
   CqcIntelligenceResponse,
   CqcPollResponse,
+  ActionPlanResponse,
+  ActionPlansListResponse,
+  ActionPlanSummaryStats,
+  ActionRecord,
 } from './types';
 
 /**
@@ -644,6 +648,42 @@ export class ApiClient {
     return this.fetch<CqcPollResponse>(
       `/v1/cqc-intelligence/poll`,
       { method: 'POST' }
+    );
+  }
+
+  // ── Action Plans ──────────────────────────────────────────────────
+
+  async getActionPlan(providerId: string, findingId: string): Promise<ActionPlanResponse> {
+    return this.fetch<ActionPlanResponse>(
+      `/v1/providers/${providerId}/findings/${encodeURIComponent(findingId)}/action-plan`
+    );
+  }
+
+  async listActionPlans(providerId: string, facilityId?: string): Promise<ActionPlansListResponse> {
+    const query = facilityId ? `?facility=${encodeURIComponent(facilityId)}` : '';
+    return this.fetch<ActionPlansListResponse>(`/v1/providers/${providerId}/action-plans${query}`);
+  }
+
+  async getActionPlanSummary(providerId: string, facilityId?: string): Promise<ActionPlanSummaryStats> {
+    const query = facilityId ? `?facility=${encodeURIComponent(facilityId)}` : '';
+    return this.fetch<ActionPlanSummaryStats>(`/v1/providers/${providerId}/action-plans/summary${query}`);
+  }
+
+  async generateActionPlan(providerId: string, findingId: string): Promise<ActionPlanResponse> {
+    return this.fetch<ActionPlanResponse>(
+      `/v1/providers/${providerId}/findings/${encodeURIComponent(findingId)}/action-plan/generate`,
+      { method: 'POST' }
+    );
+  }
+
+  async updateAction(
+    providerId: string,
+    actionId: string,
+    updates: { status?: string; assignedTo?: string; targetCompletionDate?: string; notes?: string }
+  ): Promise<ActionRecord & ConstitutionalMetadata> {
+    return this.fetch<ActionRecord & ConstitutionalMetadata>(
+      `/v1/providers/${providerId}/actions/${encodeURIComponent(actionId)}`,
+      { method: 'PATCH', body: JSON.stringify(updates) }
     );
   }
 }

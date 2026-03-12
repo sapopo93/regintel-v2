@@ -446,6 +446,40 @@ model CqcIntelligencePollStateV2 {
   @@map("cqc_intelligence_poll_state_v2")
 }
 
+// ── Action Plans (V2 write-through cache) ──
+
+model ActionV2 {
+  id                      String   @id
+  tenantId                String   @map("tenant_id")
+  providerId              String   @map("provider_id")
+  facilityId              String   @map("facility_id")
+  findingId               String   @map("finding_id")
+  topicId                 String   @map("topic_id")
+  domain                  String   @default("CQC")
+  reportingDomain         String   @map("reporting_domain") @default("MOCK_SIMULATION")
+  description             String
+  title                   String
+  category                String
+  priority                String
+  assignedTo              String?  @map("assigned_to")
+  targetCompletionDate    String?  @map("target_completion_date")
+  status                  String   @default("OPEN")
+  verificationEvidenceIds String[] @map("verification_evidence_ids") @default([])
+  sortOrder               Int      @default(0) @map("sort_order")
+  createdAt               String   @map("created_at")
+  createdBy               String   @map("created_by")
+  completedAt             String?  @map("completed_at")
+  verifiedAt              String?  @map("verified_at")
+  notes                   String?
+  source                  String   @default("TEMPLATE")
+
+  @@index([tenantId])
+  @@index([providerId])
+  @@index([facilityId])
+  @@index([findingId])
+  @@map("actions_v2")
+}
+
 // ── Usage Events (billing hooks for future pricing) ──
 
 model UsageEventV2 {

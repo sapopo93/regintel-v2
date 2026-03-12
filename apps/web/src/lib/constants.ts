@@ -79,6 +79,7 @@ export const SIDEBAR_GROUPS: readonly SidebarGroup[] = [
       { id: 'topics', label: 'Inspection Areas', href: '/topics' },
       { id: 'mock-session', label: 'Mock Inspections', href: '/mock-session' },
       { id: 'findings', label: 'Findings', href: '/findings' },
+      { id: 'action-plans', label: 'Action Plans', href: '/action-plan' },
       { id: 'evidence', label: 'Evidence', href: '/evidence' },
       { id: 'document-audit', label: 'Document Audit', href: '/document-audit' },
       { id: 'exports', label: 'Exports', href: '/exports' },

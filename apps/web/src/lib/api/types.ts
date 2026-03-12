@@ -98,6 +98,7 @@ export interface MockInspectionSession {
   maxFollowUps: number;
   createdAt: string;
   completedAt?: string;
+  findingId?: string;
   topicCatalogVersion: string;
   topicCatalogHash: string;
   prsLogicProfilesVersion: string;
@@ -720,4 +721,65 @@ export interface CqcPollResponse extends ConstitutionalMetadata {
   alertsGenerated: number;
   locationsProcessed: number;
   locationsSkipped: number;
+}
+
+/**
+ * Action Plans
+ */
+export interface ActionRecord {
+  id: string;
+  findingId: string;
+  topicId: string;
+  domain: 'CQC' | 'IMMIGRATION';
+  reportingDomain: 'MOCK_SIMULATION' | 'REGULATORY_HISTORY';
+  title: string;
+  description: string;
+  category: 'POLICY' | 'EVIDENCE' | 'TRAINING' | 'PROCESS' | 'DOCUMENTATION';
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  assignedTo?: string;
+  targetCompletionDate?: string;
+  status: 'OPEN' | 'IN_PROGRESS' | 'VERIFIED_CLOSED' | 'REJECTED';
+  verificationEvidenceIds: string[];
+  sortOrder: number;
+  createdAt: string;
+  createdBy: string;
+  completedAt?: string;
+  verifiedAt?: string;
+  notes?: string;
+  source: 'TEMPLATE' | 'DOCUMENT_AUDIT';
+}
+
+export type PlanStatus = 'OPEN' | 'IN_PROGRESS' | 'COMPLETED' | 'OVERDUE';
+
+export interface ActionPlanResponse extends ConstitutionalMetadata {
+  findingId: string;
+  finding: InspectionFinding;
+  actions: ActionRecord[];
+  planStatus: PlanStatus;
+  totalActions: number;
+  completedActions: number;
+  overdueActions: number;
+  generated?: boolean;
+}
+
+export interface ActionPlanSummaryStats extends ConstitutionalMetadata {
+  totalActions: number;
+  openActions: number;
+  inProgressActions: number;
+  completedActions: number;
+  overdueActions: number;
+  highPriorityOpen: number;
+}
+
+export interface ActionPlansListResponse extends ConstitutionalMetadata {
+  plans: ActionPlanSummary[];
+}
+
+export interface ActionPlanSummary {
+  findingId: string;
+  topicId: string;
+  actions: ActionRecord[];
+  computedStatus: PlanStatus;
+  totalActions: number;
+  completedActions: number;
 }
