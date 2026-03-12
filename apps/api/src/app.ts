@@ -14,6 +14,7 @@ import {
   serializeCsvExport,
   type CsvActionRecord,
   type CsvEvidenceRecord,
+  type PdfFindingEnrichment,
 } from '@regintel/domain/readiness-export';
 import { renderFindingsPdf, renderInspectorPackPdf, renderBlueOceanBoardPdf, renderBlueOceanAuditPdf } from './renderers/pdf-renderer';
 import { renderFindingsDocx, renderInspectorPackDocx, renderBlueOceanBoardDocx, renderBlueOceanAuditDocx } from './renderers/docx-renderer';
@@ -3529,19 +3530,25 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       return;
     }
 
-    const session = (await store.listSessionsByProvider(ctx, providerId))
+    // Gather ALL completed sessions for this facility (not just the first one)
+    const completedSessions = (await store.listSessionsByProvider(ctx, providerId))
       .filter((item) => item.facilityId === facilityId)
-      .find((item) => item.status === 'COMPLETED');
+      .filter((item) => item.status === 'COMPLETED')
+      .sort((a, b) => (b.completedAt ?? b.createdAt).localeCompare(a.completedAt ?? a.createdAt));
 
-    if (!session) {
+    if (completedSessions.length === 0) {
       sendError(res, 409, 'No completed session available for export', facilityReportContext);
       return;
     }
 
+    // Use the most recent session for metadata but collect findings from ALL sessions
+    const session = completedSessions[0];
     const reportContext = resolveReportContextForSession(session);
 
+    const completedSessionIds = new Set(completedSessions.map((s) => s.sessionId));
     const findings = (await store.listFindingsByProvider(ctx, providerId))
-      .filter((finding) => finding.sessionId === session.sessionId)
+      .filter((finding) => completedSessionIds.has(finding.sessionId))
+      .filter((finding) => finding.facilityId === facilityId)
       .map<DraftFinding>((finding) => ({
         id: finding.id,
         sessionId: finding.sessionId,
@@ -3603,7 +3610,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       // TODO: Evidence coverage records not yet available per-topic from store
       const csvEvidenceRecords: CsvEvidenceRecord[] = [];
 
-      const csvExport = generateCsvExport(domainSession, metadata, csvActions, csvEvidenceRecords);
+      const csvExport = generateCsvExport(domainSession, metadata, csvActions, csvEvidenceRecords, completedSessionIds);
       content = serializeCsvExport(csvExport);
     } else if (safeFormat === 'BLUE_OCEAN_BOARD' || safeFormat === 'BLUE_OCEAN_AUDIT') {
       const inspectionFindings = findings.map((f) => {
@@ -3712,8 +3719,26 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
           : serializeBlueOceanBoardMarkdown(blueOceanReport);
       }
     } else {
-      // PDF (mock findings)
-      const pdfExport = generatePdfExport(domainSession, metadata);
+      // PDF (mock findings) — enrich with evidence status and actions
+      const pdfEnrichments: PdfFindingEnrichment[] = [];
+      const allStoreFindings = (await store.listFindingsByProvider(ctx, providerId))
+        .filter((f) => completedSessionIds.has(f.sessionId) && f.facilityId === facilityId);
+      for (const sf of allStoreFindings) {
+        const findingActions = store.listActionsByFinding(ctx, sf.id);
+        pdfEnrichments.push({
+          findingId: sf.id,
+          evidenceRequired: sf.evidenceRequired,
+          evidenceProvided: sf.evidenceProvided,
+          evidenceMissing: sf.evidenceMissing,
+          actions: findingActions.map((a) => ({
+            description: a.description,
+            status: a.status,
+            ownerRole: a.assignedTo ?? '',
+            targetCompletionDate: a.targetCompletionDate ?? '',
+          })),
+        });
+      }
+      const pdfExport = generatePdfExport(domainSession, metadata, completedSessionIds, pdfEnrichments);
       if (outFmt === 'docx') {
         const rendered = await renderFindingsDocx(pdfExport);
         content = rendered.buffer.toString('base64');

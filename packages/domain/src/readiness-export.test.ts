@@ -435,7 +435,7 @@ describe('ux:report_export', () => {
     });
 
     it('PDF with many findings paginates correctly with metadata on every page', () => {
-      // Create session with 12 findings (should produce 3 pages at 5 per page)
+      // Create session with 12 findings (should produce 4 pages at 3 per page)
       const manyFindings: DraftFinding[] = Array.from({ length: 12 }, (_, i) => ({
         id: `finding-${String(i).padStart(3, '0')}`,
         sessionId: 'session-test-001',
@@ -455,10 +455,11 @@ describe('ux:report_export', () => {
       const metadata = createTestMetadata();
       const pdfExport = generatePdfExport(session, metadata);
 
-      expect(pdfExport.pages.length).toBe(3);
-      expect(pdfExport.pages[0].findings.length).toBe(5);
-      expect(pdfExport.pages[1].findings.length).toBe(5);
-      expect(pdfExport.pages[2].findings.length).toBe(2);
+      expect(pdfExport.pages.length).toBe(4);
+      expect(pdfExport.pages[0].findings.length).toBe(3);
+      expect(pdfExport.pages[1].findings.length).toBe(3);
+      expect(pdfExport.pages[2].findings.length).toBe(3);
+      expect(pdfExport.pages[3].findings.length).toBe(3);
 
       // Every page has metadata
       for (const page of pdfExport.pages) {

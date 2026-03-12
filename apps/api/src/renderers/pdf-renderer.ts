@@ -116,7 +116,39 @@ export async function renderFindingsPdf(pdfExport: PdfExport): Promise<RenderOut
       doc.moveDown(0.2);
 
       doc.fontSize(9).fillColor('#333333').text(finding.description, { width: 490 });
-      doc.moveDown(1);
+      doc.moveDown(0.3);
+
+      // Evidence status
+      if (finding.evidenceRequired.length > 0 || finding.evidenceProvided.length > 0 || finding.evidenceMissing.length > 0) {
+        doc.fontSize(8).fillColor('#1a237e').text('Evidence Status:', { underline: true });
+        if (finding.evidenceProvided.length > 0) {
+          doc.fontSize(8).fillColor('#2e7d32').text(`  Provided: ${finding.evidenceProvided.join(', ')}`, { indent: 5 });
+        }
+        if (finding.evidenceMissing.length > 0) {
+          doc.fontSize(8).fillColor('#d32f2f').text(`  Missing: ${finding.evidenceMissing.join(', ')}`, { indent: 5 });
+        }
+        if (finding.evidenceRequired.length > 0) {
+          doc.fontSize(8).fillColor('#555555').text(`  Required: ${finding.evidenceRequired.join(', ')}`, { indent: 5 });
+        }
+        doc.moveDown(0.2);
+      }
+
+      // Actions
+      if (finding.actions.length > 0) {
+        doc.fontSize(8).fillColor('#1a237e').text(`Actions (${finding.actions.length}):`, { underline: true });
+        for (const action of finding.actions) {
+          const parts = [
+            action.description,
+            action.ownerRole ? `Owner: ${action.ownerRole}` : null,
+            action.targetCompletionDate ? `Due: ${formatDate(action.targetCompletionDate)}` : null,
+            `Status: ${action.status}`,
+          ].filter(Boolean).join(' | ');
+          doc.fontSize(7).fillColor('#333333').text(`  • ${parts}`, { indent: 5, width: 480 });
+        }
+        doc.moveDown(0.2);
+      }
+
+      doc.moveDown(0.8);
 
       if (doc.y > doc.page.height - 100) break;
     }

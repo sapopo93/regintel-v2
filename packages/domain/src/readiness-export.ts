@@ -108,6 +108,15 @@ export interface PdfExportPage {
     impactScore: number;
     likelihoodScore: number;
     compositeRiskScore: number;
+    evidenceRequired: string[];
+    evidenceProvided: string[];
+    evidenceMissing: string[];
+    actions: Array<{
+      description: string;
+      status: string;
+      ownerRole: string;
+      targetCompletionDate: string;
+    }>;
   }>;
 }
 
@@ -148,15 +157,20 @@ export class SessionNotCompletedError extends Error {
 /**
  * Validates that all findings are from MOCK_SIMULATION domain.
  * Throws RegulatoryHistoryExportError if any finding violates this invariant.
+ *
+ * When validSessionIds is provided, findings from any of those sessions are allowed.
+ * This supports multi-session exports where findings are aggregated across sessions.
  */
 export function validateExportSafety(
   findings: DraftFinding[],
-  session: MockInspectionSession
+  session: MockInspectionSession,
+  validSessionIds?: Set<string>
 ): void {
   // DraftFindings from MockInspectionSession are by definition SYSTEM_MOCK/MOCK_SIMULATION.
   // This structural check ensures no contamination has occurred.
+  const allowedIds = validSessionIds ?? new Set([session.id]);
   for (const finding of findings) {
-    if (finding.sessionId !== session.id) {
+    if (!allowedIds.has(finding.sessionId)) {
       throw new RegulatoryHistoryExportError(finding.id);
     }
   }
@@ -218,13 +232,14 @@ export function generateCsvExport(
   session: MockInspectionSession,
   metadata: ExportMetadata,
   actions?: CsvActionRecord[],
-  evidenceRecords?: CsvEvidenceRecord[]
+  evidenceRecords?: CsvEvidenceRecord[],
+  validSessionIds?: Set<string>
 ): CsvExport {
   if (session.status !== 'COMPLETED') {
     throw new SessionNotCompletedError(session.id, session.status);
   }
 
-  validateExportSafety(session.draftFindings, session);
+  validateExportSafety(session.draftFindings, session, validSessionIds);
 
   const sortedFindings = sortFindingsDeterministic(session.draftFindings);
 
@@ -324,7 +339,23 @@ export function generateCsvExport(
 /**
  * Maximum findings per PDF page.
  */
-const FINDINGS_PER_PAGE = 5;
+const FINDINGS_PER_PAGE = 3;
+
+/**
+ * Enrichment data for PDF findings (evidence status and actions per finding).
+ */
+export interface PdfFindingEnrichment {
+  findingId: string;
+  evidenceRequired: string[];
+  evidenceProvided: string[];
+  evidenceMissing: string[];
+  actions: Array<{
+    description: string;
+    status: string;
+    ownerRole: string;
+    targetCompletionDate: string;
+  }>;
+}
 
 /**
  * Generates PDF export from a completed mock inspection session.
@@ -337,15 +368,25 @@ const FINDINGS_PER_PAGE = 5;
  */
 export function generatePdfExport(
   session: MockInspectionSession,
-  metadata: ExportMetadata
+  metadata: ExportMetadata,
+  validSessionIds?: Set<string>,
+  enrichments?: PdfFindingEnrichment[]
 ): PdfExport {
   if (session.status !== 'COMPLETED') {
     throw new SessionNotCompletedError(session.id, session.status);
   }
 
-  validateExportSafety(session.draftFindings, session);
+  validateExportSafety(session.draftFindings, session, validSessionIds);
 
   const sortedFindings = sortFindingsDeterministic(session.draftFindings);
+
+  // Build enrichment lookup
+  const enrichmentMap = new Map<string, PdfFindingEnrichment>();
+  if (enrichments) {
+    for (const e of enrichments) {
+      enrichmentMap.set(e.findingId, e);
+    }
+  }
 
   // Paginate findings
   const pages: PdfExportPage[] = [];
@@ -366,18 +407,25 @@ export function generatePdfExport(
       topicCatalogSha256: metadata.topicCatalogSha256,
       prsLogicProfilesVersion: metadata.prsLogicProfilesVersion,
       prsLogicProfilesSha256: metadata.prsLogicProfilesSha256,
-      findings: pageFindings.map((finding) => ({
-        findingId: finding.id,
-        topicId: finding.topicId,
-        regulationId: finding.regulationId,
-        regulationSectionId: finding.regulationSectionId,
-        title: finding.title,
-        description: finding.description,
-        severity: finding.severity,
-        impactScore: finding.impactScore,
-        likelihoodScore: finding.likelihoodScore,
-        compositeRiskScore: computeCompositeRiskScore(finding.impactScore, finding.likelihoodScore),
-      })),
+      findings: pageFindings.map((finding) => {
+        const enrichment = enrichmentMap.get(finding.id);
+        return {
+          findingId: finding.id,
+          topicId: finding.topicId,
+          regulationId: finding.regulationId,
+          regulationSectionId: finding.regulationSectionId,
+          title: finding.title,
+          description: finding.description,
+          severity: finding.severity,
+          impactScore: finding.impactScore,
+          likelihoodScore: finding.likelihoodScore,
+          compositeRiskScore: computeCompositeRiskScore(finding.impactScore, finding.likelihoodScore),
+          evidenceRequired: enrichment?.evidenceRequired ?? [],
+          evidenceProvided: enrichment?.evidenceProvided ?? [],
+          evidenceMissing: enrichment?.evidenceMissing ?? [],
+          actions: enrichment?.actions ?? [],
+        };
+      }),
     });
   }
 

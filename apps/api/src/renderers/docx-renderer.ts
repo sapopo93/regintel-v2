@@ -203,6 +203,36 @@ export async function renderFindingsDocx(pdfExport: PdfExport): Promise<RenderOu
         bodyText(`Risk Score: ${finding.compositeRiskScore} | Regulation: ${finding.regulationId} § ${finding.regulationSectionId}`, '555555')
       );
       children.push(bodyText(finding.description));
+
+      // Evidence status
+      if (finding.evidenceProvided.length > 0) {
+        children.push(bulletItem(`Evidence Provided: ${finding.evidenceProvided.join(', ')}`, '2E7D32'));
+      }
+      if (finding.evidenceMissing.length > 0) {
+        children.push(bulletItem(`Evidence Missing: ${finding.evidenceMissing.join(', ')}`, 'D32F2F'));
+      }
+      if (finding.evidenceRequired.length > 0) {
+        children.push(bulletItem(`Evidence Required: ${finding.evidenceRequired.join(', ')}`, '555555'));
+      }
+
+      // Actions
+      if (finding.actions.length > 0) {
+        children.push(
+          new Paragraph({
+            children: [new TextRun({ text: `Actions (${finding.actions.length}):`, bold: true, size: 18, color: '1A237E' })],
+            spacing: { before: 60, after: 40 },
+          })
+        );
+        for (const action of finding.actions) {
+          const parts = [
+            action.description,
+            action.ownerRole ? `Owner: ${action.ownerRole}` : null,
+            action.targetCompletionDate ? `Due: ${formatDate(action.targetCompletionDate)}` : null,
+            `Status: ${action.status}`,
+          ].filter(Boolean).join(' | ');
+          children.push(bulletItem(parts));
+        }
+      }
     }
   }
 
