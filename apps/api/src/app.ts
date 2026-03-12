@@ -56,6 +56,7 @@ import {
   generateInspectorEvidencePack,
   serializeInspectorPackMarkdown,
   type EvidenceInput,
+  type FindingInput,
 } from '@regintel/domain/inspector-evidence-pack';
 import { fetchCqcLocations, fetchCqcLocationDetail, getNoteworthy } from '@regintel/domain/cqc-changes-client';
 import { ACTION_PLAN_TEMPLATES } from './action-plan-templates';
@@ -3288,11 +3289,29 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         };
       });
 
+      // Fetch mock inspection findings for this facility to populate QS coverage
+      const allFindings = (await store.listFindingsByProvider(ctx, providerId))
+        .filter((finding) => finding.facilityId === facilityId);
+
+      const findingInputs: FindingInput[] = allFindings.map((finding) => {
+        const topic = TOPICS.find((t) => t.id === finding.topicId);
+        return {
+          findingId: finding.id,
+          topicId: finding.topicId,
+          topicTitle: topic?.title ?? finding.topicId,
+          severity: finding.severity,
+          title: finding.title,
+          description: finding.description,
+          createdAt: finding.createdAt,
+        };
+      });
+
       const pack = generateInspectorEvidencePack({
         facilityName: facility.facilityName,
         facilityId: facility.id,
         inspectionStatus: facility.inspectionStatus,
         evidenceInputs,
+        findingInputs,
         metadata: {
           topicCatalogVersion: metadata.topicCatalogVersion,
           topicCatalogHash: metadata.topicCatalogHash,

@@ -19,7 +19,7 @@ import {
 
 export type AuditStatus = 'PASS' | 'NEEDS_IMPROVEMENT' | 'CRITICAL_GAPS' | 'PENDING' | 'NOT_AUDITED';
 export type SAFRating = 'MET' | 'PARTIALLY_MET' | 'NOT_MET' | 'NOT_APPLICABLE';
-export type MappingSource = 'audit-verified' | 'type-inferred';
+export type MappingSource = 'audit-verified' | 'type-inferred' | 'finding-inferred';
 
 export interface EvidenceItem {
   evidenceId: string;
@@ -177,6 +177,48 @@ export const QS_KEYWORD_PATTERNS: Record<string, RegExp[]> = {
 };
 
 /**
+ * Topic-to-Quality-Statement mapping.
+ * Maps mock inspection topic IDs to the SAF34 quality statements they cover.
+ * Used to infer QS coverage from mock inspection findings.
+ */
+export const TOPIC_TO_QS: Record<string, string[]> = {
+  'safe-care-treatment':       ['S1', 'S2', 'S4', 'S9'],
+  'safeguarding':              ['S3'],
+  'medication-management':     ['S8'],
+  'infection-prevention-control': ['S7'],
+  'risk-assessment':           ['S4', 'S1'],
+  'premises-equipment':        ['S5', 'W7'],
+  'deprivation-of-liberty':    ['E7'],
+  'person-centred-care':       ['E1', 'R1', 'C2'],
+  'consent':                   ['E6'],
+  'nutrition-hydration':       ['E2', 'E4'],
+  'staff-training-development': ['S6', 'E8'],
+  'supervision-appraisal':     ['E8'],
+  'mental-capacity-act':       ['E6', 'E7'],
+  'dignity-respect':           ['C1'],
+  'service-user-involvement':  ['C2', 'R4'],
+  'emotional-social-wellbeing': ['C3'],
+  'end-of-life-care':          ['C4'],
+  'complaints-handling':       ['R4'],
+  'care-planning-review':      ['R1'],
+  'meeting-individual-needs':  ['R1', 'R3'],
+  'transitions-discharge':     ['R2'],
+  'equality-diversity':        ['E9'],
+  'governance-oversight':      ['W1', 'W4'],
+  'quality-assurance':         ['W6', 'E5'],
+  'staff-recruitment':         ['S6', 'W8'],
+  'fit-proper-persons':        ['W2'],
+  'whistleblowing-openness':   ['W3'],
+  'notifications-cqc':         ['W4'],
+  'financial-sustainability':  ['W4'],
+  'records-management':        ['W4'],
+  'staff-wellbeing':           ['E8'],
+  'learning-from-incidents':   ['S1', 'W6'],
+  'partnership-working':       ['W5'],
+  'staffing':                  ['S6', 'E3'],
+};
+
+/**
  * Input shape for evidence items passed to the pack generator.
  */
 export interface EvidenceInput {
@@ -200,15 +242,35 @@ export interface EvidenceInput {
 }
 
 /**
- * Map evidence items to quality statements using two-tier strategy.
+ * Input shape for mock inspection findings passed to the pack generator.
+ * Findings map to quality statements via their topicId.
+ */
+export interface FindingInput {
+  findingId: string;
+  topicId: string;
+  topicTitle: string;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  title: string;
+  description: string;
+  createdAt: string;
+}
+
+/**
+ * Map evidence items and findings to quality statements.
  *
- * Tier 1: Completed audit with SAF statement ratings (MET/PARTIALLY_MET → mapped)
- * Tier 2: For unaudited evidence, use EVIDENCE_TYPE_TO_QS fallback
+ * Evidence mapping (three tiers):
+ *   Tier 1: Completed audit with SAF statement ratings (MET/PARTIALLY_MET → mapped)
+ *   Tier 2: For unaudited evidence, use EVIDENCE_TYPE_TO_QS fallback
+ *   Tier 3: Keyword fallback for types with no QS mapping
+ *
+ * Findings mapping:
+ *   Maps findings to QS via TOPIC_TO_QS (topic ID → quality statement IDs)
  *
  * Returns a map from QS id to array of EvidenceItems.
  */
 export function mapEvidenceToQualityStatements(
-  evidenceInputs: EvidenceInput[]
+  evidenceInputs: EvidenceInput[],
+  findingInputs?: FindingInput[]
 ): { qsMap: Map<string, EvidenceItem[]>; awaitingAuditMap: Map<string, EvidenceItem[]> } {
   const qsMap = new Map<string, EvidenceItem[]>();
   const awaitingAuditMap = new Map<string, EvidenceItem[]>();
@@ -295,6 +357,30 @@ export function mapEvidenceToQualityStatements(
             safRating: null,
             mappingSource: 'type-inferred',
             expiresAt: evidence.expiresAt ?? null,
+          });
+        }
+      }
+    }
+  }
+
+  // Map findings to quality statements via topic → QS mapping
+  if (findingInputs) {
+    for (const finding of findingInputs) {
+      const qsIds = TOPIC_TO_QS[finding.topicId] ?? [];
+      for (const qsId of qsIds) {
+        const items = qsMap.get(qsId);
+        if (items) {
+          items.push({
+            evidenceId: finding.findingId,
+            fileName: `Mock Inspection: ${finding.topicTitle}`,
+            evidenceType: 'MOCK_FINDING',
+            uploadedAt: finding.createdAt,
+            description: `[${finding.severity}] ${finding.title}`,
+            auditStatus: 'NOT_AUDITED',
+            complianceScore: null,
+            safRating: null,
+            mappingSource: 'finding-inferred',
+            expiresAt: null,
           });
         }
       }
@@ -466,6 +552,7 @@ export interface GeneratePackInput {
   facilityId: string;
   inspectionStatus: string;
   evidenceInputs: EvidenceInput[];
+  findingInputs?: FindingInput[];
   metadata: {
     topicCatalogVersion: string;
     topicCatalogHash: string;
@@ -476,10 +563,10 @@ export interface GeneratePackInput {
 }
 
 /**
- * Assemble an InspectorEvidencePack from evidence data.
+ * Assemble an InspectorEvidencePack from evidence and findings data.
  */
 export function generateInspectorEvidencePack(input: GeneratePackInput): InspectorEvidencePack {
-  const { qsMap, awaitingAuditMap } = mapEvidenceToQualityStatements(input.evidenceInputs);
+  const { qsMap, awaitingAuditMap } = mapEvidenceToQualityStatements(input.evidenceInputs, input.findingInputs);
   const outstandingReadiness = detectOutstandingIndicators(input.evidenceInputs);
 
   const keyQuestionOrder: KeyQuestion[] = ['SAFE', 'EFFECTIVE', 'CARING', 'RESPONSIVE', 'WELL_LED'];
