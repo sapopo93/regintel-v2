@@ -19,7 +19,7 @@ import { MetadataBar } from '@/components/constitutional/MetadataBar';
 import { SimulationFrame } from '@/components/mock/SimulationFrame';
 import { apiClient } from '@/lib/api/client';
 import { getAuthRole } from '@/lib/auth';
-import type { ExportStatusResponse, ProviderOverviewResponse, ExportFormat } from '@/lib/api/types';
+import type { ExportStatusResponse, ProviderOverviewResponse, ExportFormat, OutputFormat } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
 import { ErrorState } from '@/components/layout/ErrorState';
 import { LoadingSkeleton } from '@/components/layout/LoadingSkeleton';
@@ -32,6 +32,7 @@ export default function ExportsPage() {
   const [overview, setOverview] = useState<ProviderOverviewResponse | null>(null);
   const [statusData, setStatusData] = useState<ExportStatusResponse | null>(null);
   const [format, setFormat] = useState<ExportFormat>('BLUE_OCEAN_BOARD');
+  const [outputFormat, setOutputFormat] = useState<OutputFormat>('pdf');
   const [includeWatermark, setIncludeWatermark] = useState(true);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -110,6 +111,7 @@ export default function ExportsPage() {
         facilityId,
         format,
         includeWatermark,
+        outputFormat: format === 'CSV' ? 'csv' : outputFormat,
       });
       // Store the API path — download happens via authenticated fetch, not a bare <a href>
       setDownloadPath(response.downloadUrl);
@@ -221,6 +223,32 @@ export default function ExportsPage() {
                     ))}
                   </div>
                 </div>
+
+                {format !== 'CSV' && (
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>File Format</label>
+                    <div className={styles.radioGroup}>
+                      <label className={styles.radio}>
+                        <input
+                          type="radio"
+                          value="pdf"
+                          checked={outputFormat === 'pdf'}
+                          onChange={() => setOutputFormat('pdf')}
+                        />
+                        <span>PDF</span>
+                      </label>
+                      <label className={styles.radio}>
+                        <input
+                          type="radio"
+                          value="docx"
+                          checked={outputFormat === 'docx'}
+                          onChange={() => setOutputFormat('docx')}
+                        />
+                        <span>Word (DOCX)</span>
+                      </label>
+                    </div>
+                  </div>
+                )}
 
                 <div className={styles.formGroup}>
                   <label className={styles.checkbox}>

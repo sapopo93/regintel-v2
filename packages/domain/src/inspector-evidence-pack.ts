@@ -89,9 +89,9 @@ export interface InspectorEvidencePack {
  */
 export const EVIDENCE_TYPE_TO_QS: Record<string, string[]> = {
   // Original mappings (improved)
-  POLICY:        ['W1', 'W4'],
+  POLICY:        ['W1', 'W2', 'W4', 'W5'],
   TRAINING:      ['S6', 'E8', 'W6'],
-  AUDIT:         ['W4', 'W6', 'E5'],
+  AUDIT:         ['W4', 'W6', 'W7', 'E5'],
   ROTA:          ['S6', 'E3'],
   SKILLS_MATRIX: ['S6', 'E8'],
   SUPERVISION:   ['E8', 'S6', 'W3'],
@@ -99,7 +99,7 @@ export const EVIDENCE_TYPE_TO_QS: Record<string, string[]> = {
   VISIT_LOG:              ['S2', 'S6', 'R1', 'C1'],
   MISSED_VISIT_RECORD:    ['S2', 'S3', 'W4', 'R4'],
   CERTIFICATE:   ['S6', 'E8'],
-  CQC_REPORT:    [],
+  CQC_REPORT:    ['S1', 'S3', 'E1', 'R1', 'W1', 'W4'],
   // Clinical records
   CARE_PLAN:           ['E1', 'R1', 'C2', 'E6'],
   MAR_CHART:           ['S8', 'S1', 'S9'],
@@ -115,6 +115,10 @@ export const EVIDENCE_TYPE_TO_QS: Record<string, string[]> = {
   // Governance
   STAFF_MEETING_MINUTES: ['W1', 'W3', 'W6'],
   RECRUITMENT_FILE:      ['S6'],
+  EQUALITY_ASSESSMENT:   ['E9'],
+  BUSINESS_CONTINUITY_PLAN: ['W5'],
+  ENVIRONMENTAL_AUDIT:   ['W7'],
+  WORKFORCE_PLAN:        ['W8'],
   // Safety & Environment
   FIRE_SAFETY_CHECK:          ['S5'],
   INFECTION_CONTROL_AUDIT:    ['S7', 'S5'],
@@ -129,6 +133,47 @@ export const EVIDENCE_TYPE_TO_QS: Record<string, string[]> = {
   SERVICE_USER_AGREEMENT:   ['R3'],
   RESIDENT_SURVEY:          ['R4'],
   OTHER:         [],
+};
+
+/**
+ * Tier 3 keyword-based fallback mapping for OTHER-typed evidence.
+ * Scans filename + description for patterns to infer QS relevance.
+ */
+export const QS_KEYWORD_PATTERNS: Record<string, RegExp[]> = {
+  S1: [/safe/i, /incident/i, /safeguard/i, /accident/i],
+  S2: [/staffing/i, /deployment/i, /visit\s*log/i],
+  S3: [/safeguard/i, /abuse/i, /whistleblow/i, /concern/i],
+  S4: [/risk\s*assess/i, /risk\s*manage/i],
+  S5: [/fire/i, /environment/i, /premises/i, /maintenance/i, /infection/i, /health\s*and\s*safety/i],
+  S6: [/training/i, /recruit/i, /staff/i, /induction/i, /DBS/i],
+  S7: [/infection/i, /hygiene/i, /cleaning/i, /IPC/i],
+  S8: [/medic/i, /MAR/i, /prescri/i, /pharmacy/i],
+  S9: [/medic/i, /error/i, /controlled\s*drug/i],
+  E1: [/assess/i, /care\s*plan/i, /needs\s*assess/i],
+  E2: [/nutri/i, /hydrat/i, /diet/i, /weight/i, /food/i],
+  E3: [/handover/i, /multi.?disciplin/i, /MDT/i, /referral/i],
+  E4: [/nutri/i, /MUST/i, /malnutri/i],
+  E5: [/monitor/i, /outcome/i, /wound/i, /clinical/i],
+  E6: [/consent/i, /MCA/i, /capacity/i, /best\s*interest/i, /DoLS/i],
+  E7: [/MCA/i, /deprivation/i, /liberty/i, /DoLS/i],
+  E8: [/competenc/i, /supervis/i, /appraisal/i, /training/i],
+  E9: [/equal/i, /diversit/i, /inclus/i, /accessible/i],
+  R1: [/person.?centred/i, /care\s*plan/i, /individual/i, /preference/i],
+  R2: [/discharge/i, /transition/i, /transfer/i],
+  R3: [/choice/i, /consent/i, /agreement/i, /service\s*user/i],
+  R4: [/complaint/i, /feedback/i, /survey/i, /concern/i],
+  C1: [/dignity/i, /privacy/i, /respect/i, /kind/i],
+  C2: [/involve/i, /particip/i, /decision/i, /care\s*plan/i],
+  C3: [/activit/i, /social/i, /occupation/i, /wellbeing/i, /engage/i],
+  C4: [/end\s*of\s*life/i, /palliative/i, /bereave/i, /dying/i],
+  W1: [/governance/i, /leadership/i, /board/i, /strateg/i, /manage/i],
+  W2: [/vision/i, /culture/i, /values/i, /openness/i],
+  W3: [/supervis/i, /support/i, /wellbeing/i, /staff\s*meeting/i],
+  W4: [/audit/i, /governance/i, /quality\s*assurance/i, /compliance/i, /policy/i],
+  W5: [/business\s*continu/i, /disaster/i, /emergenc/i, /resilience/i],
+  W6: [/improve/i, /lesson/i, /learning/i, /action\s*plan/i],
+  W7: [/environment/i, /premises/i, /facilities/i, /equipment/i],
+  W8: [/workforce/i, /succession/i, /retention/i, /staff\s*plan/i],
 };
 
 /**
@@ -221,7 +266,20 @@ export function mapEvidenceToQualityStatements(
       }
     } else {
       // Tier 2: Evidence type heuristic (no audit, failed audit, or skipped)
-      const qsIds = EVIDENCE_TYPE_TO_QS[evidence.evidenceType] ?? [];
+      let qsIds = EVIDENCE_TYPE_TO_QS[evidence.evidenceType] ?? [];
+
+      // Tier 3: Keyword fallback for types with no QS mapping (e.g. OTHER, CQC_REPORT with empty mapping)
+      if (qsIds.length === 0) {
+        const searchText = `${evidence.fileName} ${evidence.description ?? ''}`;
+        const matchedQs: string[] = [];
+        for (const [qsId, patterns] of Object.entries(QS_KEYWORD_PATTERNS)) {
+          if (patterns.some((p) => p.test(searchText))) {
+            matchedQs.push(qsId);
+          }
+        }
+        qsIds = matchedQs;
+      }
+
       const auditStatus: AuditStatus = evidence.audit?.status === 'FAILED' ? 'NOT_AUDITED' : 'NOT_AUDITED';
       for (const qsId of qsIds) {
         const items = qsMap.get(qsId);

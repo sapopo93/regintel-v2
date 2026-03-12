@@ -278,10 +278,13 @@ export type ExportFormat =
 /**
  * Export generation request
  */
+export type OutputFormat = 'pdf' | 'docx' | 'csv' | 'md';
+
 export interface ExportRequest {
   facilityId: string;
   format: ExportFormat;
   includeWatermark: boolean;
+  outputFormat?: OutputFormat;
 }
 
 /**

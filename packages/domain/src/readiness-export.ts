@@ -59,6 +59,13 @@ export interface CsvExportRow {
   likelihoodScore: number;
   compositeRiskScore: number;
   draftedAt: ISOTimestamp;
+
+  // Enriched columns
+  evidenceCoverage: string;
+  actionCount: number;
+  actionsCompleted: number;
+  ownerRole: string;
+  targetCompletionDate: string;
 }
 
 /**
@@ -179,6 +186,25 @@ export function sortFindingsDeterministic(findings: DraftFinding[]): DraftFindin
 }
 
 /**
+ * Action record for CSV enrichment.
+ */
+export interface CsvActionRecord {
+  findingId: string;
+  status: string;
+  ownerRole?: string;
+  targetCompletionDate?: string;
+}
+
+/**
+ * Evidence record for CSV enrichment.
+ */
+export interface CsvEvidenceRecord {
+  topicId?: string;
+  qualityStatementsCovered?: number;
+  qualityStatementsTotal?: number;
+}
+
+/**
  * Generates CSV export from a completed mock inspection session.
  *
  * PURE FUNCTION: No side effects. Deterministic output for same input.
@@ -188,7 +214,9 @@ export function sortFindingsDeterministic(findings: DraftFinding[]): DraftFindin
  */
 export function generateCsvExport(
   session: MockInspectionSession,
-  metadata: ExportMetadata
+  metadata: ExportMetadata,
+  actions?: CsvActionRecord[],
+  evidenceRecords?: CsvEvidenceRecord[]
 ): CsvExport {
   if (session.status !== 'COMPLETED') {
     throw new SessionNotCompletedError(session.id, session.status);
@@ -216,27 +244,71 @@ export function generateCsvExport(
     'likelihoodScore',
     'compositeRiskScore',
     'draftedAt',
+    'evidenceCoverage',
+    'actionCount',
+    'actionsCompleted',
+    'ownerRole',
+    'targetCompletionDate',
   ];
 
-  const rows: CsvExportRow[] = sortedFindings.map((finding) => ({
-    sessionId: metadata.sessionId,
-    providerId: metadata.providerId,
-    topicCatalogVersion: metadata.topicCatalogVersion,
-    topicCatalogSha256: metadata.topicCatalogSha256,
-    prsLogicProfilesVersion: metadata.prsLogicProfilesVersion,
-    prsLogicProfilesSha256: metadata.prsLogicProfilesSha256,
-    findingId: finding.id,
-    topicId: finding.topicId,
-    regulationId: finding.regulationId,
-    regulationSectionId: finding.regulationSectionId,
-    title: finding.title,
-    description: finding.description,
-    severity: finding.severity,
-    impactScore: finding.impactScore,
-    likelihoodScore: finding.likelihoodScore,
-    compositeRiskScore: computeCompositeRiskScore(finding.impactScore, finding.likelihoodScore),
-    draftedAt: finding.draftedAt,
-  }));
+  // Build action lookup by finding
+  const actionsByFinding = new Map<string, CsvActionRecord[]>();
+  if (actions) {
+    for (const action of actions) {
+      const existing = actionsByFinding.get(action.findingId) ?? [];
+      existing.push(action);
+      actionsByFinding.set(action.findingId, existing);
+    }
+  }
+
+  // Build evidence coverage lookup by topic
+  const evidenceByTopic = new Map<string, CsvEvidenceRecord>();
+  if (evidenceRecords) {
+    for (const record of evidenceRecords) {
+      if (record.topicId) {
+        evidenceByTopic.set(record.topicId, record);
+      }
+    }
+  }
+
+  const rows: CsvExportRow[] = sortedFindings.map((finding) => {
+    const findingActions = actionsByFinding.get(finding.id) ?? [];
+    const completedActions = findingActions.filter((a) => a.status === 'VERIFIED' || a.status === 'COMPLETED');
+    const evRecord = evidenceByTopic.get(finding.topicId);
+    const evCoverage = evRecord && evRecord.qualityStatementsTotal
+      ? `${Math.round((evRecord.qualityStatementsCovered ?? 0) / evRecord.qualityStatementsTotal * 100)}%`
+      : '';
+    const owners = findingActions.map((a) => a.ownerRole).filter(Boolean);
+    const deadlines = findingActions
+      .map((a) => a.targetCompletionDate)
+      .filter(Boolean)
+      .sort() as string[];
+
+    return {
+      sessionId: metadata.sessionId,
+      providerId: metadata.providerId,
+      topicCatalogVersion: metadata.topicCatalogVersion,
+      topicCatalogSha256: metadata.topicCatalogSha256,
+      prsLogicProfilesVersion: metadata.prsLogicProfilesVersion,
+      prsLogicProfilesSha256: metadata.prsLogicProfilesSha256,
+      findingId: finding.id,
+      topicId: finding.topicId,
+      regulationId: finding.regulationId,
+      regulationSectionId: finding.regulationSectionId,
+      title: finding.title,
+      description: finding.description,
+      severity: finding.severity,
+      impactScore: finding.impactScore,
+      likelihoodScore: finding.likelihoodScore,
+      compositeRiskScore: computeCompositeRiskScore(finding.impactScore, finding.likelihoodScore),
+      draftedAt: finding.draftedAt,
+      evidenceCoverage: evCoverage,
+      actionCount: findingActions.length,
+      actionsCompleted: completedActions.length,
+      ownerRole: owners[0] ?? '',
+      targetCompletionDate: deadlines[0] ?? '',
+    };
+  });
 
   return {
     metadata,
@@ -342,6 +414,17 @@ export function serializeCsvExport(csvExport: CsvExport): string {
     });
     lines.push(values.join(','));
   }
+
+  // Summary rows
+  const totalFindings = csvExport.rows.length;
+  const totalActions = csvExport.rows.reduce((sum, r) => sum + r.actionCount, 0);
+  const totalCompleted = csvExport.rows.reduce((sum, r) => sum + r.actionsCompleted, 0);
+  const highestRisk = csvExport.rows.reduce((max, r) => Math.max(max, r.compositeRiskScore), 0);
+  const evCoverages = csvExport.rows.map((r) => r.evidenceCoverage).filter((v) => v !== '');
+  const avgEvCoverage = evCoverages.length > 0
+    ? Math.round(evCoverages.reduce((sum, v) => sum + parseInt(v, 10), 0) / evCoverages.length)
+    : 0;
+  lines.push(`# SUMMARY,Total Findings: ${totalFindings},Evidence Coverage: ${avgEvCoverage}%,Actions Open: ${totalActions - totalCompleted},Actions Verified: ${totalCompleted},Highest Risk: ${highestRisk}`);
 
   return lines.join('\n');
 }

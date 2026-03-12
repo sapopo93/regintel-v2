@@ -168,6 +168,7 @@ export interface ExportRecord {
   sessionId: string;
   format: 'CSV' | 'PDF' | 'BLUE_OCEAN' | 'BLUE_OCEAN_BOARD' | 'BLUE_OCEAN_AUDIT' | 'INSPECTOR_PACK';
   content: string;
+  contentEncoding: 'utf8' | 'base64';
   reportingDomain: 'MOCK_SIMULATION' | 'REGULATORY_HISTORY';
   mode: 'MOCK' | 'REAL';
   reportSource: {
@@ -958,6 +959,7 @@ export class InMemoryStore {
     sessionId: string;
     format: 'CSV' | 'PDF' | 'BLUE_OCEAN' | 'BLUE_OCEAN_BOARD' | 'BLUE_OCEAN_AUDIT' | 'INSPECTOR_PACK';
     content: string;
+    contentEncoding?: 'utf8' | 'base64';
     reportingDomain: 'MOCK_SIMULATION' | 'REGULATORY_HISTORY';
     mode: 'MOCK' | 'REAL';
     reportSource: {
@@ -980,6 +982,7 @@ export class InMemoryStore {
       sessionId: input.sessionId,
       format: input.format,
       content: input.content,
+      contentEncoding: input.contentEncoding ?? 'utf8',
       reportingDomain: input.reportingDomain,
       mode: input.mode,
       reportSource: input.reportSource,

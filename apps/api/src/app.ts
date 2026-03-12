@@ -13,6 +13,9 @@ import {
   generatePdfExport,
   serializeCsvExport,
 } from '@regintel/domain/readiness-export';
+import { renderFindingsPdf, renderInspectorPackPdf, renderBlueOceanBoardPdf, renderBlueOceanAuditPdf } from './renderers/pdf-renderer.js';
+import { renderFindingsDocx, renderInspectorPackDocx, renderBlueOceanBoardDocx, renderBlueOceanAuditDocx } from './renderers/docx-renderer.js';
+import type { RenderOutput } from './renderers/renderer-types.js';
 import {
   QUEUE_NAMES,
   getQueueAdapter,
@@ -698,10 +701,32 @@ function normalizeExportFormat(format: unknown): ExportFormat {
   return 'PDF';
 }
 
-function getExportExtension(format: ExportFormat): string {
+type OutputFormat = 'pdf' | 'docx' | 'csv' | 'md';
+
+function getExportExtension(format: ExportFormat, outputFormat?: OutputFormat): string {
+  if (outputFormat) return outputFormat;
   if (format === 'CSV') return 'csv';
   if (format === 'PDF') return 'pdf';
-  return 'md'; // BLUE_OCEAN_*, INSPECTOR_PACK all use markdown
+  return 'md'; // BLUE_OCEAN_*, INSPECTOR_PACK all use markdown (legacy default)
+}
+
+function resolveOutputFormat(format: ExportFormat, outputFormat?: string): OutputFormat {
+  if (outputFormat === 'pdf' || outputFormat === 'docx' || outputFormat === 'csv' || outputFormat === 'md') {
+    return outputFormat;
+  }
+  // Defaults per report type
+  if (format === 'CSV') return 'csv';
+  if (format === 'PDF') return 'pdf';
+  return 'pdf'; // Blue Ocean and Inspector Pack default to PDF now
+}
+
+function getMimeType(outputFormat: OutputFormat): string {
+  switch (outputFormat) {
+    case 'pdf': return 'application/pdf';
+    case 'docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    case 'csv': return 'text/csv';
+    case 'md': return 'text/markdown';
+  }
 }
 
 function getBlueOceanFilename(exportId: string, format: ExportFormat): string {
@@ -850,28 +875,6 @@ function mapEvidenceRecord(record: EvidenceRecordRecord, documentAudit?: Documen
   };
 }
 
-function serializePdfExport(pdfExport: ReturnType<typeof generatePdfExport>): string {
-  const lines: string[] = [];
-  lines.push(`# ${pdfExport.watermark}`);
-  lines.push(`generatedAt=${pdfExport.generatedAt}`);
-  lines.push(`totalFindings=${pdfExport.totalFindings}`);
-
-  for (const page of pdfExport.pages) {
-    lines.push(`page=${page.pageNumber}`);
-    lines.push(`watermark=${page.watermark}`);
-    lines.push(`topicCatalogVersion=${page.topicCatalogVersion}`);
-    lines.push(`topicCatalogSha256=${page.topicCatalogSha256}`);
-    lines.push(`prsLogicProfilesVersion=${page.prsLogicProfilesVersion}`);
-    lines.push(`prsLogicProfilesSha256=${page.prsLogicProfilesSha256}`);
-    for (const finding of page.findings) {
-      lines.push(
-        `finding=${finding.findingId}|${finding.severity}|${finding.compositeRiskScore}|${finding.title}`
-      );
-    }
-  }
-
-  return lines.join('\n');
-}
 
 function resolveMockContextFromSessions(sessions: MockSessionRecord[]): ReportContext {
   const latest = [...sessions].sort((a, b) => {
@@ -3232,14 +3235,16 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         .object({
           facilityId: zFacilityId,
           format: zExportFormat.optional(),
+          outputFormat: z.enum(['pdf', 'docx', 'csv', 'md']).optional(),
         })
         .strip(),
     });
     if (!parsed) return;
     const { providerId } = parsed.params as { providerId: string };
-    const { facilityId, format } = parsed.body as {
+    const { facilityId, format, outputFormat: requestedOutputFormat } = parsed.body as {
       facilityId: string;
       format?: string;
+      outputFormat?: string;
     };
 
     const safeFormat = normalizeExportFormat(format);
@@ -3294,7 +3299,21 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         watermark: facilityReportContext.mode === 'REAL' ? null : 'PRACTICE — NOT AN OFFICIAL CQC RECORD',
       });
 
-      const content = serializeInspectorPackMarkdown(pack);
+      const outFmt = resolveOutputFormat(safeFormat, requestedOutputFormat);
+      let content: string;
+      let contentEncoding: 'utf8' | 'base64' = 'utf8';
+
+      if (outFmt === 'pdf') {
+        const rendered = await renderInspectorPackPdf(pack);
+        content = rendered.buffer.toString('base64');
+        contentEncoding = 'base64';
+      } else if (outFmt === 'docx') {
+        const rendered = await renderInspectorPackDocx(pack);
+        content = rendered.buffer.toString('base64');
+        contentEncoding = 'base64';
+      } else {
+        content = serializeInspectorPackMarkdown(pack);
+      }
 
       const exportRecord = await store.createExport(ctx, {
         providerId,
@@ -3302,6 +3321,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         sessionId: facilityReportContext.reportSource.id,
         format: 'INSPECTOR_PACK',
         content,
+        contentEncoding,
         reportingDomain: facilityReportContext.reportingDomain,
         mode: facilityReportContext.mode,
         reportSource: facilityReportContext.reportSource,
@@ -3322,7 +3342,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         facilityId,
       });
 
-      const fileExtension = getExportExtension(safeFormat);
+      const fileExtension = getExportExtension(safeFormat, outFmt);
       const downloadUrl = `/v1/exports/${exportRecord.id}.${fileExtension}`;
 
       sendWithMetadata(res, {
@@ -3412,10 +3432,27 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         reportingDomain: ReportingDomain.REGULATORY_HISTORY,
       });
 
-      const content =
-        safeFormat === 'BLUE_OCEAN_AUDIT'
+      const outFmt = resolveOutputFormat(safeFormat, requestedOutputFormat);
+      let content: string;
+      let contentEncoding: 'utf8' | 'base64' = 'utf8';
+
+      if (outFmt === 'pdf') {
+        const rendered = safeFormat === 'BLUE_OCEAN_AUDIT'
+          ? await renderBlueOceanAuditPdf(blueOceanReport)
+          : await renderBlueOceanBoardPdf(blueOceanReport);
+        content = rendered.buffer.toString('base64');
+        contentEncoding = 'base64';
+      } else if (outFmt === 'docx') {
+        const rendered = safeFormat === 'BLUE_OCEAN_AUDIT'
+          ? await renderBlueOceanAuditDocx(blueOceanReport)
+          : await renderBlueOceanBoardDocx(blueOceanReport);
+        content = rendered.buffer.toString('base64');
+        contentEncoding = 'base64';
+      } else {
+        content = safeFormat === 'BLUE_OCEAN_AUDIT'
           ? serializeBlueOceanAuditMarkdown(blueOceanReport)
           : serializeBlueOceanBoardMarkdown(blueOceanReport);
+      }
 
       const exportRecord = await store.createExport(ctx, {
         providerId,
@@ -3423,6 +3460,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         sessionId: facilityReportContext.reportSource.id,
         format: safeFormat,
         content,
+        contentEncoding,
         reportingDomain: facilityReportContext.reportingDomain,
         mode: facilityReportContext.mode,
         reportSource: facilityReportContext.reportSource,
@@ -3435,7 +3473,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         facilityId,
       });
 
-      const fileExtension = getExportExtension(safeFormat);
+      const fileExtension = getExportExtension(safeFormat, outFmt);
       const downloadUrl = `/v1/exports/${exportRecord.id}.${fileExtension}`;
 
       sendWithMetadata(res, {
@@ -3488,7 +3526,10 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
 
     const domainSession = buildDomainSession(session, findings);
 
+    const outFmt = resolveOutputFormat(safeFormat, requestedOutputFormat);
     let content: string;
+    let contentEncoding: 'utf8' | 'base64' = 'utf8';
+
     if (safeFormat === 'CSV') {
       const csvExport = generateCsvExport(domainSession, metadata);
       content = serializeCsvExport(csvExport);
@@ -3557,13 +3598,37 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         evidence: evidenceRecords,
         reportingDomain: ReportingDomain.MOCK_SIMULATION,
       });
-      content =
-        safeFormat === 'BLUE_OCEAN_AUDIT'
+
+      if (outFmt === 'pdf') {
+        const rendered = safeFormat === 'BLUE_OCEAN_AUDIT'
+          ? await renderBlueOceanAuditPdf(blueOceanReport)
+          : await renderBlueOceanBoardPdf(blueOceanReport);
+        content = rendered.buffer.toString('base64');
+        contentEncoding = 'base64';
+      } else if (outFmt === 'docx') {
+        const rendered = safeFormat === 'BLUE_OCEAN_AUDIT'
+          ? await renderBlueOceanAuditDocx(blueOceanReport)
+          : await renderBlueOceanBoardDocx(blueOceanReport);
+        content = rendered.buffer.toString('base64');
+        contentEncoding = 'base64';
+      } else {
+        content = safeFormat === 'BLUE_OCEAN_AUDIT'
           ? serializeBlueOceanAuditMarkdown(blueOceanReport)
           : serializeBlueOceanBoardMarkdown(blueOceanReport);
+      }
     } else {
+      // PDF (mock findings)
       const pdfExport = generatePdfExport(domainSession, metadata);
-      content = serializePdfExport(pdfExport);
+      if (outFmt === 'docx') {
+        const rendered = await renderFindingsDocx(pdfExport);
+        content = rendered.buffer.toString('base64');
+        contentEncoding = 'base64';
+      } else {
+        // Default: real PDF
+        const rendered = await renderFindingsPdf(pdfExport);
+        content = rendered.buffer.toString('base64');
+        contentEncoding = 'base64';
+      }
     }
 
     const exportRecord = await store.createExport(ctx, {
@@ -3572,6 +3637,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       sessionId: session.sessionId,
       format: safeFormat,
       content,
+      contentEncoding,
       reportingDomain: reportContext.reportingDomain,
       mode: reportContext.mode,
       reportSource: reportContext.reportSource,
@@ -3584,7 +3650,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       facilityId,
     });
 
-    const fileExtension = getExportExtension(safeFormat);
+    const fileExtension = getExportExtension(safeFormat, outFmt);
     const downloadUrl = `/v1/exports/${exportRecord.id}.${fileExtension}`;
 
     sendWithMetadata(res, {
@@ -3619,13 +3685,40 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     if (!parsed) return;
     const { exportId } = parsed.params as { exportId: string };
     const exportRecord = await store.getExportById(ctx, exportId);
-    if (!exportRecord || exportRecord.format !== 'PDF') {
+    if (!exportRecord) {
       sendError(res, 404, 'Export not found');
       return;
     }
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${exportRecord.id}.pdf"`);
-    res.send(exportRecord.content);
+    const encoding = exportRecord.contentEncoding ?? 'utf8';
+    if (encoding === 'base64') {
+      res.send(Buffer.from(exportRecord.content, 'base64'));
+    } else {
+      res.send(exportRecord.content);
+    }
+  });
+
+  app.get('/v1/exports/:exportId.docx', async (req, res) => {
+    const ctx = getContext(req);
+    const parsed = validateRequest(req, res, {
+      params: z.object({ exportId: zExportId }).strip(),
+    });
+    if (!parsed) return;
+    const { exportId } = parsed.params as { exportId: string };
+    const exportRecord = await store.getExportById(ctx, exportId);
+    if (!exportRecord) {
+      sendError(res, 404, 'Export not found');
+      return;
+    }
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${exportRecord.id}.docx"`);
+    const encoding = exportRecord.contentEncoding ?? 'utf8';
+    if (encoding === 'base64') {
+      res.send(Buffer.from(exportRecord.content, 'base64'));
+    } else {
+      res.send(exportRecord.content);
+    }
   });
 
   app.get('/v1/exports/:exportId.md', async (req, res) => {

@@ -151,7 +151,8 @@ Source of truth for UI routes and API endpoints. Update this file when navigatio
         "GET /v1/providers/:providerId/exports?facility=:facilityId",
         "POST /v1/providers/:providerId/exports",
         "GET /v1/exports/:exportId.csv",
-        "GET /v1/exports/:exportId.pdf"
+        "GET /v1/exports/:exportId.pdf",
+        "GET /v1/exports/:exportId.docx"
       ]
     },
     {

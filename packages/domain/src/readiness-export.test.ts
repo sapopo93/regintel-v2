@@ -179,8 +179,8 @@ describe('ux:report_export', () => {
       const serialized = serializeCsvExport(csvExport);
       const lines = serialized.split('\n');
 
-      // Skip watermark comment and header row
-      const dataLines = lines.slice(2);
+      // Skip watermark comment and header row; last line is summary
+      const dataLines = lines.slice(2).filter((l: string) => !l.startsWith('# SUMMARY'));
       expect(dataLines.length).toBe(3);
 
       for (const line of dataLines) {
