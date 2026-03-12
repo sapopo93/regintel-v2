@@ -39,6 +39,7 @@ import {
 import { z, type ZodTypeAny, ZodError } from 'zod';
 import { computeProvenanceHash, computeCompositeRiskScore } from '@regintel/domain/inspection-finding';
 import type { Action } from '@regintel/domain/action';
+import { ActionStatus } from '@regintel/domain/action';
 import { onboardFacility } from '@regintel/domain/onboarding';
 import {
   scrapeLatestReport,
@@ -3402,24 +3403,47 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         };
       });
 
-      const evidenceRecords = (await store.listEvidenceByFacility(ctx, facilityId)).map((record) => ({
-        id: record.id,
-        tenantId: record.tenantId,
-        blobHashes: [record.blobHash],
-        primaryBlobHash: record.blobHash,
-        title: record.fileName,
-        description: record.description,
-        evidenceType: record.evidenceType,
-        supportsFindingIds: [],
-        supportsPolicyIds: [],
-        collectedAt: record.uploadedAt,
-        collectedBy: record.createdBy,
-        accessRevoked: false,
-        createdAt: record.uploadedAt,
-        createdBy: record.createdBy,
-      }));
+      const evidenceRecords = (await store.listEvidenceByFacility(ctx, facilityId)).map((record) => {
+        const linkedFindingIds = inspectionFindings.map(f => f.id);
+        return {
+          id: record.id,
+          tenantId: record.tenantId,
+          blobHashes: [record.blobHash],
+          primaryBlobHash: record.blobHash,
+          title: record.fileName,
+          description: record.description,
+          evidenceType: record.evidenceType,
+          supportsFindingIds: linkedFindingIds,
+          supportsPolicyIds: [],
+          collectedAt: record.uploadedAt,
+          collectedBy: record.createdBy,
+          accessRevoked: false,
+          createdAt: record.uploadedAt,
+          createdBy: record.createdBy,
+        };
+      });
 
       const actions: Action[] = [];
+      for (const finding of inspectionFindings) {
+        const actionRecords = store.listActionsByFinding(ctx, finding.id);
+        for (const ar of actionRecords) {
+          actions.push({
+            id: ar.id,
+            tenantId: ar.tenantId,
+            domain: Domain.CQC,
+            findingId: ar.findingId,
+            description: ar.description,
+            assignedTo: ar.assignedTo,
+            targetCompletionDate: ar.targetCompletionDate ?? null,
+            status: ar.status as ActionStatus,
+            verificationEvidenceIds: ar.verificationEvidenceIds,
+            createdAt: ar.createdAt,
+            createdBy: ar.createdBy,
+            completedAt: ar.completedAt ?? null,
+            verifiedAt: ar.verifiedAt ?? null,
+          });
+        }
+      }
 
       const blueOceanReport = generateBlueOceanReport({
         tenantId: ctx.tenantId,
@@ -3596,24 +3620,47 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         };
       });
 
-      const evidenceRecords = (await store.listEvidenceByFacility(ctx, facilityId)).map((record) => ({
-        id: record.id,
-        tenantId: record.tenantId,
-        blobHashes: [record.blobHash],
-        primaryBlobHash: record.blobHash,
-        title: record.fileName,
-        description: record.description,
-        evidenceType: record.evidenceType,
-        supportsFindingIds: [],
-        supportsPolicyIds: [],
-        collectedAt: record.uploadedAt,
-        collectedBy: record.createdBy,
-        accessRevoked: false,
-        createdAt: record.uploadedAt,
-        createdBy: record.createdBy,
-      }));
+      const evidenceRecords = (await store.listEvidenceByFacility(ctx, facilityId)).map((record) => {
+        const linkedFindingIds = inspectionFindings.map(f => f.id);
+        return {
+          id: record.id,
+          tenantId: record.tenantId,
+          blobHashes: [record.blobHash],
+          primaryBlobHash: record.blobHash,
+          title: record.fileName,
+          description: record.description,
+          evidenceType: record.evidenceType,
+          supportsFindingIds: linkedFindingIds,
+          supportsPolicyIds: [],
+          collectedAt: record.uploadedAt,
+          collectedBy: record.createdBy,
+          accessRevoked: false,
+          createdAt: record.uploadedAt,
+          createdBy: record.createdBy,
+        };
+      });
 
       const actions: Action[] = [];
+      for (const finding of inspectionFindings) {
+        const actionRecords = store.listActionsByFinding(ctx, finding.id);
+        for (const ar of actionRecords) {
+          actions.push({
+            id: ar.id,
+            tenantId: ar.tenantId,
+            domain: Domain.CQC,
+            findingId: ar.findingId,
+            description: ar.description,
+            assignedTo: ar.assignedTo,
+            targetCompletionDate: ar.targetCompletionDate ?? null,
+            status: ar.status as ActionStatus,
+            verificationEvidenceIds: ar.verificationEvidenceIds,
+            createdAt: ar.createdAt,
+            createdBy: ar.createdBy,
+            completedAt: ar.completedAt ?? null,
+            verifiedAt: ar.verifiedAt ?? null,
+          });
+        }
+      }
 
       const blueOceanReport = generateBlueOceanReport({
         tenantId: session.tenantId,

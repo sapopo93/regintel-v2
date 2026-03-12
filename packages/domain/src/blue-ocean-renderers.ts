@@ -8,6 +8,15 @@
 import { ReportingDomain } from './types.js';
 import type { BlueOceanReport, BlueOceanActionDetail } from './blue-ocean-report.js';
 
+/**
+ * Strips tenant prefix from scoped keys for display.
+ * "user_3AIES…:session-11" → "session-11"
+ */
+function displayId(scopedId: string): string {
+  const colonIdx = scopedId.indexOf(':');
+  return colonIdx >= 0 ? scopedId.slice(colonIdx + 1) : scopedId;
+}
+
 const BOARD_WATERMARK = 'BLUE OCEAN (MOCK) \u2014 NOT REGULATORY HISTORY';
 const REGULATORY_WATERMARK = 'BLUE OCEAN \u2014 REGULATORY HISTORY';
 
@@ -270,7 +279,7 @@ export function serializeBlueOceanAuditMarkdown(report: BlueOceanReport): string
   lines.push('# Blue Ocean Report (Audit Pack)');
   lines.push('');
   lines.push(`watermark=${report.watermark ?? 'none'}`);
-  lines.push(`reportId=${report.reportId}`);
+  lines.push(`reportId=${displayId(report.reportId)}`);
   lines.push(`domain=${report.domain}`);
   lines.push(`reportingDomain=${report.reportingDomain}`);
   lines.push('');
@@ -312,7 +321,7 @@ export function serializeBlueOceanAuditMarkdown(report: BlueOceanReport): string
   lines.push('');
   for (const finding of report.sections.majorFindings) {
     lines.push(
-      `findingId=${finding.findingId} severity=${finding.severity} risk=${finding.compositeRiskScore} regulation=${finding.regulationId} section=${finding.regulationSectionId}`
+      `findingId=${displayId(finding.findingId)} severity=${finding.severity} risk=${finding.compositeRiskScore} regulation=${finding.regulationId} section=${finding.regulationSectionId}`
     );
   }
   lines.push('');
@@ -335,7 +344,7 @@ export function serializeBlueOceanAuditMarkdown(report: BlueOceanReport): string
   lines.push('## Root Cause Analysis');
   lines.push('');
   for (const rca of report.sections.rootCauseAnalysis) {
-    lines.push(`findingId=${rca.findingId}`);
+    lines.push(`findingId=${displayId(rca.findingId)}`);
     lines.push(`title=${rca.title}`);
     lines.push(`severity=${rca.severity}`);
     for (let i = 0; i < rca.hypotheses.length; i += 1) {
@@ -358,7 +367,7 @@ export function serializeBlueOceanAuditMarkdown(report: BlueOceanReport): string
   lines.push(`rejectedActions=${remediation.rejectedActions}`);
   lines.push('actionsByFinding=');
   for (const entry of remediation.actionsByFinding) {
-    lines.push(`- ${entry.findingId}:${entry.actionIds.join(', ')}`);
+    lines.push(`- ${displayId(entry.findingId)}:${entry.actionIds.map(displayId).join(', ')}`);
   }
   lines.push('');
   if (remediation.actionDetails.length > 0) {
@@ -366,7 +375,7 @@ export function serializeBlueOceanAuditMarkdown(report: BlueOceanReport): string
     lines.push('|----------|-----------|-------------|----------|----------------------|--------|-------------------------|');
     for (const action of remediation.actionDetails) {
       lines.push(
-        `| ${action.actionId} | ${action.findingId} | ${action.description} | ${action.ownerRole ?? 'null'} | ${action.targetCompletionDate ?? 'null'} | ${action.status} | ${action.verificationEvidenceIds.join(', ')} |`
+        `| ${displayId(action.actionId)} | ${displayId(action.findingId)} | ${action.description} | ${action.ownerRole ?? 'null'} | ${action.targetCompletionDate ?? 'null'} | ${action.status} | ${action.verificationEvidenceIds.map(displayId).join(', ')} |`
       );
     }
     lines.push('');
@@ -403,16 +412,16 @@ export function serializeBlueOceanAuditMarkdown(report: BlueOceanReport): string
   lines.push('## Data Lineage');
   lines.push('');
   const lineage = report.sections.dataLineage;
-  lines.push(`findingIds=${lineage.findingIds.join(', ')}`);
-  lines.push(`actionIds=${lineage.actionIds.join(', ')}`);
-  lines.push(`evidenceIds=${lineage.evidenceIds.join(', ')}`);
+  lines.push(`findingIds=${lineage.findingIds.map(displayId).join(', ')}`);
+  lines.push(`actionIds=${lineage.actionIds.map(displayId).join(', ')}`);
+  lines.push(`evidenceIds=${lineage.evidenceIds.map(displayId).join(', ')}`);
   lines.push('evidenceToFindings=');
   for (const entry of lineage.evidenceToFindings) {
-    lines.push(`- ${entry.evidenceId}:${entry.supportsFindingIds.join(', ')}`);
+    lines.push(`- ${displayId(entry.evidenceId)}:${entry.supportsFindingIds.map(displayId).join(', ')}`);
   }
   lines.push('findingToActions=');
   for (const entry of lineage.findingToActions) {
-    lines.push(`- ${entry.findingId}:${entry.actionIds.join(', ')}`);
+    lines.push(`- ${displayId(entry.findingId)}:${entry.actionIds.map(displayId).join(', ')}`);
   }
   lines.push('');
 

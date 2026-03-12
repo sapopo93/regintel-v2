@@ -27,6 +27,15 @@ import type { BlueOceanReport } from '@regintel/domain';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
+/**
+ * Strips tenant prefix from scoped keys for display.
+ * "user_3AIES…:session-11" → "session-11"
+ */
+function displayId(scopedId: string): string {
+  const colonIdx = scopedId.indexOf(':');
+  return colonIdx >= 0 ? scopedId.slice(colonIdx + 1) : scopedId;
+}
+
 interface MetaInfo {
   topicCatalogVersion: string;
   topicCatalogHash: string;
@@ -169,7 +178,7 @@ export async function renderFindingsDocx(pdfExport: PdfExport): Promise<RenderOu
     emptyParagraph(),
     boldText('Provider: ', pdfExport.metadata.providerName ?? pdfExport.metadata.providerId),
     ...(pdfExport.metadata.facilityName ? [boldText('Facility: ', pdfExport.metadata.facilityName)] : []),
-    boldText('Session: ', pdfExport.metadata.sessionId),
+    boldText('Session: ', displayId(pdfExport.metadata.sessionId)),
     boldText('Generated: ', formatDate(pdfExport.generatedAt)),
     boldText('Total Findings: ', String(pdfExport.totalFindings)),
     emptyParagraph(),
@@ -431,7 +440,7 @@ export async function renderBlueOceanAuditDocx(report: BlueOceanReport): Promise
   // Cover
   sectionChildren.push(heading('Blue Ocean Report — Audit Pack'));
   sectionChildren.push(emptyParagraph());
-  sectionChildren.push(boldText('Report ID: ', report.reportId));
+  sectionChildren.push(boldText('Report ID: ', displayId(report.reportId)));
   sectionChildren.push(boldText('Domain: ', String(report.domain)));
   sectionChildren.push(boldText('Reporting Domain: ', String(report.reportingDomain)));
   sectionChildren.push(emptyParagraph());

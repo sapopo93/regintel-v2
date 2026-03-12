@@ -12,6 +12,15 @@ import type { BlueOceanReport } from '@regintel/domain';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
+/**
+ * Strips tenant prefix from scoped keys for display.
+ * "user_3AIES…:session-11" → "session-11"
+ */
+function displayId(scopedId: string): string {
+  const colonIdx = scopedId.indexOf(':');
+  return colonIdx >= 0 ? scopedId.slice(colonIdx + 1) : scopedId;
+}
+
 function collectBuffer(doc: PDFKit.PDFDocument): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -84,7 +93,7 @@ export async function renderFindingsPdf(pdfExport: PdfExport): Promise<RenderOut
   const facilityLabel = pdfExport.metadata.facilityName ? ` — ${pdfExport.metadata.facilityName}` : '';
   doc.fontSize(12).fillColor('#333333').text(`Provider: ${providerLabel}${facilityLabel}`, { align: 'center' });
   doc.moveDown(0.5);
-  doc.text(`Session: ${pdfExport.metadata.sessionId}`, { align: 'center' });
+  doc.text(`Session: ${displayId(pdfExport.metadata.sessionId)}`, { align: 'center' });
   doc.moveDown(0.5);
   doc.text(`Generated: ${formatDate(pdfExport.generatedAt)}`, { align: 'center' });
   doc.moveDown(1);
@@ -418,7 +427,7 @@ export async function renderBlueOceanAuditPdf(report: BlueOceanReport): Promise<
   doc.moveDown(0.5);
   doc.fontSize(14).fillColor('#555555').text('Audit Pack — Internal', { align: 'center' });
   doc.moveDown(1);
-  doc.fontSize(11).fillColor('#333333').text(`Report ID: ${report.reportId}`, { align: 'center' });
+  doc.fontSize(11).fillColor('#333333').text(`Report ID: ${displayId(report.reportId)}`, { align: 'center' });
   doc.moveDown(0.5);
   doc.text(`Domain: ${report.domain} | Reporting Domain: ${report.reportingDomain}`, { align: 'center' });
   addMetadataFooter(doc, meta);
