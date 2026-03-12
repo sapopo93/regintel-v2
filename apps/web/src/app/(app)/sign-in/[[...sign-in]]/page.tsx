@@ -10,6 +10,8 @@ export default function SignInPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-100">
       <SignIn
+        signUpUrl="/sign-up"
+        fallbackRedirectUrl="/"
         appearance={{
           elements: {
             formButtonPrimary: 'bg-blue-600 hover:bg-blue-700',

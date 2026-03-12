@@ -9,6 +9,7 @@
 
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
+import { PUBLIC_ROUTE_MATCHERS } from './lib/public-routes';
 
 const isE2EMode = process.env.E2E_TEST_MODE === 'true';
 const hasClerkSecret = Boolean(process.env.CLERK_SECRET_KEY);
@@ -16,12 +17,7 @@ const hasClerkSecret = Boolean(process.env.CLERK_SECRET_KEY);
 // Public routes — Clerk skips auth enforcement (and may skip token verification)
 // NOTE: '/' is intentionally excluded so that auth() in page.tsx returns the userId
 // for signed-in users. The root page handles unauthenticated users itself (shows landing page).
-const isPublicRoute = createRouteMatcher([
-  '/',
-    '/sign-in(.*)',
-  '/sign-up(.*)',
-  '/api/webhooks(.*)',
-]);
+const isPublicRoute = createRouteMatcher([...PUBLIC_ROUTE_MATCHERS]);
 
 // In E2E mode without Clerk secrets, bypass Clerk middleware entirely.
 const e2eBypassMiddleware = () => NextResponse.next();
