@@ -76,6 +76,11 @@ const nextConfig = {
         destination: '/results',
         permanent: true,
       },
+      {
+        source: '/facilities/:path*',
+        destination: '/locations/:path*',
+        permanent: true,
+      },
     ];
   },
   // Proxy API calls through Next.js to avoid CORS issues in production.
