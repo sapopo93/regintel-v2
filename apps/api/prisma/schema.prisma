@@ -308,6 +308,8 @@ model MockSessionV2 {
   topicCatalogHash       String @map("topic_catalog_hash")
   prsLogicProfilesVersion String @map("prs_logic_profiles_version")
   prsLogicProfilesHash   String @map("prs_logic_profiles_hash")
+  currentQuestion        String? @map("current_question")
+  conversationHistory    Json    @map("conversation_history") @default("[]")
 
   @@index([tenantId])
   @@index([providerId])

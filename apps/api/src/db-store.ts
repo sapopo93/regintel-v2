@@ -164,6 +164,8 @@ export class PrismaStore extends InMemoryStore {
           topicCatalogHash: row.topicCatalogHash,
           prsLogicProfilesVersion: row.prsLogicProfilesVersion,
           prsLogicProfilesHash: row.prsLogicProfilesHash,
+          currentQuestion: row.currentQuestion ?? '',
+          conversationHistory: Array.isArray(row.conversationHistory) ? row.conversationHistory : [],
         };
         sessionsStore.write(ctx, unscopedId, record);
 
@@ -635,6 +637,8 @@ export class PrismaStore extends InMemoryStore {
       topicCatalogHash: record.topicCatalogHash,
       prsLogicProfilesVersion: record.prsLogicProfilesVersion,
       prsLogicProfilesHash: record.prsLogicProfilesHash,
+      currentQuestion: record.currentQuestion ?? null,
+      conversationHistory: record.conversationHistory as any,
     };
 
     (prisma as any).mockSessionV2
@@ -645,6 +649,8 @@ export class PrismaStore extends InMemoryStore {
           status: record.status,
           followUpsUsed: record.followUpsUsed,
           completedAt: record.completedAt ?? null,
+          currentQuestion: record.currentQuestion ?? null,
+          conversationHistory: record.conversationHistory as any,
         },
       })
       .catch((err: unknown) =>

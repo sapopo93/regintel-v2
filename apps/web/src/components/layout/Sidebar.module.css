@@ -97,6 +97,12 @@
   padding-left: calc(var(--space-4) - 3px);
 }
 
+.navItemDisabled {
+  composes: navItem;
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .systemStatus {
   padding: var(--space-4);
   border-top: 1px solid var(--color-slate-700);

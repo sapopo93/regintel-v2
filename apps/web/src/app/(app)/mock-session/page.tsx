@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useRequireProviderAndFacility } from '@/lib/hooks/useRequireContext';
 import { Sidebar } from '@/components/layout/Sidebar';
@@ -29,6 +30,7 @@ import styles from './page.module.css';
 
 export default function MockSessionsPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const { providerId: rawProviderId, facilityId: rawFacilityId, ready } = useRequireProviderAndFacility();
   // Decode URL-encoded params (colons in tenant:resource IDs get encoded as %3A)
   const providerId = rawProviderId ? decodeURIComponent(rawProviderId) : null;
@@ -39,8 +41,6 @@ export default function MockSessionsPage() {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [selectedTopic, setSelectedTopic] = useState('');
   const [creating, setCreating] = useState(false);
-  const [createStatus, setCreateStatus] = useState<string | null>(null);
-  const [createdSessionId, setCreatedSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,18 +77,13 @@ export default function MockSessionsPage() {
 
     setCreating(true);
     setError(null);
-    setCreateStatus('Starting practice inspection...');
-    setCreatedSessionId(null);
 
     try {
       const created = await apiClient.createMockSession(providerId, selectedTopic, facilityId);
-      const refreshed = await apiClient.getMockSessions(providerId, facilityId);
-      setData(refreshed);
-      setCreateStatus('Practice inspection started.');
-      setCreatedSessionId(created.sessionId);
+      router.push(`/mock-session/${created.sessionId}?provider=${providerId}&facility=${facilityId}`);
+      return;
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to start session');
-      setCreateStatus(null);
     } finally {
       setCreating(false);
     }
@@ -125,8 +120,8 @@ export default function MockSessionsPage() {
 
         <main className={styles.main}>
           <PageHeader
-            title="Practice Inspections"
-            subtitle="All practice sessions"
+            title="Mock Inspections"
+            subtitle="All mock inspection sessions"
             topicCatalogVersion={data.topicCatalogVersion}
             topicCatalogHash={data.topicCatalogHash}
             prsLogicVersion={data.prsLogicVersion}
@@ -140,8 +135,15 @@ export default function MockSessionsPage() {
             ingestionStatus={data.ingestionStatus}
           />
 
+          <div className={styles.introBanner}>
+            <h2 className={styles.introTitle}>What is a Mock Inspection?</h2>
+            <p className={styles.introText}>
+              A mock inspection simulates a CQC visit. A virtual inspector will ask you 4–5 questions about a specific area of your service. Your answers will reveal compliance gaps and missing evidence — before a real inspector arrives. Sessions are private and do not affect your official CQC record.
+            </p>
+          </div>
+
           <div className={styles.snapshotPanel}>
-            <h2 className={styles.sectionTitle}>Start a Practice Inspection</h2>
+            <h2 className={styles.sectionTitle}>Start a Mock Inspection</h2>
             <div className={styles.formRow}>
               <label className={styles.label}>
                 Inspection Area
@@ -164,25 +166,9 @@ export default function MockSessionsPage() {
                 disabled={creating || !selectedTopic}
                 data-testid="primary-start-session"
               >
-                {creating ? 'Starting...' : 'Start Session'}
+                {creating ? 'Starting...' : 'Start Mock Inspection'}
               </button>
             </div>
-            {createStatus && (
-              <div className={styles.statusMessage} aria-live="polite">
-                {createStatus}
-                {createdSessionId && (
-                  <>
-                    {' '}
-                    <Link
-                      className={styles.statusLink}
-                      href={`/mock-session/${createdSessionId}?provider=${providerId}&facility=${facilityId}`}
-                    >
-                      Open session →
-                    </Link>
-                  </>
-                )}
-              </div>
-            )}
           </div>
 
           <DisclosurePanel
@@ -191,8 +177,8 @@ export default function MockSessionsPage() {
                 {data.sessions.length === 0 ? (
                   <EmptyState
                     icon={PlayCircle}
-                    title="No practice sessions found"
-                    description="Start a practice inspection using the form above to prepare for your CQC visit."
+                    title="No mock sessions found"
+                    description="Start a mock inspection using the form above to prepare for your CQC visit."
                   />
                 ) : (
                   data.sessions.map((session) => (
@@ -201,19 +187,28 @@ export default function MockSessionsPage() {
                       href={`/mock-session/${session.sessionId}?provider=${providerId}&facility=${facilityId}`}
                       className={styles.sessionCard}
                     >
-                      <div className={styles.sessionHeader}>
-                        <h3 className={styles.sessionTitle}>Practice inspection</h3>
-                        <div className={`${styles.statusBadge} ${styles[session.status.toLowerCase()]}`}>
-                          {session.status}
+                      <div className={styles.sessionCardInner}>
+                        <div className={styles.sessionHeader}>
+                          <div>
+                            <h3 className={styles.sessionTitle}>
+                              {topics.find((t) => t.id === session.topicId)?.title ?? formatTopicId(session.topicId)}
+                            </h3>
+                            <div className={styles.sessionMeta}>
+                              <span>{session.status === 'IN_PROGRESS' ? `Question ${session.followUpsUsed + 1} of ${session.maxFollowUps + 1}` : `${session.maxFollowUps + 1} questions completed`}</span>
+                              <span>Started: {new Date(session.createdAt).toLocaleDateString('en-GB')}</span>
+                            </div>
+                          </div>
+                          <div className={`${styles.statusBadge} ${styles[session.status.toLowerCase()]}`}>
+                            {session.status === 'IN_PROGRESS' ? 'In Progress' : session.status === 'COMPLETED' ? 'Complete' : 'Abandoned'}
+                          </div>
                         </div>
-                      </div>
-                      <div className={styles.sessionMeta}>
-                        <span>{topics.find((t) => t.id === session.topicId)?.title ?? formatTopicId(session.topicId)}</span>
-                        <span>Follow-ups: {session.followUpsUsed}/{session.maxFollowUps}</span>
-                      </div>
-                      <div className={styles.sessionDate}>
-                        Created: {new Date(session.createdAt).toLocaleString()}
-                        {session.completedAt && ` • Completed: ${new Date(session.completedAt).toLocaleString()}`}
+                        <div className={styles.sessionAction}>
+                          {session.status === 'IN_PROGRESS' ? (
+                            <span className={styles.resumeHint}>Resume →</span>
+                          ) : session.status === 'COMPLETED' ? (
+                            <span className={styles.viewHint}>View results →</span>
+                          ) : null}
+                        </div>
                       </div>
                     </Link>
                   ))

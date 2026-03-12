@@ -7,7 +7,7 @@
 
 // UI display watermark (plain English for providers)
 // Note: backend EXPORT_WATERMARK in packages/domain stays unchanged (tested by phase gates)
-export const SIMULATION_WATERMARK = 'PRACTICE INSPECTION — NOT AN OFFICIAL CQC RECORD';
+export const SIMULATION_WATERMARK = 'MOCK INSPECTION — NOT AN OFFICIAL CQC RECORD';
 
 // Origin types from domain layer
 export const ORIGIN_TYPES = {
@@ -77,7 +77,7 @@ export const SIDEBAR_GROUPS: readonly SidebarGroup[] = [
     label: 'INSPECT',
     items: [
       { id: 'topics', label: 'Inspection Areas', href: '/topics' },
-      { id: 'mock-session', label: 'Practice Inspections', href: '/mock-session' },
+      { id: 'mock-session', label: 'Mock Inspections', href: '/mock-session' },
       { id: 'findings', label: 'Findings', href: '/findings' },
       { id: 'evidence', label: 'Evidence', href: '/evidence' },
       { id: 'document-audit', label: 'Document Audit', href: '/document-audit' },

@@ -21,9 +21,9 @@ export function SimulationModeBadge({ reportingDomain }: SimulationModeBadgeProp
     <div className={styles.badge}>
       <span className={styles.indicator}>🟥</span>
       <span className={styles.text}>
-        <strong>Practice Mode</strong>
+        <strong>Mock Inspection Mode</strong>
         <span className={styles.subtext}>
-          Results from this practice session are not part of your official CQC record
+          Results from this mock inspection are not part of your official CQC record
         </span>
       </span>
     </div>

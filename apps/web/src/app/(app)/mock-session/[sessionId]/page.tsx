@@ -5,11 +5,12 @@ export const dynamic = "force-dynamic";
 /**
  * Mock Session Detail Page
  *
- * Displays a single mock inspection session.
+ * Displays a single mock inspection session with full conversation history,
+ * progress tracking, and guided UX for first-time users.
  */
 
 import { useEffect, useState } from 'react';
-import { useSearchParams, useParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useRequireProviderAndFacility } from '@/lib/hooks/useRequireContext';
 import { Sidebar } from '@/components/layout/Sidebar';
@@ -24,6 +25,8 @@ import type { MockInspectionSession, ConstitutionalMetadata, ProviderOverviewRes
 import { validateConstitutionalRequirements } from '@/lib/validators';
 import { formatTopicId } from '@/lib/format';
 import styles from './page.module.css';
+
+type ConversationTurn = { role: 'assistant' | 'user'; content: string };
 
 const PRS_LABELS: Record<string, string> = {
   NEW_PROVIDER: 'New provider',
@@ -79,20 +82,15 @@ export default function MockSessionDetailPage() {
   useEffect(loadData, [providerId, facilityId, sessionId, ready]);
 
   const handleSubmitAnswer = async () => {
-    if (!providerId || !answer.trim()) {
-      setError('Answer is required');
-      return;
-    }
-
+    if (!providerId || !answer.trim()) return;
     setSubmitting(true);
     setError(null);
-
     try {
       const updated = await apiClient.submitAnswer(providerId, sessionId, answer.trim());
       setData((prev) => prev ? { ...prev, ...updated } : prev);
       setAnswer('');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to submit answer');
+      setError(err instanceof Error ? err.message : 'Failed to submit your answer. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -122,6 +120,11 @@ export default function MockSessionDetailPage() {
     );
   }
 
+  const conversationHistory = (data.conversationHistory ?? []) as ConversationTurn[];
+  const totalQuestions = data.maxFollowUps + 1;
+  const currentQuestionNumber = data.followUpsUsed + 1;
+  const questionsRemaining = data.maxFollowUps - data.followUpsUsed;
+
   return (
     <SimulationFrame reportingDomain={data.reportingDomain}>
       <div className={styles.layout}>
@@ -137,8 +140,8 @@ export default function MockSessionDetailPage() {
 
         <main className={styles.main}>
           <PageHeader
-            title="Practice inspection session"
-            subtitle="Practice inspection session detail"
+            title="Mock inspection session"
+            subtitle="Mock inspection session detail"
             topicCatalogVersion={data.topicCatalogVersion}
             topicCatalogHash={data.topicCatalogHash}
             prsLogicVersion={data.prsLogicVersion}
@@ -159,13 +162,13 @@ export default function MockSessionDetailPage() {
                 <h2 className={styles.sectionTitle}>Session Information</h2>
                 <dl className={styles.definitionList}>
                   <dt>Inspection Area</dt>
-                  <dd>{formatTopicId(data.topicId)}</dd>
+                  <dd>{topic?.title ?? formatTopicId(data.topicId)}</dd>
 
                   <dt>Status</dt>
                   <dd className={styles[data.status.toLowerCase()]}>{data.status}</dd>
 
-                  <dt>Follow-ups Used</dt>
-                  <dd>{data.followUpsUsed} / {data.maxFollowUps}</dd>
+                  <dt>Progress</dt>
+                  <dd>{data.followUpsUsed} of {totalQuestions} questions answered</dd>
 
                   <dt>Created At</dt>
                   <dd>{new Date(data.createdAt).toLocaleString()}</dd>
@@ -219,51 +222,137 @@ export default function MockSessionDetailPage() {
 
           {data.status === 'IN_PROGRESS' ? (
             <>
-              {topic && (
-                <div className={styles.questionCard}>
-                  <h2 className={styles.questionTitle}>{topic.title}</h2>
-                  <p className={styles.questionRef}>{topic.regulationSectionId}</p>
-                  <p className={styles.questionPrompt}>
-                    {topic.questionMode === 'evidence_first'
-                      ? `Please provide evidence demonstrating compliance with ${topic.title}. Include specific documents, records, or examples.`
-                      : topic.questionMode === 'narrative_first'
-                      ? `Describe how your service addresses ${topic.title}. Explain your processes, procedures, and oversight.`
-                      : `Please explain how you meet the requirements of ${topic.title}. Be specific about evidence and outcomes.`}
-                  </p>
+              {data.followUpsUsed === 0 && (
+                <div className={styles.sessionIntro}>
+                  <span className={styles.introIcon}>👋</span>
+                  <div>
+                    <strong>Welcome to your mock inspection</strong>
+                    <p>The inspector will ask you {totalQuestions} questions about <em>{topic?.title ?? formatTopicId(data.topicId)}</em>. Answer honestly and in detail — this is your chance to find gaps before a real CQC visit. Your answers are private and will not affect your official record.</p>
+                  </div>
                 </div>
               )}
+
+              <div className={styles.progressBar}>
+                <span className={styles.progressText}>Question {currentQuestionNumber} of {totalQuestions}</span>
+                <div className={styles.progressTrack}>
+                  <div
+                    className={styles.progressFill}
+                    style={{ width: `${(data.followUpsUsed / data.maxFollowUps) * 100}%` }}
+                  />
+                </div>
+                <span className={styles.progressRemaining}>
+                  {questionsRemaining === 0
+                    ? 'Final question'
+                    : `${questionsRemaining} more after this`}
+                </span>
+              </div>
+
+              {questionsRemaining === 0 && (
+                <div className={styles.finalQuestionBanner}>
+                  This is your final question — give as much detail as you can.
+                </div>
+              )}
+
+              <div className={styles.questionCard}>
+                <div className={styles.inspectorLabel}>
+                  <span className={styles.inspectorBadge}>Inspector</span>
+                  {topic && <span className={styles.questionRef}>{topic.regulationSectionId} — {topic.title}</span>}
+                </div>
+                <p className={styles.questionPrompt} data-testid="mock-session-question">
+                  {data.currentQuestion || 'Loading question...'}
+                </p>
+              </div>
+
+              {conversationHistory.length > 0 && (
+                <div className={styles.conversationHistory}>
+                  <h3 className={styles.historyTitle}>What you&apos;ve covered so far</h3>
+                  {conversationHistory
+                    .reduce<Array<{ q: ConversationTurn; a?: ConversationTurn }>>((pairs, turn, idx, arr) => {
+                      if (turn.role === 'assistant') {
+                        pairs.push({ q: turn, a: arr[idx + 1] });
+                      }
+                      return pairs;
+                    }, [])
+                    .map((pair, i) => (
+                      <div key={i} className={styles.exchangePair}>
+                        <div className={styles.inspectorTurn}>
+                          <span className={styles.turnLabel}>Inspector asked</span>
+                          <p>{pair.q.content}</p>
+                        </div>
+                        {pair.a && (
+                          <div className={styles.userTurn}>
+                            <span className={styles.turnLabel}>Your response</span>
+                            <p>{pair.a.content}</p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              )}
+
               <div className={styles.section}>
-                <h2 className={styles.sectionTitle}>Submit Answer</h2>
+                <h2 className={styles.sectionTitle}>Your Response</h2>
+                <p className={styles.guidance}>
+                  Be specific. Name the documents you have, describe the process you follow, and give an example where you can. Vague answers will generate findings — detailed answers show compliance.
+                </p>
                 <textarea
                   className={styles.answerInput}
                   value={answer}
                   onChange={(event) => setAnswer(event.target.value)}
-                  placeholder="Provide a response to complete the session..."
-                  aria-label="Your response to the inspection question"
-                  rows={4}
+                  placeholder="e.g. We have a risk assessment policy reviewed in January 2026. Staff complete individual risk assessments on admission and review them monthly or after any incident. Our last audit in December showed 98% compliance..."
+                  aria-label="Your response to the inspector's question"
+                  rows={7}
                   data-testid="mock-session-answer"
+                  disabled={submitting}
                 />
-                <button
-                  className={styles.submitButton}
-                  onClick={handleSubmitAnswer}
-                  disabled={submitting || !answer.trim()}
-                  data-testid="primary-submit-answer"
-                >
-                  {submitting ? 'Submitting...' : 'Submit Answer'}
-                </button>
+                {!answer.trim() && !submitting && (
+                  <p className={styles.answerHint}>Write at least a sentence before submitting.</p>
+                )}
+                <div className={styles.submitRow}>
+                  <button
+                    className={styles.submitButton}
+                    onClick={handleSubmitAnswer}
+                    disabled={submitting || !answer.trim()}
+                    data-testid="primary-submit-answer"
+                  >
+                    {submitting
+                      ? (currentQuestionNumber < totalQuestions
+                          ? 'Loading next question...'
+                          : 'Completing your inspection...')
+                      : (questionsRemaining > 0
+                          ? 'Submit and continue to next question →'
+                          : 'Submit my final response and complete inspection')}
+                  </button>
+                </div>
               </div>
             </>
           ) : (
             <div className={styles.completedSection}>
-              <h2 className={styles.sectionTitle}>Session Complete</h2>
-              <p>This practice inspection session has been completed. View the generated findings to see your results.</p>
-              <Link
-                href={`/findings?provider=${providerId}&facility=${facilityId}`}
-                className={styles.submitButton}
-                style={{ display: 'inline-block', textDecoration: 'none', textAlign: 'center', marginTop: 'var(--space-4)' }}
-              >
-                View Findings
-              </Link>
+              <div className={styles.completedIcon}>✓</div>
+              <h2 className={styles.completedTitle}>Mock Inspection Complete</h2>
+              <p className={styles.completedSummary}>
+                You&apos;ve completed {totalQuestions} questions on <strong>{topic?.title ?? formatTopicId(data.topicId)}</strong>.
+              </p>
+              <p className={styles.completedNote}>
+                A finding has been generated based on your responses. It shows your compliance position, any evidence gaps, and what a real inspector would look for. Use it to prepare before your next CQC visit.
+              </p>
+              <div className={styles.completedActions}>
+                <Link
+                  href={`/findings?provider=${providerId}&facility=${facilityId}`}
+                  className={styles.primaryActionButton}
+                >
+                  View my results →
+                </Link>
+                <Link
+                  href={`/mock-session?provider=${providerId}&facility=${facilityId}`}
+                  className={styles.secondaryActionButton}
+                >
+                  Inspect another area
+                </Link>
+              </div>
+              <p className={styles.completedFootnote}>
+                These results are private and will not appear on your official CQC record.
+              </p>
             </div>
           )}
 

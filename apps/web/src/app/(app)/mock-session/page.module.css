@@ -176,3 +176,43 @@
   color: var(--color-charcoal);
   font-weight: var(--font-semibold);
 }
+
+.introBanner {
+  background-color: var(--color-slate-50);
+  border: 1px solid var(--color-slate-200);
+  border-radius: var(--radius-md);
+  padding: var(--space-5) var(--space-6);
+  margin-bottom: var(--space-6);
+}
+
+.introTitle {
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  color: var(--color-charcoal);
+  margin-bottom: var(--space-2);
+}
+
+.introText {
+  font-size: var(--text-sm);
+  color: var(--color-slate-600);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.sessionCardInner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.sessionAction {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.resumeHint,
+.viewHint {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-charcoal);
+}

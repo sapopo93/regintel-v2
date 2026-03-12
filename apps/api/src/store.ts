@@ -90,6 +90,8 @@ export interface MockSessionRecord {
   topicCatalogHash: string;
   prsLogicProfilesVersion: string;
   prsLogicProfilesHash: string;
+  currentQuestion: string;
+  conversationHistory: Array<{ role: 'assistant' | 'user'; content: string }>;
 }
 
 export interface FindingRecord {
@@ -808,6 +810,7 @@ export class InMemoryStore {
     topicCatalogHash: string;
     prsLogicProfilesVersion: string;
     prsLogicProfilesHash: string;
+    initialQuestion: string;
   }): MockSessionRecord {
     const id = `session-${this.nextSequence(ctx, 'session')}`;
     const sessionId = scopeKey(ctx, id);
@@ -836,6 +839,8 @@ export class InMemoryStore {
       topicCatalogHash: input.topicCatalogHash,
       prsLogicProfilesVersion: input.prsLogicProfilesVersion,
       prsLogicProfilesHash: input.prsLogicProfilesHash,
+      currentQuestion: input.initialQuestion,
+      conversationHistory: [],
     };
 
     this.sessions.write(ctx, id, record);

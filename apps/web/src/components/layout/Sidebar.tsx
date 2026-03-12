@@ -99,17 +99,16 @@ export function Sidebar({
                 item.id !== 'dashboard' &&
                 item.id !== 'intelligence'
               ) {
-                const facilitiesQuery = new URLSearchParams();
-                facilitiesQuery.set('provider', providerId);
                 return (
-                  <Link
+                  <span
                     key={item.id}
-                    href={`/locations?${facilitiesQuery.toString()}` as any}
-                    className={isActive ? styles.navItemActive : styles.navItem}
+                    className={styles.navItemDisabled}
+                    title="Select a location first to access this section"
+                    aria-disabled="true"
                     data-testid={`sidebar-link-${item.id}`}
                   >
                     {label}
-                  </Link>
+                  </span>
                 );
               }
               const href = query.toString() ? `${item.href}?${query.toString()}` : item.href;

@@ -102,6 +102,8 @@ export interface MockInspectionSession {
   topicCatalogHash: string;
   prsLogicProfilesVersion: string;
   prsLogicProfilesHash: string;
+  currentQuestion?: string;
+  conversationHistory?: Array<{ role: 'assistant' | 'user'; content: string }>;
 }
 
 /**

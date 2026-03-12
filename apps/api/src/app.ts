@@ -398,6 +398,105 @@ const TOPICS = [
   },
 ];
 
+const MOCK_QUESTION_BANK: Record<string, string[]> = {
+  'safe-care-treatment': [
+    "Under Regulation 12(2)(a), providers must assess and mitigate risks to people's health and safety. Walk me through your current risk assessment process — how are individual risk assessments initiated, who carries them out, and how often are they reviewed?",
+    "You've described your process. Can you tell me specifically what evidence you hold that demonstrates staff are following these risk assessments in practice? I'm looking for audit trails, observation records, or incident reviews.",
+    "When a risk assessment identifies a significant risk, what's your escalation pathway? Give me a recent example of a high-risk situation and how it was managed end to end.",
+    "How do you ensure risk assessments are updated when someone's condition changes unexpectedly — for example after a fall, a hospital admission, or a change in mental capacity?",
+    "Regulation 12(2)(a) requires oversight at provider level, not just care-plan level. How does senior leadership monitor that risk management is effective across all service users? What does your governance evidence look like?",
+  ],
+  'safeguarding': [
+    "Under Regulation 13, you must protect people from abuse and improper treatment. Describe your safeguarding policy — when did it last have a full review, who owns it, and is it aligned with your local authority's safeguarding procedures?",
+    "How do staff recognise and report safeguarding concerns? Walk me through the last safeguarding referral you made — what triggered it, what steps were taken, and what was the outcome?",
+    "What training do staff receive on safeguarding, and how do you verify it's been understood — not just attended? Are there any staff currently overdue for refresher training?",
+    "How do you handle allegations against staff or volunteers? What's your Deprivation of Liberty (DoLS) authorisation count currently, and are all authorisations in date?",
+    "What oversight does your registered manager or provider have of safeguarding trends across the service? How would you identify if safeguarding was becoming a systemic issue rather than isolated incidents?",
+  ],
+  'medication-management': [
+    "Under Regulation 12(2)(b), safe management of medicines is essential. Describe your medicines policy — who is responsible for medicines management, how are medicines stored, and what's your controlled drugs procedure?",
+    "How do you ensure medicines are administered as prescribed? Walk me through a recent medicines audit — what did it find, and what actions were taken as a result?",
+    "What happens when a medicines administration error occurs? Describe your error reporting process and give an example of a learning outcome from a recent error.",
+    "How do you manage medicines for people who self-administer? What risk assessments are in place, and how are competencies for medicines administration assessed in staff?",
+    "How does your provider-level governance monitor medicines safety? What KPIs do you track, and when was your last medicines-focused quality assurance review?",
+  ],
+  'infection-prevention-control': [
+    "Under Regulation 12(2)(h), you must protect people from the risk of healthcare-associated infections. Who is your IPC lead, and how are they supported to keep their knowledge current with national guidance?",
+    "Walk me through your IPC audit programme — what areas are audited, how frequently, and what happens when an audit identifies a gap?",
+    "How do you manage an outbreak scenario — for example, a norovirus outbreak? What's your notification process and isolation procedure?",
+    "How do you ensure cleaning standards are consistently met across all shifts? What evidence do you hold that the environment is safe from an infection control perspective?",
+  ],
+  'risk-assessment': [
+    "Regulation 12(2)(a) requires systematic assessment and mitigation of risk. How is your risk assessment framework structured — what tools do you use and how do they connect to care planning?",
+    "How do you ensure risk assessments reflect the person's current condition? What triggers an unplanned review, and who is responsible for initiating it?",
+    "Can you describe how environmental and operational risks are captured — not just individual service user risks? For example, premises hazards, staffing risks, or equipment failures.",
+    "How does senior management receive assurance that risk management is effective? What does your governance reporting on risk look like?",
+  ],
+  'premises-equipment': [
+    "Under Regulation 15, premises and equipment must be safe and suitable. Who is responsible for managing planned and reactive maintenance, and what system do you use to track outstanding works?",
+    "What statutory checks are you required to carry out — such as gas safety, electrical testing, or fire risk assessments — and can you confirm all are current?",
+    "How do you manage equipment that is critical to care delivery — such as hoists, pressure-relieving mattresses, or call systems? What's your inspection and servicing schedule?",
+    "Walk me through your last premises audit. What was found, what remedial action was taken, and how was completion verified?",
+  ],
+  'deprivation-of-liberty': [
+    "Under Regulation 13(3), you must not deprive a person of their liberty without a lawful authorisation. How many residents currently have DoLS authorisations in place, and are all of them current?",
+    "What is your process for identifying whether a resident may be deprived of their liberty? Who makes the initial assessment, and how is a referral to the supervisory body made?",
+    "How do you ensure that conditions attached to DoLS authorisations are being met in practice? Give me an example of how conditions have been implemented for a current resident.",
+    "What training do staff receive specifically on MCA and DoLS? How do you assess whether staff are applying the principles correctly in day-to-day practice?",
+    "How does your service governance oversee DoLS compliance? Who monitors expiry dates, and what's your process if an authorisation lapses before renewal?",
+  ],
+  'person-centred-care': [
+    "Under Regulation 9, care must be person-centred and based on a comprehensive assessment. Walk me through how a new resident's care plan is developed — who is involved, what assessments are used, and how are the person's preferences captured?",
+    "How do residents and their families genuinely shape care delivery — not just at care plan review but day to day? Give me a recent example of care being adapted to reflect someone's expressed preference.",
+    "How do you support residents who have difficulty communicating their wishes? What tools or approaches do you use to ensure their voice is central to decisions about their care?",
+    "How do you know care plans are being followed in practice? What monitoring or observation methods do you use to verify that staff are delivering care as planned?",
+    "What feedback mechanisms do you have in place, and how does feedback from residents and families lead to actual changes in care delivery?",
+  ],
+  'consent': [
+    "Under Regulation 11, you must obtain valid consent before providing care. Describe your consent framework — how do you assess capacity, document consent decisions, and review them when circumstances change?",
+    "How do staff ensure that consent is genuinely informed — that the person understands what they are agreeing to? How is this documented in practice?",
+    "When a person lacks capacity, what process do you follow to make decisions in their best interests? Give me a recent example of a best interests decision and how it was recorded.",
+    "How do you handle a situation where a person with capacity refuses care? Walk me through how you balance their right to refuse with your duty of care.",
+    "How does your governance oversee consent practice across the service? When was your last consent-focused audit, and what did it find?",
+  ],
+  'nutrition-hydration': [
+    "Under Regulation 14, you must ensure people receive adequate nutrition and hydration. What assessment tools do you use, and how are nutrition and hydration needs incorporated into each person's care plan?",
+    "How do you identify and respond to someone who is at risk of malnutrition or dehydration? Give me a recent example and describe the intervention pathway.",
+    "How are dietary preferences, cultural needs, and clinical requirements balanced in your menu planning? How do you get feedback from residents on food quality?",
+    "What monitoring do you carry out to ensure nutrition and hydration plans are being followed? How do you record fluid and food intake for high-risk residents?",
+  ],
+  'staffing': [
+    "Under Regulation 18, you must deploy sufficient numbers of suitably qualified staff. How do you calculate your staffing levels — what tool or method do you use, and how often is the calculation reviewed?",
+    "Walk me through how you manage unplanned staff absences. What is your escalation process, and how do you ensure safe staffing levels are maintained through a bank or agency?",
+    "How do you assess and develop staff competencies? What's your supervision and appraisal cycle, and how do you identify training needs?",
+    "What's your current vacancy rate, and how is it being managed? How do you ensure new starters are effectively inducted before working unsupervised?",
+    "How does your governance board or registered manager receive assurance about staffing adequacy? What staffing KPIs are reported, and what would trigger a formal review?",
+  ],
+  'governance-leadership': [
+    "Under Regulation 17, you must operate an effective system of governance. Describe your quality assurance framework — what audits, checks, and reviews form your governance cycle?",
+    "How does your registered manager maintain oversight of quality and safety across the service? What reporting do they receive, and how do they act on it?",
+    "Walk me through a recent significant event — a serious complaint, a safeguarding concern, or a regulatory notification — and describe how your governance system responded.",
+    "How do you ensure that learning from incidents, complaints, and audits leads to sustained improvement rather than one-off actions?",
+    "How are people who use the service, and their families, involved in governance? Give me an example of how feedback has driven a change in the way you operate.",
+  ],
+  'dignity-respect': [
+    "Regulation 10 requires that people are treated with dignity and respect. How do you ensure this is embedded in day-to-day care delivery, not just in policy?",
+    "How do you monitor whether staff are treating people with dignity in practice — particularly during personal care or when people are distressed?",
+    "Give me an example of how you have responded when you identified that someone was not being treated with dignity. What was the situation and what action did you take?",
+    "How do you support people to maintain their identity, relationships, and lifestyle in a way that is meaningful to them?",
+    "How does your governance oversee dignity and respect? What feedback mechanisms do you use, and how is feedback acted upon?",
+  ],
+};
+
+function selectQuestion(topicId: string, questionNumber: number): string {
+  const questions = MOCK_QUESTION_BANK[topicId];
+  if (!questions || questions.length === 0) {
+    return `Question ${questionNumber + 1}: Please describe your processes and evidence for this inspection area.`;
+  }
+  const idx = Math.min(questionNumber, questions.length - 1);
+  return questions[idx];
+}
+
 // SAF 34 regulation key mappings for topics (maps topic IDs to CQC regulation keys)
 const SAF34_TOPIC_REGULATION_KEYS: Record<string, string[]> = {
   'safe-care-treatment': ['CQC:REG:SAFE_CARE', 'CQC:QS:SAFE', 'CQC:REG:SAFEGUARDING', 'CQC:REG:IPC', 'CQC:REG:MEDICINES', 'CQC:REG:PREMISES'],
@@ -1530,6 +1629,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
 
     const fCtx = buildFacilityContext(facility, provider);
     const metadata = buildConstitutionalMetadata();
+    const firstQuestion = selectQuestion(topicId, 0);
     const session = await store.createMockSession(ctx, {
       provider,
       facilityId,
@@ -1539,6 +1639,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       topicCatalogHash: metadata.topicCatalogHash,
       prsLogicProfilesVersion: metadata.prsLogicVersion,
       prsLogicProfilesHash: metadata.prsLogicHash,
+      initialQuestion: firstQuestion,
     });
 
     await store.appendAuditEvent(ctx, providerId, 'MOCK_SESSION_STARTED', {
@@ -1590,29 +1691,69 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       return;
     }
 
+    const topic = TOPICS.find((item) => item.id === session.topicId);
+    const facility = await store.getFacilityById(ctx, session.facilityId);
+    const provider = await store.getProviderById(ctx, providerId);
+    const fCtx = buildFacilityContext(facility ?? {}, provider ?? {});
+
+    const newFollowUpsUsed = session.followUpsUsed + 1;
+    const newHistory = [
+      ...session.conversationHistory,
+      { role: 'assistant' as const, content: session.currentQuestion },
+      { role: 'user' as const, content: answer },
+    ];
+
+    await store.appendAuditEvent(ctx, providerId, 'MOCK_SESSION_ANSWERED', {
+      sessionId,
+      questionNumber: newFollowUpsUsed,
+      answerLength: answer.length,
+    });
+
+    if (newFollowUpsUsed < session.maxFollowUps) {
+      // More questions remain — advance to next question, stay IN_PROGRESS
+      const nextQuestion = selectQuestion(session.topicId, newFollowUpsUsed);
+      const updated: typeof session = {
+        ...session,
+        followUpsUsed: newFollowUpsUsed,
+        currentQuestion: nextQuestion,
+        conversationHistory: newHistory,
+      };
+      await store.updateSession(ctx, updated);
+      const reportContext = resolveReportContextForSession(updated);
+      sendWithMetadata(res, updated, reportContext);
+      return;
+    }
+
+    // Final answer — complete session
+    const completedAt = new Date().toISOString();
     const updated: typeof session = {
       ...session,
-      followUpsUsed: session.followUpsUsed + 1,
+      followUpsUsed: newFollowUpsUsed,
+      conversationHistory: newHistory,
       status: 'COMPLETED',
-      completedAt: new Date().toISOString(),
+      completedAt,
     };
-
     await store.updateSession(ctx, updated);
 
-    const topic = TOPICS.find((item) => item.id === session.topicId);
     const evidenceRequired = topic?.evidenceRequirements ?? [];
     const facilityEvidence = await store.listEvidenceByFacility(ctx, session.facilityId);
     const evidenceProvided = facilityEvidence.map((record) => record.evidenceType);
     const evidenceMissing = evidenceRequired.filter(
       (required) => !evidenceProvided.includes(required)
     );
-    const facility = await store.getFacilityById(ctx, session.facilityId);
-    const provider = await store.getProviderById(ctx, providerId);
-    const fCtx = buildFacilityContext(facility ?? {}, provider ?? {});
 
     const impactScore = 80;
     const likelihoodScore = 90;
     const adjusted = computeAdjustedSeverityScore(impactScore, likelihoodScore, fCtx.severityMultiplier);
+
+    // Build description from full conversation
+    const conversationSummary = newHistory
+      .map((turn, i) => {
+        const label = turn.role === 'assistant' ? `Q${Math.floor(i / 2) + 1}` : `A${Math.floor(i / 2) + 1}`;
+        return `${label}: ${turn.content.slice(0, 300)}${turn.content.length > 300 ? '...' : ''}`;
+      })
+      .join('\n');
+
     const finding = await store.addFinding(ctx, {
       providerId,
       facilityId: session.facilityId,
@@ -1625,30 +1766,17 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       impactScore: adjusted.adjustedImpact,
       likelihoodScore: adjusted.adjustedLikelihood,
       compositeRiskScore: adjusted.composite,
-      title: `Practice finding: ${topic?.title ?? 'Mock inspection'} (${topic?.regulationSectionId ?? 'Reg 12(2)(a)'})`,
-      description: (() => {
-        const prefix = `During practice inspection of ${topic?.title ?? 'this topic'}, the provider response was evaluated against ${topic?.regulationSectionId ?? 'Reg 12(2)(a)'}. Provider response summary: `;
-        const maxLen = 500;
-        const remaining = maxLen - prefix.length;
-        const summary = remaining >= answer.length
-          ? answer
-          : answer.slice(0, answer.lastIndexOf(' ', remaining)) + '...';
-        return prefix + summary;
-      })(),
+      title: `Mock inspection finding: ${topic?.title ?? 'Mock inspection'} (${topic?.regulationSectionId ?? 'Reg 12(2)(a)'})`,
+      description: `Mock inspection of ${topic?.title ?? 'this topic'} under ${topic?.regulationSectionId ?? 'Reg 12(2)(a)'}. Full session transcript:\n\n${conversationSummary}`,
       evidenceRequired,
       evidenceProvided,
       evidenceMissing,
     });
 
-    await store.appendAuditEvent(ctx, providerId, 'MOCK_SESSION_ANSWERED', {
-      sessionId,
-      answerLength: answer.length,
-      followUpsUsed: updated.followUpsUsed,
-    });
     await store.appendAuditEvent(ctx, providerId, 'MOCK_SESSION_COMPLETED', {
       sessionId,
       findingId: finding.id,
-      findingsCount: 1,
+      questionsAsked: newFollowUpsUsed,
     });
 
     if (process.env.ENABLE_AI_INSIGHTS !== 'false') {
@@ -1662,7 +1790,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
           topicId: session.topicId,
           topicTitle: topic?.title,
           regulationSectionId: topic?.regulationSectionId,
-          question: topic?.title ? `Mock inspection topic: ${topic.title}` : 'Mock inspection topic',
+          question: session.currentQuestion,
           answer,
           serviceType: facility?.serviceType,
         } as AIInsightJobData);

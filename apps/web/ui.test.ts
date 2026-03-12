@@ -404,7 +404,7 @@ describe('ui:no-interpretation', () => {
 
     it('watermark text is fact-based', () => {
       // Watermark states facts, not interpretations
-      expect(SIMULATION_WATERMARK).toContain('PRACTICE');
+      expect(SIMULATION_WATERMARK).toContain('MOCK');
       expect(SIMULATION_WATERMARK).toContain('NOT AN OFFICIAL CQC RECORD');
 
       // No interpretive language like "safe", "risky", "good", "bad"
