@@ -44,7 +44,7 @@ test.describe('No dead buttons', () => {
       'topics',
       'mock-session',
       'findings',
-      'facilities',
+      'locations',
       'evidence',
       'exports',
       'audit',
@@ -73,9 +73,9 @@ test.describe('No dead buttons', () => {
     let response = await responsePromise;
     let body = await response.text();
     expect(body.toLowerCase()).not.toContain('not implemented');
-    await page.waitForURL(/\/facilities\?provider=/);
+    await page.waitForURL(/\/locations\?provider=/);
 
-    await page.goto(`${BASE_URL}/facilities/new?provider=${providerId}`);
+    await page.goto(`${BASE_URL}/locations/new?provider=${providerId}`);
     const cqcLocationId = `1-${String(Math.floor(Math.random() * 1e9)).padStart(9, '0')}`;
     await page.fill('[data-testid="facility-name-input"]', 'No Dead Facility');
     await page.fill('[data-testid="cqc-location-id-input"]', cqcLocationId);
@@ -96,7 +96,7 @@ test.describe('No dead buttons', () => {
     body = JSON.stringify(facilityBody);
     expect(body.toLowerCase()).not.toContain('not implemented');
 
-    await page.waitForURL(new RegExp(`/facilities/${createdFacilityId}`));
+    await page.waitForURL(new RegExp(`/locations/${createdFacilityId}`));
     await page.click('[data-testid="toggle-upload-button"]');
     await page.waitForSelector('[data-testid="file-input"]', { state: 'visible' });
     await page.setInputFiles('[data-testid="file-input"]', {

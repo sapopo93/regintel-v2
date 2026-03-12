@@ -21,10 +21,10 @@ test('founder full journey from onboarding to export', async ({ page }) => {
   const providerId = providerBody.provider?.providerId;
   expect(providerId).toBeTruthy();
 
-  await page.waitForURL(/\/facilities\?provider=/);
+  await page.waitForURL(/\/locations\?provider=/);
 
   await page.click('[data-testid="add-facility-button"]');
-  await page.waitForURL(/\/facilities\/new\?provider=/);
+  await page.waitForURL(/\/locations\/new\?provider=/);
 
   const cqcLocationId = `1-${String(Math.floor(Math.random() * 1e9)).padStart(9, '0')}`;
   await page.fill('[data-testid="facility-name-input"]', 'Acme Care Home');
@@ -45,7 +45,7 @@ test('founder full journey from onboarding to export', async ({ page }) => {
   const facilityId = facilityBody.facility?.id;
   expect(facilityId).toBeTruthy();
 
-  await page.waitForURL(new RegExp(`/facilities/${facilityId}`));
+  await page.waitForURL(new RegExp(`/locations/${facilityId}`));
 
   await expect(page.getByText('Provider ID:')).toBeVisible();
   await expect(page.getByText(String(providerId))).toBeVisible();

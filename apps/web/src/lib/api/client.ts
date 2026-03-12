@@ -179,6 +179,44 @@ export class ApiClient {
   }
 
   /**
+   * Download a file from the API with Clerk auth headers.
+   * Use this instead of a plain <a href> link so Clerk tokens are sent correctly.
+   * Returns a Blob + the server-suggested filename (from Content-Disposition).
+   */
+  async downloadFile(path: string): Promise<{ blob: Blob; filename: string }> {
+    const url = `${this.config.baseUrl}${path}`;
+
+    let authToken: string | null = null;
+    if (this.config.getToken) {
+      authToken = await this.config.getToken();
+    }
+
+    const response = await fetch(url, {
+      credentials: 'include',
+      headers: {
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        ...(this.config.tenantId ? { 'X-Tenant-Id': this.config.tenantId } : {}),
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new ApiError(
+        `Download failed: ${errorData.error || response.statusText}`,
+        response.status,
+        errorData
+      );
+    }
+
+    const disposition = response.headers.get('Content-Disposition') ?? '';
+    const filenameMatch = disposition.match(/filename="([^"]+)"/);
+    const filename = filenameMatch?.[1] ?? path.split('/').pop() ?? 'download';
+
+    const blob = await response.blob();
+    return { blob, filename };
+  }
+
+  /**
    * Get providers list
    */
   async getProviders(): Promise<ProvidersListResponse> {

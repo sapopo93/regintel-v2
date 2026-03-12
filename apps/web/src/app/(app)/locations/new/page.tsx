@@ -146,7 +146,7 @@ export default function NewFacilityPage() {
 
       // Redirect to facility detail page with sync flag so it shows loading message
       const query = providerId ? `?provider=${providerId}&cqcSyncing=true` : '?cqcSyncing=true';
-      router.push(`/facilities/${response.facility.id}${query}`);
+      router.push(`/locations/${response.facility.id}${query}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to create facility');
       setSubmitting(false);
@@ -155,7 +155,7 @@ export default function NewFacilityPage() {
 
   const handleCancel = () => {
     const query = providerId ? `?provider=${providerId}` : '';
-    router.push(`/facilities${query}` as any);
+    router.push(`/locations${query}` as any);
   };
 
   return (

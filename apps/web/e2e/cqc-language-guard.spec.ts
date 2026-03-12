@@ -70,7 +70,7 @@ test.describe('CQC Language Guard — Facility Page', () => {
 
   test('no tech strings in customer view', async ({ page }) => {
     await page.goto(
-      `${BASE_URL}/facilities/${encodeURIComponent(facilityId)}?provider=${encodeURIComponent(providerId)}`
+      `${BASE_URL}/locations/${encodeURIComponent(facilityId)}?provider=${encodeURIComponent(providerId)}`
     );
     await page.waitForSelector('[data-testid="customer-view"]');
     await assertNoTechStrings(page.locator('[data-testid="customer-view"]'));
@@ -78,7 +78,7 @@ test.describe('CQC Language Guard — Facility Page', () => {
 
   test('CQC labels visible in customer view', async ({ page }) => {
     await page.goto(
-      `${BASE_URL}/facilities/${encodeURIComponent(facilityId)}?provider=${encodeURIComponent(providerId)}`
+      `${BASE_URL}/locations/${encodeURIComponent(facilityId)}?provider=${encodeURIComponent(providerId)}`
     );
     await page.waitForSelector('[data-testid="customer-view"]');
     const customerView = page.locator('[data-testid="customer-view"]');
@@ -92,7 +92,7 @@ test.describe('CQC Language Guard — Facility Page', () => {
 
   test('AdvancedPanel is hidden by default', async ({ page }) => {
     await page.goto(
-      `${BASE_URL}/facilities/${encodeURIComponent(facilityId)}?provider=${encodeURIComponent(providerId)}`
+      `${BASE_URL}/locations/${encodeURIComponent(facilityId)}?provider=${encodeURIComponent(providerId)}`
     );
     await page.waitForSelector('[data-testid="advanced-panel"]');
 
@@ -103,7 +103,7 @@ test.describe('CQC Language Guard — Facility Page', () => {
 
   test('AdvancedPanel shows technical content after expand', async ({ page }) => {
     await page.goto(
-      `${BASE_URL}/facilities/${encodeURIComponent(facilityId)}?provider=${encodeURIComponent(providerId)}`
+      `${BASE_URL}/locations/${encodeURIComponent(facilityId)}?provider=${encodeURIComponent(providerId)}`
     );
     await page.waitForSelector('[data-testid="advanced-panel"]');
 
@@ -121,7 +121,7 @@ test.describe('CQC Language Guard — Facility Page', () => {
 
   test('AdvancedPanel summary is keyboard accessible', async ({ page }) => {
     await page.goto(
-      `${BASE_URL}/facilities/${encodeURIComponent(facilityId)}?provider=${encodeURIComponent(providerId)}`
+      `${BASE_URL}/locations/${encodeURIComponent(facilityId)}?provider=${encodeURIComponent(providerId)}`
     );
     await page.waitForSelector('[data-testid="advanced-panel"] summary');
 

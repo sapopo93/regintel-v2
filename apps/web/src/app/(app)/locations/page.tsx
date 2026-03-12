@@ -61,7 +61,7 @@ export default function FacilitiesPage() {
 
   const handleAddFacility = () => {
     const query = providerId ? `?provider=${providerId}` : '';
-    router.push(`/facilities/new${query}`);
+    router.push(`/locations/new${query}`);
   };
 
   const handleViewFacility = (facilityId: string) => {

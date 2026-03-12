@@ -63,7 +63,7 @@ export const SIDEBAR_GROUPS: readonly SidebarGroup[] = [
     label: 'SETUP',
     items: [
       { id: 'providers', label: 'Providers', href: '/providers' },
-      { id: 'facilities', label: 'Locations', href: '/facilities' },
+      { id: 'locations', label: 'Locations', href: '/locations' },
     ],
   },
   {

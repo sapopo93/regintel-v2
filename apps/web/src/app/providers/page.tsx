@@ -111,7 +111,7 @@ function ProvidersPageInner({
           ? { ...prev, providers: [...prev.providers, provider] }
           : { ...metadata, providers: [provider] }
       ));
-      router.push(`/facilities?provider=${provider.providerId}`);
+      router.push(`/locations?provider=${provider.providerId}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to create provider');
     } finally {
@@ -120,7 +120,7 @@ function ProvidersPageInner({
   };
 
   const handleOpenProvider = (provider: Provider) => {
-    router.push(`/facilities?provider=${provider.providerId}`);
+    router.push(`/locations?provider=${provider.providerId}`);
   };
 
   if (loading) {

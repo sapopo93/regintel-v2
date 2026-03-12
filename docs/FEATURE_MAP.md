@@ -52,14 +52,14 @@ Source of truth for UI routes and API endpoints. Update this file when navigatio
       ]
     },
     {
-      "route": "/facilities?provider=:providerId",
+      "route": "/locations?provider=:providerId",
       "status": "LIVE",
       "endpoints": [
         "GET /v1/providers/:providerId/facilities"
       ]
     },
     {
-      "route": "/facilities/new?provider=:providerId",
+      "route": "/locations/new?provider=:providerId",
       "status": "LIVE",
       "endpoints": [
         "POST /v1/facilities/onboard",
@@ -67,7 +67,7 @@ Source of truth for UI routes and API endpoints. Update this file when navigatio
       ]
     },
     {
-      "route": "/facilities/[facilityId]?provider=:providerId",
+      "route": "/locations/[facilityId]?provider=:providerId",
       "status": "LIVE",
       "endpoints": [
         "GET /v1/facilities/:facilityId",

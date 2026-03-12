@@ -95,7 +95,7 @@ export function Sidebar({
               } else if (
                 providerId &&
                 item.id !== 'providers' &&
-                item.id !== 'facilities' &&
+                item.id !== 'locations' &&
                 item.id !== 'dashboard' &&
                 item.id !== 'intelligence'
               ) {
@@ -104,7 +104,7 @@ export function Sidebar({
                 return (
                   <Link
                     key={item.id}
-                    href={`/facilities?${facilitiesQuery.toString()}` as any}
+                    href={`/locations?${facilitiesQuery.toString()}` as any}
                     className={isActive ? styles.navItemActive : styles.navItem}
                     data-testid={`sidebar-link-${item.id}`}
                   >

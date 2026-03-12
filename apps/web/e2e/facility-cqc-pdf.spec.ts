@@ -28,10 +28,10 @@ test('create facility with CQC ID and upload CQC report PDF', async ({ page }) =
   const providerId = providerBody.provider?.providerId;
   expect(providerId).toBeTruthy();
 
-  await page.waitForURL(/\/facilities\?provider=/);
+  await page.waitForURL(/\/locations\?provider=/);
 
   await page.click('[data-testid="add-facility-button"]');
-  await page.waitForURL(/\/facilities\/new\?provider=/);
+  await page.waitForURL(/\/locations\/new\?provider=/);
 
   await page.fill('[data-testid="facility-name-input"]', "St Joseph's Nursing Home");
   await page.fill('[data-testid="cqc-location-id-input"]', '1-1881302287');
@@ -51,7 +51,7 @@ test('create facility with CQC ID and upload CQC report PDF', async ({ page }) =
   const facilityId = facilityBody.facility?.id;
   expect(facilityId).toBeTruthy();
 
-  await page.waitForURL(new RegExp(`/facilities/${facilityId}`));
+  await page.waitForURL(new RegExp(`/locations/${facilityId}`));
 
   await page.click('[data-testid="toggle-upload-button"]');
   await page.waitForSelector('[data-testid="file-input"]', { state: 'visible' });

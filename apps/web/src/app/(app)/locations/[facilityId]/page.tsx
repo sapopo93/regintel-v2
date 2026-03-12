@@ -133,7 +133,7 @@ export default function FacilityDetailPage() {
         const hasCqcReport = evidence.evidence.some((e) => e.evidenceType === 'CQC_REPORT');
         if (hasCqcReport) {
           setEvidenceData(evidence);
-          const base = `/facilities/${encodeURIComponent(facilityId)}`;
+          const base = `/locations/${encodeURIComponent(facilityId)}`;
           const nextRoute = (
             providerId ? `${base}?provider=${encodeURIComponent(providerId)}` : base
           ) as Route;

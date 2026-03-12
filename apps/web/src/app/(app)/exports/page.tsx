@@ -18,7 +18,7 @@ import { DisclosurePanel } from '@/components/disclosure/DisclosurePanel';
 import { MetadataBar } from '@/components/constitutional/MetadataBar';
 import { SimulationFrame } from '@/components/mock/SimulationFrame';
 import { apiClient } from '@/lib/api/client';
-import { getAuthRole, getAuthToken } from '@/lib/auth';
+import { getAuthRole } from '@/lib/auth';
 import type { ExportStatusResponse, ProviderOverviewResponse, ExportFormat } from '@/lib/api/types';
 import { validateConstitutionalRequirements } from '@/lib/validators';
 import { ErrorState } from '@/components/layout/ErrorState';
@@ -36,7 +36,9 @@ export default function ExportsPage() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [downloadReady, setDownloadReady] = useState(false);
+  const [downloadPath, setDownloadPath] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   const loadPageData = () => {
     if (!ready || !providerId || !facilityId) {
@@ -100,7 +102,8 @@ export default function ExportsPage() {
 
     setLoading(true);
     setExportError(null);
-    setDownloadUrl(null);
+    setDownloadReady(false);
+    setDownloadPath(null);
 
     try {
       const response = await apiClient.generateExport(providerId, {
@@ -108,16 +111,34 @@ export default function ExportsPage() {
         format,
         includeWatermark,
       });
-      const token = getAuthToken();
-      if (token) {
-        setDownloadUrl(`${response.downloadUrl}?token=${encodeURIComponent(token)}`);
-      } else {
-        setDownloadUrl(response.downloadUrl);
-      }
+      // Store the API path — download happens via authenticated fetch, not a bare <a href>
+      setDownloadPath(response.downloadUrl);
+      setDownloadReady(true);
     } catch (err: any) {
       setExportError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!downloadPath) return;
+    setDownloading(true);
+    setExportError(null);
+    try {
+      const { blob, filename } = await apiClient.downloadFile(downloadPath);
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(objectUrl);
+    } catch (err: any) {
+      setExportError(err.message || 'Download failed');
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -237,17 +258,17 @@ export default function ExportsPage() {
                   </div>
                 )}
 
-                {downloadUrl && (
+                {downloadReady && (
                   <div className={styles.section}>
                     <h2 className={styles.sectionTitle}>Export Ready</h2>
                     <p className={styles.successMessage}>Your export has been generated.</p>
-                    <a
-                      href={downloadUrl}
-                      download
+                    <button
+                      onClick={handleDownload}
+                      disabled={downloading}
                       className={styles.downloadButton}
                     >
-                      Download {formatLabel(format)}
-                    </a>
+                      {downloading ? 'Downloading…' : `Download ${formatLabel(format)}`}
+                    </button>
                   </div>
                 )}
               </div>

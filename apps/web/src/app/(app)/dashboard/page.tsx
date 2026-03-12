@@ -265,7 +265,7 @@ export default function DashboardPage() {
               title="No locations registered yet"
               description="Register your first location to start tracking readiness."
               action={
-                <Link href={`/facilities?provider=${providerId}`} style={{ color: 'var(--color-primary, #2563eb)', textDecoration: 'none', fontSize: '0.9rem' }}>
+                <Link href={`/locations?provider=${providerId}`} style={{ color: 'var(--color-primary, #2563eb)', textDecoration: 'none', fontSize: '0.9rem' }}>
                   Go to Locations
                 </Link>
               }
