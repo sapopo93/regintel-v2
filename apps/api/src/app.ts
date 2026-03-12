@@ -12,10 +12,12 @@ import {
   generateCsvExport,
   generatePdfExport,
   serializeCsvExport,
+  type CsvActionRecord,
+  type CsvEvidenceRecord,
 } from '@regintel/domain/readiness-export';
-import { renderFindingsPdf, renderInspectorPackPdf, renderBlueOceanBoardPdf, renderBlueOceanAuditPdf } from './renderers/pdf-renderer.js';
-import { renderFindingsDocx, renderInspectorPackDocx, renderBlueOceanBoardDocx, renderBlueOceanAuditDocx } from './renderers/docx-renderer.js';
-import type { RenderOutput } from './renderers/renderer-types.js';
+import { renderFindingsPdf, renderInspectorPackPdf, renderBlueOceanBoardPdf, renderBlueOceanAuditPdf } from './renderers/pdf-renderer';
+import { renderFindingsDocx, renderInspectorPackDocx, renderBlueOceanBoardDocx, renderBlueOceanAuditDocx } from './renderers/docx-renderer';
+import type { RenderOutput } from './renderers/renderer-types';
 import {
   QUEUE_NAMES,
   getQueueAdapter,
@@ -55,7 +57,7 @@ import {
   type EvidenceInput,
 } from '@regintel/domain/inspector-evidence-pack';
 import { fetchCqcLocations, fetchCqcLocationDetail, getNoteworthy } from '@regintel/domain/cqc-changes-client';
-import { ACTION_PLAN_TEMPLATES } from './action-plan-templates.js';
+import { ACTION_PLAN_TEMPLATES } from './action-plan-templates';
 import {
   generateAlerts,
   deduplicateAlerts,
@@ -3515,9 +3517,19 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     const topicCatalogSha = session.topicCatalogHash.replace('sha256:', '');
     const prsLogicSha = session.prsLogicProfilesHash.replace('sha256:', '');
 
+    // Look up human-readable names for the PDF/DOCX title page.
+    // Use list-based lookup to avoid silent failures from key scoping mismatches.
+    // NOTE: Exports are cached — users must generate a NEW export after this fix to see corrected names.
+    const allProviders = store.listProviders(ctx);
+    const matchedProvider = allProviders.find(p => p.providerId === providerId);
+    const allFacilities = store.listFacilities(ctx);
+    const matchedFacility = allFacilities.find(f => f.id === facilityId);
+
     const metadata = {
       sessionId: session.sessionId,
       providerId,
+      providerName: matchedProvider?.providerName,
+      facilityName: matchedFacility?.facilityName,
       topicCatalogVersion: session.topicCatalogVersion,
       topicCatalogSha256: topicCatalogSha,
       prsLogicProfilesVersion: session.prsLogicProfilesVersion,
@@ -3531,7 +3543,24 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     let contentEncoding: 'utf8' | 'base64' = 'utf8';
 
     if (safeFormat === 'CSV') {
-      const csvExport = generateCsvExport(domainSession, metadata);
+      // Collect action plan data for CSV enrichment columns
+      const csvActions: CsvActionRecord[] = [];
+      for (const finding of domainSession.draftFindings) {
+        const actions = store.listActionsByFinding(ctx, finding.id);
+        for (const action of actions) {
+          csvActions.push({
+            findingId: finding.id,
+            status: action.status,
+            ownerRole: action.assignedTo,
+            targetCompletionDate: action.targetCompletionDate,
+          });
+        }
+      }
+
+      // TODO: Evidence coverage records not yet available per-topic from store
+      const csvEvidenceRecords: CsvEvidenceRecord[] = [];
+
+      const csvExport = generateCsvExport(domainSession, metadata, csvActions, csvEvidenceRecords);
       content = serializeCsvExport(csvExport);
     } else if (safeFormat === 'BLUE_OCEAN_BOARD' || safeFormat === 'BLUE_OCEAN_AUDIT') {
       const inspectionFindings = findings.map((f) => {
@@ -3685,18 +3714,19 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     if (!parsed) return;
     const { exportId } = parsed.params as { exportId: string };
     const exportRecord = await store.getExportById(ctx, exportId);
-    if (!exportRecord) {
+    const validPdfFormats = ['PDF', 'BLUE_OCEAN_BOARD', 'BLUE_OCEAN_AUDIT', 'INSPECTOR_PACK'];
+    if (!exportRecord || !validPdfFormats.includes(exportRecord.format)) {
+      sendError(res, 404, 'Export not found');
+      return;
+    }
+    // Only serve binary PDF (base64-encoded); utf8 exports are legacy markdown, not PDF
+    if (exportRecord.contentEncoding !== 'base64') {
       sendError(res, 404, 'Export not found');
       return;
     }
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${exportRecord.id}.pdf"`);
-    const encoding = exportRecord.contentEncoding ?? 'utf8';
-    if (encoding === 'base64') {
-      res.send(Buffer.from(exportRecord.content, 'base64'));
-    } else {
-      res.send(exportRecord.content);
-    }
+    res.send(Buffer.from(exportRecord.content, 'base64'));
   });
 
   app.get('/v1/exports/:exportId.docx', async (req, res) => {
@@ -3707,18 +3737,14 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     if (!parsed) return;
     const { exportId } = parsed.params as { exportId: string };
     const exportRecord = await store.getExportById(ctx, exportId);
-    if (!exportRecord) {
+    // DOCX exports are always base64-encoded binary; reject non-base64 exports
+    if (!exportRecord || exportRecord.contentEncoding !== 'base64') {
       sendError(res, 404, 'Export not found');
       return;
     }
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="${exportRecord.id}.docx"`);
-    const encoding = exportRecord.contentEncoding ?? 'utf8';
-    if (encoding === 'base64') {
-      res.send(Buffer.from(exportRecord.content, 'base64'));
-    } else {
-      res.send(exportRecord.content);
-    }
+    res.send(Buffer.from(exportRecord.content, 'base64'));
   });
 
   app.get('/v1/exports/:exportId.md', async (req, res) => {

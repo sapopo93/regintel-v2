@@ -28,6 +28,8 @@ export const EXPORT_WATERMARK = 'READINESS (MOCK) — NOT REGULATORY HISTORY';
 export interface ExportMetadata {
   sessionId: SessionId;
   providerId: string;
+  providerName?: string;
+  facilityName?: string;
   topicCatalogVersion: string;
   topicCatalogSha256: ContentHash;
   prsLogicProfilesVersion: string;

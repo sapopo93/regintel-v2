@@ -167,7 +167,8 @@ export async function renderFindingsDocx(pdfExport: PdfExport): Promise<RenderOu
   const children: Paragraph[] = [
     heading('Mock Inspection Findings'),
     emptyParagraph(),
-    boldText('Provider: ', pdfExport.metadata.providerId),
+    boldText('Provider: ', pdfExport.metadata.providerName ?? pdfExport.metadata.providerId),
+    ...(pdfExport.metadata.facilityName ? [boldText('Facility: ', pdfExport.metadata.facilityName)] : []),
     boldText('Session: ', pdfExport.metadata.sessionId),
     boldText('Generated: ', formatDate(pdfExport.generatedAt)),
     boldText('Total Findings: ', String(pdfExport.totalFindings)),

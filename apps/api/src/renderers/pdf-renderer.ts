@@ -32,7 +32,7 @@ function addMetadataFooter(
   doc: PDFKit.PDFDocument,
   meta: { topicCatalogVersion: string; topicCatalogHash: string; prsLogicVersion: string; prsLogicHash: string }
 ): void {
-  const y = doc.page.height - 50;
+  const y = doc.page.height - 70;  // 70px from bottom keeps text above the margin boundary
   doc.save();
   doc.fontSize(7).fillColor('#aaaaaa');
   doc.text(
@@ -80,7 +80,9 @@ export async function renderFindingsPdf(pdfExport: PdfExport): Promise<RenderOut
   doc.moveDown(6);
   doc.fontSize(24).fillColor('#1a237e').text('Mock Inspection Findings', { align: 'center' });
   doc.moveDown(1);
-  doc.fontSize(12).fillColor('#333333').text(`Provider: ${pdfExport.metadata.providerId}`, { align: 'center' });
+  const providerLabel = pdfExport.metadata.providerName ?? pdfExport.metadata.providerId;
+  const facilityLabel = pdfExport.metadata.facilityName ? ` — ${pdfExport.metadata.facilityName}` : '';
+  doc.fontSize(12).fillColor('#333333').text(`Provider: ${providerLabel}${facilityLabel}`, { align: 'center' });
   doc.moveDown(0.5);
   doc.text(`Session: ${pdfExport.metadata.sessionId}`, { align: 'center' });
   doc.moveDown(0.5);
