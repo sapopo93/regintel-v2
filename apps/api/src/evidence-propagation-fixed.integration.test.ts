@@ -93,7 +93,7 @@ describe('evidence:propagation-fixed', () => {
    * Test B: Topic mapping identifies missing evidence correctly
    */
   it('✅ PASS: topic evidence matching works with enum types', () => {
-    // Upload evidence for 'safe-care-treatment' topic
+    // Upload evidence for 'safeguarding' topic
     const policyBlob = store.createEvidenceBlob(ctx, {
       contentBase64: 'cG9saWN5',
       mimeType: 'application/pdf',
@@ -166,7 +166,7 @@ describe('evidence:propagation-fixed', () => {
     const session1 = store.createMockSession(ctx, {
       provider: provider!,
       facilityId,
-      topicId: 'safe-care-treatment',
+      topicId: 'safeguarding',
       maxFollowUps: 4,
       topicCatalogVersion: '1.0.0',
       topicCatalogHash: 'sha256:abc123',
@@ -177,7 +177,7 @@ describe('evidence:propagation-fixed', () => {
     const session2 = store.createMockSession(ctx, {
       provider: provider!,
       facilityId,
-      topicId: 'safe-care-treatment',
+      topicId: 'safeguarding',
       maxFollowUps: 4,
       topicCatalogVersion: '1.0.0',
       topicCatalogHash: 'sha256:abc123',
@@ -189,8 +189,8 @@ describe('evidence:propagation-fixed', () => {
     const findingData = {
       providerId,
       facilityId,
-      regulationSectionId: 'Reg 12(2)(a)',
-      topicId: 'safe-care-treatment',
+      regulationSectionId: 'SAF S3',
+      topicId: 'safeguarding',
       origin: 'SYSTEM_MOCK' as const,
       reportingDomain: 'MOCK_SIMULATION' as const,
       severity: 'HIGH' as const,

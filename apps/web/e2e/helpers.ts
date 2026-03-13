@@ -75,7 +75,7 @@ export async function createMockSession(
     { headers: { Authorization: `Bearer ${FOUNDER_TOKEN}` } }
   );
   const topicsBody = await topicsResponse.json();
-  const topicId = topicsBody.topics?.[0]?.id || 'safe-care-treatment';
+  const topicId = topicsBody.topics?.[0]?.id || 'safeguarding';
 
   const sessionResponse = await request.post(
     `${API_BASE_URL}/v1/providers/${providerId}/mock-sessions`,

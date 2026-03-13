@@ -22,10 +22,10 @@ describe('saf34', () => {
     for (const qs of SAF_34_QUALITY_STATEMENTS) {
       counts[qs.keyQuestion] = (counts[qs.keyQuestion] || 0) + 1;
     }
-    expect(counts.SAFE).toBe(9);
-    expect(counts.EFFECTIVE).toBe(9);
-    expect(counts.CARING).toBe(4);
-    expect(counts.RESPONSIVE).toBe(4);
+    expect(counts.SAFE).toBe(8);
+    expect(counts.EFFECTIVE).toBe(6);
+    expect(counts.CARING).toBe(5);
+    expect(counts.RESPONSIVE).toBe(7);
     expect(counts.WELL_LED).toBe(8);
   });
 
@@ -71,7 +71,7 @@ describe('saf34', () => {
       const caring = result.keyQuestions.find((kq) => kq.keyQuestion === 'CARING');
       expect(caring).toBeDefined();
       expect(caring!.covered).toBeGreaterThan(0);
-      expect(caring!.total).toBe(4);
+      expect(caring!.total).toBe(5);
     });
 
     it('returns full coverage when all keys are matched', () => {

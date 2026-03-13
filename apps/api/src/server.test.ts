@@ -164,7 +164,7 @@ describe('API contract tests', () => {
     const sessionResponse = await request(app)
       .post(`/v1/providers/${provider.providerId}/mock-sessions`)
       .set(AUTH_HEADER)
-      .send({ topicId: 'safe-care-treatment', facilityId: facility.id });
+      .send({ topicId: 'safeguarding', facilityId: facility.id });
     expectMetadata(sessionResponse.body);
 
     const answerResponse = await request(app)
@@ -228,7 +228,7 @@ describe('API contract tests', () => {
     const sessionResponse = await request(app)
       .post(`/v1/providers/${provider.providerId}/mock-sessions`)
       .set(AUTH_HEADER)
-      .send({ topicId: 'safe-care-treatment', facilityId: facility.id });
+      .send({ topicId: 'safeguarding', facilityId: facility.id });
     expectMetadata(sessionResponse.body);
     const session = sessionResponse.body;
 
@@ -249,7 +249,7 @@ describe('API contract tests', () => {
       request(app).get('/v1/providers'),
       request(app).get(`/v1/providers/${provider.providerId}/overview`).query({ facility: facility.id }),
       request(app).get(`/v1/providers/${provider.providerId}/topics`).query({ facility: facility.id }),
-      request(app).get(`/v1/providers/${provider.providerId}/topics/safe-care-treatment`),
+      request(app).get(`/v1/providers/${provider.providerId}/topics/safeguarding`),
       request(app).get(`/v1/providers/${provider.providerId}/mock-sessions`).query({ facility: facility.id }),
       request(app).get(`/v1/providers/${provider.providerId}/mock-sessions/${session.sessionId}`),
       request(app).get(`/v1/providers/${provider.providerId}/evidence`).query({ facility: facility.id }),

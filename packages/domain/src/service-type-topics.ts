@@ -7,6 +7,8 @@
  * all topics.
  *
  * Unknown/undefined service types get all 34 topics (backward compat).
+ *
+ * Topic IDs are 1:1 with the CQC SAF 34 Quality Statements.
  */
 
 import { EvidenceType } from './evidence-types';
@@ -19,59 +21,57 @@ export enum CqcServiceType {
   SUPPORTED_LIVING = 'supported_living',
 }
 
-/** All 34 topic IDs in the system */
+/** All 34 topic IDs in the system — 1:1 with CQC SAF Quality Statements */
 export const ALL_TOPIC_IDS: readonly string[] = [
-  // SAFE
-  'safe-care-treatment',
+  // SAFE (S1–S8)
+  'learning-culture',
+  'safe-systems-pathways-transitions',
   'safeguarding',
-  'medication-management',
+  'involving-people-manage-risks',
+  'safe-environments',
+  'safe-effective-staffing',
   'infection-prevention-control',
-  'risk-assessment',
-  'premises-equipment',
-  'deprivation-of-liberty',
-  // EFFECTIVE
+  'medicines-optimisation',
+  // EFFECTIVE (E1–E6)
+  'assessing-needs',
+  'evidence-based-care',
+  'staff-teams-work-together',
+  'supporting-healthier-lives',
+  'monitoring-improving-outcomes',
+  'consent-to-care',
+  // CARING (C1–C5)
+  'kindness-compassion-dignity',
+  'treating-people-as-individuals',
+  'independence-choice-control',
+  'responding-immediate-needs',
+  'workforce-wellbeing-enablement',
+  // RESPONSIVE (R1–R7)
   'person-centred-care',
-  'consent',
-  'nutrition-hydration',
-  'staff-training-development',
-  'supervision-appraisal',
-  'mental-capacity-act',
-  // CARING
-  'dignity-respect',
-  'service-user-involvement',
-  'emotional-social-wellbeing',
-  'end-of-life-care',
-  // RESPONSIVE
-  'complaints-handling',
-  'care-planning-review',
-  'meeting-individual-needs',
-  'transitions-discharge',
-  'equality-diversity',
-  // WELL-LED
-  'governance-oversight',
-  'quality-assurance',
-  'staff-recruitment',
-  'fit-proper-persons',
-  'whistleblowing-openness',
-  'notifications-cqc',
-  'financial-sustainability',
-  'records-management',
-  'staff-wellbeing',
-  'learning-from-incidents',
-  'partnership-working',
-  'staffing',
+  'care-continuity-integration',
+  'providing-information',
+  'listening-involving-people',
+  'equity-in-access',
+  'equity-experiences-outcomes',
+  'planning-for-future',
+  // WELL-LED (W1–W8)
+  'shared-direction-culture',
+  'capable-compassionate-leaders',
+  'freedom-to-speak-up',
+  'workforce-edi',
+  'governance-management-sustainability',
+  'partnerships-communities',
+  'learning-improvement-innovation',
+  'environmental-sustainability',
 ] as const;
 
-/** Topics excluded for domiciliary care (no premises, no on-site catering, no DoLS typically) */
+/** Topics excluded for domiciliary care (no owned premises) */
 const DOMICILIARY_EXCLUDED = new Set([
-  'premises-equipment',
-  'nutrition-hydration',
-  'deprivation-of-liberty',
+  'safe-environments',
 ]);
 
-/** Topics excluded for supported living (no premises responsibility, limited DoLS) */
+/** Topics excluded for supported living (no owned premises) */
 const SUPPORTED_LIVING_EXCLUDED = new Set([
-  'premises-equipment',
+  'safe-environments',
 ]);
 
 function allExcept(excluded: Set<string>): Set<string> {

@@ -137,7 +137,7 @@ test.describe('Tenant Isolation', () => {
       `${API_BASE_URL}/v1/providers/${encodeURIComponent(alphaProviderId)}/mock-sessions`,
       {
         headers: headersFor(TENANT_BETA),
-        data: { topicId: 'safe-care-treatment', facilityId: alphaFacilityId },
+        data: { topicId: 'safeguarding', facilityId: alphaFacilityId },
       }
     );
     expect(res.status()).toBe(404);

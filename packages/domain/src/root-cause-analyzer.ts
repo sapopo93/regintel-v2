@@ -85,7 +85,7 @@ function buildHypotheses(finding: InspectionFinding): RootCauseHypothesis[] {
         `to meet "${finding.title}".`,
       rationale:
         `Impact ${finding.impactScore} and likelihood ${finding.likelihoodScore} ` +
-        'suggest sustained operational strain. Link: S6 (Safe staffing), E8 (Workforce wellbeing)',
+        'suggest sustained operational strain. Link: S6 (Safe staffing), C5 (Workforce wellbeing)',
       disconfirmingTests: [
         `Check training matrix for ${finding.regulationSectionId}-related competencies: % completion, any expired certifications, last assessment dates.`,
         `Review staffing rotas and dependency assessments against required ratios for the last 90 days.`,

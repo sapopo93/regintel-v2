@@ -100,7 +100,7 @@ const TOPIC_WORD_OVERRIDES: Record<string, string> = {
 
 /**
  * Converts a topic slug to display title
- * e.g. "safe-care-treatment" → "Safe Care and Treatment"
+ * e.g. "learning-culture" → "Learning Culture"
  */
 export function formatTopicId(slug: string): string {
   return slug

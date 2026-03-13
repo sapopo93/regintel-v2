@@ -60,7 +60,7 @@ describe('inspector-evidence-pack', () => {
 
       const { qsMap } = mapEvidenceToQualityStatements([evidence]);
 
-      // TRAINING maps to S6, E8, W6
+      // TRAINING maps to S6, C5, W7
       const expectedQs = EVIDENCE_TYPE_TO_QS['TRAINING'];
       for (const qsId of expectedQs) {
         expect(qsMap.get(qsId)!.length).toBe(1);
@@ -76,9 +76,9 @@ describe('inspector-evidence-pack', () => {
 
       const { qsMap } = mapEvidenceToQualityStatements([evidence]);
 
-      // AUDIT maps to W4, W6, E5
-      expect(qsMap.get('W4')!.length).toBe(1);
-      expect(qsMap.get('W4')![0].mappingSource).toBe('type-inferred');
+      // AUDIT maps to W5, W7, W8, E5
+      expect(qsMap.get('W5')!.length).toBe(1);
+      expect(qsMap.get('W5')![0].mappingSource).toBe('type-inferred');
     });
 
     it('places pending audit items in awaiting audit map', () => {

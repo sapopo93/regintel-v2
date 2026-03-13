@@ -41,19 +41,16 @@ describe('service-type-topics', () => {
       expect(getApplicableTopicIds(CqcServiceType.HOSPICE)).toHaveLength(34);
     });
 
-    it('excludes premises/nutrition/DoLS for domiciliary', () => {
+    it('excludes safe-environments for domiciliary', () => {
       const topics = getApplicableTopicIds(CqcServiceType.DOMICILIARY);
-      expect(topics).toHaveLength(31);
-      expect(topics).not.toContain('premises-equipment');
-      expect(topics).not.toContain('nutrition-hydration');
-      expect(topics).not.toContain('deprivation-of-liberty');
+      expect(topics).toHaveLength(33);
+      expect(topics).not.toContain('safe-environments');
     });
 
-    it('excludes premises for supported living', () => {
+    it('excludes safe-environments for supported living', () => {
       const topics = getApplicableTopicIds(CqcServiceType.SUPPORTED_LIVING);
       expect(topics).toHaveLength(33);
-      expect(topics).not.toContain('premises-equipment');
-      expect(topics).toContain('nutrition-hydration');
+      expect(topics).not.toContain('safe-environments');
     });
   });
 
@@ -76,9 +73,9 @@ describe('service-type-topics', () => {
 
   describe('getRequiredEvidenceTypes', () => {
     const mockTopics = [
-      { id: 'safe-care-treatment', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT] },
-      { id: 'premises-equipment', evidenceRequirements: [EvidenceType.AUDIT, EvidenceType.CERTIFICATE] },
-      { id: 'staffing', evidenceRequirements: [EvidenceType.ROTA, EvidenceType.SKILLS_MATRIX, EvidenceType.SUPERVISION] },
+      { id: 'learning-culture', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT] },
+      { id: 'safe-environments', evidenceRequirements: [EvidenceType.AUDIT, EvidenceType.CERTIFICATE] },
+      { id: 'safe-effective-staffing', evidenceRequirements: [EvidenceType.ROTA, EvidenceType.SKILLS_MATRIX, EvidenceType.SUPERVISION] },
     ];
 
     it('returns all evidence types for undefined service type', () => {
@@ -89,7 +86,7 @@ describe('service-type-topics', () => {
 
     it('excludes evidence types from excluded topics for domiciliary', () => {
       const types = getRequiredEvidenceTypes(CqcServiceType.DOMICILIARY, mockTopics);
-      // premises-equipment excluded → CERTIFICATE not required (only source)
+      // safe-environments excluded → CERTIFICATE not required (only source)
       expect(types).not.toContain(EvidenceType.CERTIFICATE);
     });
 

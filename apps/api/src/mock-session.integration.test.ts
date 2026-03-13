@@ -72,7 +72,7 @@ describe('integration:mock-session', () => {
       providerId,
       facilityId,
       sessionId: session.sessionId,
-      regulationSectionId: 'Reg 12(2)(a)',
+      regulationSectionId: 'SAF S3',
       topicId: 'test-topic',
       origin: 'SYSTEM_MOCK',
       reportingDomain: 'MOCK_SIMULATION',
@@ -101,7 +101,7 @@ describe('integration:mock-session', () => {
     const session = store.createMockSession(ctx, {
       provider: provider!,
       facilityId,
-      topicId: 'safe-care-treatment',
+      topicId: 'safeguarding',
       maxFollowUps: 4,
       topicCatalogVersion: '2.1.0',
       topicCatalogHash: 'sha256:topic123',

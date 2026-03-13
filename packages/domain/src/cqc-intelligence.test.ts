@@ -13,7 +13,7 @@ import {
 function makeCoverage(overrides: Partial<ProviderCoverageForIntelligence> = {}): ProviderCoverageForIntelligence {
   const perQS: Record<string, number> = {};
   // Default all QS to 0%
-  for (const id of ['S1','S2','S3','S4','S5','S6','S7','S8','S9','E1','E2','E3','E4','E5','E6','E7','E8','E9','C1','C2','C3','C4','R1','R2','R3','R4','W1','W2','W3','W4','W5','W6','W7','W8']) {
+  for (const id of ['S1','S2','S3','S4','S5','S6','S7','S8','E1','E2','E3','E4','E5','E6','C1','C2','C3','C4','C5','R1','R2','R3','R4','R5','R6','R7','W1','W2','W3','W4','W5','W6','W7','W8']) {
     perQS[id] = 0;
   }
   return {

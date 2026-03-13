@@ -4,42 +4,47 @@ import { ProviderRegulatoryState, Domain } from './types';
 import { InteractionMode } from './prs-logic-profile';
 import { EvidenceType } from './evidence-types';
 
-// Minimal topic stubs matching the 34 topics in app.ts
+// Minimal topic stubs matching the 34 SAF-aligned topics in app.ts
 const STUB_TOPICS: TopicDefinition[] = [
-  { id: 'safe-care-treatment', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT] },
+  // SAFE (S1–S8)
+  { id: 'learning-culture', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT, EvidenceType.TRAINING] },
+  { id: 'safe-systems-pathways-transitions', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
   { id: 'safeguarding', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT] },
-  { id: 'medication-management', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT] },
+  { id: 'involving-people-manage-risks', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
+  { id: 'safe-environments', evidenceRequirements: [EvidenceType.AUDIT, EvidenceType.CERTIFICATE] },
+  { id: 'safe-effective-staffing', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.CERTIFICATE, EvidenceType.SKILLS_MATRIX, EvidenceType.SUPERVISION, EvidenceType.ROTA] },
   { id: 'infection-prevention-control', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT] },
-  { id: 'risk-assessment', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
-  { id: 'premises-equipment', evidenceRequirements: [EvidenceType.AUDIT, EvidenceType.CERTIFICATE] },
-  { id: 'deprivation-of-liberty', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT] },
+  { id: 'medicines-optimisation', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT] },
+  // EFFECTIVE (E1–E6)
+  { id: 'assessing-needs', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
+  { id: 'evidence-based-care', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT] },
+  { id: 'staff-teams-work-together', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
+  { id: 'supporting-healthier-lives', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
+  { id: 'monitoring-improving-outcomes', evidenceRequirements: [EvidenceType.AUDIT, EvidenceType.POLICY] },
+  { id: 'consent-to-care', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT] },
+  // CARING (C1–C5)
+  { id: 'kindness-compassion-dignity', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT] },
+  { id: 'treating-people-as-individuals', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
+  { id: 'independence-choice-control', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
+  { id: 'responding-immediate-needs', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
+  { id: 'workforce-wellbeing-enablement', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.SUPERVISION, EvidenceType.AUDIT] },
+  // RESPONSIVE (R1–R7)
   { id: 'person-centred-care', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
-  { id: 'consent', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT] },
-  { id: 'nutrition-hydration', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
-  { id: 'staff-training-development', evidenceRequirements: [EvidenceType.TRAINING, EvidenceType.CERTIFICATE, EvidenceType.SKILLS_MATRIX] },
-  { id: 'supervision-appraisal', evidenceRequirements: [EvidenceType.SUPERVISION, EvidenceType.POLICY] },
-  { id: 'mental-capacity-act', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT] },
-  { id: 'dignity-respect', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT] },
-  { id: 'service-user-involvement', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
-  { id: 'emotional-social-wellbeing', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
-  { id: 'end-of-life-care', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT] },
-  { id: 'complaints-handling', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
-  { id: 'care-planning-review', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
-  { id: 'meeting-individual-needs', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
-  { id: 'transitions-discharge', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
-  { id: 'equality-diversity', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT] },
-  { id: 'governance-oversight', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
-  { id: 'quality-assurance', evidenceRequirements: [EvidenceType.AUDIT, EvidenceType.POLICY] },
-  { id: 'staff-recruitment', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.CERTIFICATE, EvidenceType.AUDIT] },
-  { id: 'fit-proper-persons', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.CERTIFICATE, EvidenceType.AUDIT] },
-  { id: 'whistleblowing-openness', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING] },
-  { id: 'notifications-cqc', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
-  { id: 'financial-sustainability', evidenceRequirements: [EvidenceType.AUDIT, EvidenceType.POLICY] },
-  { id: 'records-management', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
-  { id: 'staff-wellbeing', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.SUPERVISION, EvidenceType.AUDIT] },
-  { id: 'learning-from-incidents', evidenceRequirements: [EvidenceType.AUDIT, EvidenceType.POLICY, EvidenceType.TRAINING] },
-  { id: 'partnership-working', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
-  { id: 'staffing', evidenceRequirements: [EvidenceType.ROTA, EvidenceType.SKILLS_MATRIX, EvidenceType.SUPERVISION] },
+  { id: 'care-continuity-integration', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
+  { id: 'providing-information', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
+  { id: 'listening-involving-people', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
+  { id: 'equity-in-access', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT] },
+  { id: 'equity-experiences-outcomes', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
+  { id: 'planning-for-future', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT] },
+  // WELL-LED (W1–W8)
+  { id: 'shared-direction-culture', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
+  { id: 'capable-compassionate-leaders', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.CERTIFICATE, EvidenceType.AUDIT] },
+  { id: 'freedom-to-speak-up', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING] },
+  { id: 'workforce-edi', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.TRAINING, EvidenceType.AUDIT] },
+  { id: 'governance-management-sustainability', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
+  { id: 'partnerships-communities', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
+  { id: 'learning-improvement-innovation', evidenceRequirements: [EvidenceType.AUDIT, EvidenceType.POLICY, EvidenceType.TRAINING] },
+  { id: 'environmental-sustainability', evidenceRequirements: [EvidenceType.POLICY, EvidenceType.AUDIT] },
 ];
 
 describe('facility-context', () => {
@@ -88,10 +93,10 @@ describe('facility-context', () => {
   });
 
   describe('service type filtering', () => {
-    it('domiciliary gets 31 topics', () => {
+    it('domiciliary gets 33 topics', () => {
       const ctx = resolveFacilityContext({ serviceType: 'domiciliary' }, STUB_TOPICS);
-      expect(ctx.applicableTopicCount).toBe(31);
-      expect(ctx.applicableTopicIds).not.toContain('premises-equipment');
+      expect(ctx.applicableTopicCount).toBe(33);
+      expect(ctx.applicableTopicIds).not.toContain('safe-environments');
     });
 
     it('domiciliary has fewer evidence types (no CERTIFICATE from premises)', () => {
@@ -164,7 +169,7 @@ describe('facility-context', () => {
         },
         STUB_TOPICS,
       );
-      expect(ctx.applicableTopicCount).toBe(31);
+      expect(ctx.applicableTopicCount).toBe(33);
       expect(ctx.readinessColorThresholds).toEqual({ red: 60, amber: 90 });
       expect(ctx.maxFollowUpsPerTopic).toBe(5);
     });
