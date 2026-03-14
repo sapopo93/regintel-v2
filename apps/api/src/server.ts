@@ -1,14 +1,14 @@
 import 'dotenv/config';
+import './env'; // Validate environment variables (fail-fast on misconfiguration)
 import { createApp } from './app';
 import { startAuditWorker, stopAuditWorker } from './audit-worker';
+import { logger } from './logger';
 
 const PORT = process.env.PORT || 3001;
 
 // Startup validation — log warnings for dangerous production misconfigurations
 function validateStartupConfig() {
-  const isProduction = process.env.NODE_ENV === 'production';
   const warnings: string[] = [];
-  const errors: string[] = [];
 
   if (process.env.E2E_TEST_MODE === 'true') {
     warnings.push('E2E_TEST_MODE=true — Clerk authentication is BYPASSED. Disable in production.');
@@ -22,7 +22,6 @@ function validateStartupConfig() {
     warnings.push('CQC_API_KEY is not set — CQC location lookups may fail (401 errors).');
   }
 
-
   if (!process.env.REDIS_URL || process.env.REDIS_URL.includes('localhost')) {
     warnings.push('REDIS_URL points to localhost — background jobs will use in-memory queue (lost on restart).');
   }
@@ -32,22 +31,17 @@ function validateStartupConfig() {
   }
 
   if (warnings.length > 0) {
-    console.warn('\n[STARTUP] Configuration warnings:');
-    warnings.forEach(w => console.warn(`  ⚠️  ${w}`));
+    warnings.forEach(w => logger.warn(w, { context: 'startup' }));
+  } else {
+    logger.info('Configuration looks good', { context: 'startup' });
   }
 
-  if (errors.length > 0) {
-    console.error('\n[STARTUP] Configuration errors:');
-    errors.forEach(e => console.error(`  ❌  ${e}`));
-  }
-
-  if (warnings.length === 0 && errors.length === 0) {
-    console.log('[STARTUP] Configuration looks good.');
-  }
-
-  console.log(`[STARTUP] Store: ${process.env.USE_DB_STORE !== 'false' ? 'PrismaStore (PostgreSQL)' : 'InMemoryStore'}`);
-  console.log(`[STARTUP] Auth: ${process.env.E2E_TEST_MODE === 'true' ? 'BYPASSED (E2E mode)' : process.env.CLERK_SECRET_KEY ? 'Clerk JWT' : 'Legacy tokens only'}`);
-  console.log(`[STARTUP] NODE_ENV: ${process.env.NODE_ENV || 'not set (defaulting to development)'}`);
+  logger.info('Startup config', {
+    context: 'startup',
+    store: process.env.USE_DB_STORE !== 'false' ? 'PrismaStore' : 'InMemoryStore',
+    auth: process.env.E2E_TEST_MODE === 'true' ? 'BYPASSED' : process.env.CLERK_SECRET_KEY ? 'Clerk JWT' : 'Legacy tokens',
+    nodeEnv: process.env.NODE_ENV || 'not set',
+  });
 }
 
 validateStartupConfig();
@@ -59,32 +53,32 @@ async function start() {
     await (store as any).waitForReady();
   }
   const server = app.listen(PORT, () => {
-    console.log(`RegIntel API server running on http://localhost:${PORT}`);
+    logger.info(`RegIntel API server running on port ${PORT}`, { context: 'startup' });
     startAuditWorker();
   });
 
   server.on('error', (err: NodeJS.ErrnoException) => {
     if (err.code === 'EADDRINUSE') {
-      console.error(`[SERVER] Port ${PORT} already in use. Exiting.`);
+      logger.error(`Port ${PORT} already in use`, { context: 'startup' });
     } else {
-      console.error('[SERVER] Fatal listen error:', err);
+      logger.error('Fatal listen error', { context: 'startup', error: err.message });
     }
     process.exit(1);
   });
 
   const shutdown = (signal: string) => {
-    console.log(`[SERVER] ${signal}  graceful shutdown`);
+    logger.info(`${signal} — graceful shutdown`, { context: 'shutdown' });
     stopAuditWorker();
-    server.close(() => { console.log('[SERVER] Closed'); process.exit(0); });
+    server.close(() => { logger.info('Server closed', { context: 'shutdown' }); process.exit(0); });
     setTimeout(() => process.exit(1), 10000).unref();
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT',  () => shutdown('SIGINT'));
-  process.on('unhandledRejection', (r) => console.error('[SERVER] Unhandled rejection:', r));
-  process.on('uncaughtException',  (e) => { console.error('[SERVER] Uncaught exception:', e); process.exit(1); });
+  process.on('unhandledRejection', (r) => logger.error('Unhandled rejection', { context: 'process', error: String(r) }));
+  process.on('uncaughtException',  (e) => { logger.error('Uncaught exception', { context: 'process', error: e.message, stack: e.stack }); process.exit(1); });
 }
 
 start().catch((err) => {
-  console.error('[STARTUP] Fatal error during startup:', err);
+  logger.error('Fatal error during startup', { context: 'startup', error: err.message, stack: err.stack });
   process.exit(1);
 });

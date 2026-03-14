@@ -10,6 +10,12 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+// Mock the logger module before importing auth
+vi.mock('./logger', () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+  securityLogger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}));
+
 // We need to test the isTestAuthAllowed logic by mocking environment variables
 // Since the function is not exported, we'll test it through resolveAuthContext behavior
 
@@ -55,10 +61,8 @@ describe('auth:security-hardening', () => {
       process.env.CLERK_TEST_TOKEN = 'test-token';
       process.env.E2E_TEST_MODE = undefined;
 
-      // Suppress the expected warning
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
       const { resolveAuthContext } = await import('./auth');
+      const { securityLogger } = await import('./logger');
 
       const mockReq = {
         header: vi.fn().mockImplementation((name: string) => {
@@ -73,12 +77,10 @@ describe('auth:security-hardening', () => {
       // Test auth should be blocked when Clerk is configured without E2E mode
       expect(result).toBeNull();
 
-      // Should have logged a warning
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('AUTH SECURITY WARNING')
+      // Should have logged a warning via security logger
+      expect(securityLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Both CLERK_SECRET_KEY and CLERK_TEST_TOKEN are set')
       );
-
-      warnSpy.mockRestore();
     });
 
     it('should ALLOW test auth when E2E_TEST_MODE=true', async () => {
@@ -179,10 +181,9 @@ describe('auth:security-hardening', () => {
       process.env.CLERK_TEST_TOKEN = 'test-token';
       process.env.E2E_TEST_MODE = undefined;
 
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
       // Just importing the module should trigger the warning check on first auth attempt
       const { resolveAuthContext } = await import('./auth');
+      const { securityLogger } = await import('./logger');
 
       const mockReq = {
         header: vi.fn().mockImplementation((name: string) => {
@@ -194,11 +195,9 @@ describe('auth:security-hardening', () => {
 
       await resolveAuthContext(mockReq);
 
-      expect(warnSpy).toHaveBeenCalledWith(
+      expect(securityLogger.warn).toHaveBeenCalledWith(
         expect.stringContaining('Both CLERK_SECRET_KEY and CLERK_TEST_TOKEN are set')
       );
-
-      warnSpy.mockRestore();
     });
   });
 });
