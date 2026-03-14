@@ -5,10 +5,21 @@ dist/
 .DS_Store
 coverage/
 *.tsbuildinfo
-.env
 apps/*/.env
 .claude/
 output/
 tmp/
 apps/web/failure-screenshot.png
 ecosystem.config.js
+
+# Local tooling
+.venv/
+.playwright-mcp/
+agent-harness/
+
+# Test artifacts
+apps/web/e2e/screenshots/
+
+# Office temp files
+~$*.docx
+*.patch
