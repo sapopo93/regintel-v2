@@ -6,7 +6,7 @@ import {
   type DraftFinding,
   type MockInspectionSession as DomainSession,
 } from '@regintel/domain/mock-inspection-engine';
-import { Domain, FindingOrigin, ReportingDomain, Severity } from '@regintel/domain/types';
+import { Domain, FindingOrigin, ProviderRegulatoryState, ReportingDomain, Severity } from '@regintel/domain/types';
 import {
   EXPORT_WATERMARK,
   generateCsvExport,
@@ -4401,7 +4401,6 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         if (!scrapeResult.success) {
           // Still generate alerts from ratings alone (without findings text)
           locationsProcessed++;
-          const report = scrapeResult.report;
           // Build key question ratings from detail
           const kqRatings: Record<string, string> = {};
           for (const n of noteworthy) {

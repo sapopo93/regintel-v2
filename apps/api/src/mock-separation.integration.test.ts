@@ -56,6 +56,7 @@ describe('integration:mock-separation', () => {
       topicId: 'test-topic',
       maxFollowUps: 4,
       ...metadata,
+      initialQuestion: 'Test initial question',
     });
 
     // Add finding with SYSTEM_MOCK origin
@@ -136,6 +137,7 @@ describe('integration:mock-separation', () => {
       topicCatalogHash: 'sha256:abc',
       prsLogicProfilesVersion: '1.0.0',
       prsLogicProfilesHash: 'sha256:def',
+      initialQuestion: 'Test initial question',
     });
 
     store.addFinding(ctx, {

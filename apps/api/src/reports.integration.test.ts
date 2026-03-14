@@ -51,6 +51,7 @@ describe('integration:reports', () => {
       topicCatalogHash: 'sha256:abc',
       prsLogicProfilesVersion: '1.0.0',
       prsLogicProfilesHash: 'sha256:def',
+      initialQuestion: 'Test initial question',
     });
 
     // Add findings with varying severity
@@ -113,6 +114,7 @@ describe('integration:reports', () => {
       topicCatalogHash: 'sha256:abc',
       prsLogicProfilesVersion: '1.0.0',
       prsLogicProfilesHash: 'sha256:def',
+      initialQuestion: 'Test initial question',
     });
 
     // Add findings in random order
@@ -184,6 +186,7 @@ describe('integration:reports', () => {
       topicCatalogHash: 'sha256:abc',
       prsLogicProfilesVersion: '1.0.0',
       prsLogicProfilesHash: 'sha256:def',
+      initialQuestion: 'Test initial question',
     });
 
     // Create export

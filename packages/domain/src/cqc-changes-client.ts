@@ -146,7 +146,7 @@ export async function fetchCqcLocationDetail(
       return { success: false, error: `CQC API error: ${response.status}` };
     }
 
-    const body = await response.json();
+    const body: any = await response.json();
     return {
       success: true,
       detail: {
@@ -248,7 +248,7 @@ async function fetchPage(
     return { success: false, error: `CQC API error: ${response.status}` };
   }
 
-  const body = await response.json();
+  const body: any = await response.json();
   const items = body.locations ?? [];
 
   const locations: CqcLocationSummary[] = items.map((item: any) => ({

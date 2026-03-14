@@ -106,6 +106,9 @@ const IGNORE_PATTERNS = [
   'test-results', // Playwright artifacts (binary traces/screenshots)
   'playwright-report', // Playwright HTML report output
   '.claude', // Claude Code session transcripts and local settings
+  '.venv', // Python virtual environment (cert PEM files trigger false positives)
+  'agent-harness', // Local test harness tooling
+  '.playwright-mcp', // Playwright MCP console logs
 ];
 
 /**

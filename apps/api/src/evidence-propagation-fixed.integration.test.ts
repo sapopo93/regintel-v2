@@ -172,6 +172,7 @@ describe('evidence:propagation-fixed', () => {
       topicCatalogHash: 'sha256:abc123',
       prsLogicProfilesVersion: '1.0.0',
       prsLogicProfilesHash: 'sha256:def456',
+      initialQuestion: 'Test initial question',
     });
 
     const session2 = store.createMockSession(ctx, {
@@ -183,6 +184,7 @@ describe('evidence:propagation-fixed', () => {
       topicCatalogHash: 'sha256:abc123',
       prsLogicProfilesVersion: '1.0.0',
       prsLogicProfilesHash: 'sha256:def456',
+      initialQuestion: 'Test initial question',
     });
 
     // Complete both sessions with same evidence

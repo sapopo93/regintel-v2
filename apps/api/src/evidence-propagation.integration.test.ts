@@ -157,6 +157,7 @@ describe('evidence:propagation', () => {
       topicCatalogHash: 'sha256:abc123',
       prsLogicProfilesVersion: '1.0.0',
       prsLogicProfilesHash: 'sha256:def456',
+      initialQuestion: 'Test initial question',
     });
 
     // Complete session

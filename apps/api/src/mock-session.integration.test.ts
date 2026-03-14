@@ -51,6 +51,7 @@ describe('integration:mock-session', () => {
       topicCatalogHash: 'sha256:abc123',
       prsLogicProfilesVersion: '1.0.0',
       prsLogicProfilesHash: 'sha256:def456',
+      initialQuestion: 'Test initial question',
     });
 
     expect(session.status).toBe('IN_PROGRESS');
@@ -107,6 +108,7 @@ describe('integration:mock-session', () => {
       topicCatalogHash: 'sha256:topic123',
       prsLogicProfilesVersion: '1.5.0',
       prsLogicProfilesHash: 'sha256:prs456',
+      initialQuestion: 'Test initial question',
     });
 
     expect(session.topicCatalogVersion).toBe('2.1.0');
@@ -128,6 +130,7 @@ describe('integration:mock-session', () => {
       topicCatalogHash: 'sha256:abc',
       prsLogicProfilesVersion: '1.0.0',
       prsLogicProfilesHash: 'sha256:def',
+      initialQuestion: 'Test initial question',
     });
 
     // Create session 2
@@ -140,6 +143,7 @@ describe('integration:mock-session', () => {
       topicCatalogHash: 'sha256:abc',
       prsLogicProfilesVersion: '1.0.0',
       prsLogicProfilesHash: 'sha256:def',
+      initialQuestion: 'Test initial question',
     });
 
     const sessions = store.listSessionsByProvider(ctx, providerId);

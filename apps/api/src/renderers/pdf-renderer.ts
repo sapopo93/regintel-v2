@@ -6,9 +6,9 @@
 
 import PDFDocument from 'pdfkit';
 import type { RenderOutput } from './renderer-types.js';
-import type { PdfExport } from '@regintel/domain';
-import type { InspectorEvidencePack } from '@regintel/domain';
-import type { BlueOceanReport } from '@regintel/domain';
+import type { PdfExport } from '@regintel/domain/readiness-export';
+import type { InspectorEvidencePack } from '@regintel/domain/inspector-evidence-pack';
+import type { BlueOceanReport } from '@regintel/domain/blue-ocean-report';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
