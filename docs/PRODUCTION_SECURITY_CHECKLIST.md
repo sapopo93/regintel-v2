@@ -2,14 +2,13 @@
 
 This document outlines the security requirements that must be addressed before deploying RegIntel v2 to production.
 
-## Status: ✅ P0+P1 REQUIREMENTS COMPLETE
+## Status: ✅ P0 REQUIREMENTS COMPLETE
 
-**Last Updated:** 2026-03-14
+**Last Updated:** 2026-01-29
 
-**P0 Completion:** 100% (7/7 critical items complete)
-**P1 Completion:** 100% (3/3 high priority items complete)
+**P0 Completion:** 100% (4/4 critical items complete)
 
-### ✅ P0 Critical Items (Completed 2026-01-29, updated 2026-03-14)
+### ✅ P0 Critical Items (Completed 2026-01-29)
 
 1. **Clerk Authentication** - Production JWT-based auth system
    - Frontend: ClerkProvider, middleware, SignIn component
@@ -30,43 +29,6 @@ This document outlines the security requirements that must be addressed before d
    - Scripts: backup-db.sh, restore-db.sh, validate-backup.sh
    - Encryption support, checksum verification, retention policy
    - Documentation: `docs/BACKUP_RESTORE.md`
-
-5. **HTTPS Enforcement** (Added 2026-03-14)
-   - HTTP→HTTPS redirect in production (via x-forwarded-proto)
-   - Helmet middleware with HSTS (1 year, includeSubDomains, preload)
-   - Security headers: X-Content-Type-Options, X-Frame-Options, X-DNS-Prefetch-Control
-   - File: `apps/api/src/app.ts`
-
-6. **Error Handling Hardening** (Added 2026-03-14)
-   - Stack traces suppressed in production responses
-   - Request IDs in all error responses for correlation
-   - Structured error logging with Winston
-   - File: `apps/api/src/app.ts` (global error handler)
-
-7. **Environment Variable Validation** (Added 2026-03-14)
-   - Fail-fast on missing CLERK_SECRET_KEY or DATABASE_URL in production
-   - Warning on localhost ALLOWED_ORIGINS in production
-   - Validated via `envalid` on startup
-   - File: `apps/api/src/env.ts`
-
-### ✅ P1 High Priority Items (Completed 2026-03-14)
-
-1. **Structured Logging** - Winston logger with JSON output in production
-   - All console.log/warn/error replaced with structured logger
-   - Security event logging via dedicated securityLogger
-   - Request logging middleware (method, path, status, duration, tenantId)
-   - Files: `apps/api/src/logger.ts`, `apps/api/src/app.ts`, `apps/api/src/auth.ts`
-
-2. **Request ID Middleware** - Correlation IDs for debugging
-   - x-request-id header propagated or generated (crypto.randomUUID)
-   - Present in all responses, logs, and error messages
-   - File: `apps/api/src/app.ts`
-
-3. **Deep Health Check** - Dependency connectivity verification
-   - `/health/deep` endpoint checks database and blob storage
-   - Returns 503 if any dependency unreachable
-   - Latency measurements per dependency
-   - File: `apps/api/src/app.ts`
 
 ---
 
@@ -105,15 +67,11 @@ This document outlines the security requirements that must be addressed before d
 
 ---
 
-## ✅ Former Critical Blockers (P0 - Now Resolved)
+## 🔴 Critical Blockers (P0 - Must Fix Before Production)
 
-> The items below were originally listed as P0 blockers. Items #1 (JWT auth) and #2 (httpOnly cookies) are now handled by Clerk. Item #3 (HTTPS) has been implemented.
+### 1. Replace Demo Authentication with Production Auth System
 
-### 1. ~~Replace Demo Authentication with Production Auth System~~ → DONE (Clerk)
-
-**Resolved:** Production auth uses Clerk JWTs. Legacy tokens are security-hardened and blocked in production via `isTestAuthAllowed()`.
-
-**Original State:** Hardcoded demo tokens in `apps/api/src/auth.ts`
+**Current State:** Hardcoded demo tokens in `apps/api/src/auth.ts`
 
 ```typescript
 // ❌ INSECURE: Static tokens, no expiration, no rotation
@@ -630,18 +588,18 @@ RegIntel v2 serves UK CQC-regulated care providers handling sensitive data:
 
 ### GDPR/UK DPA 2018 Requirements
 - ✅ Audit trail (Article 30: Records of processing activities)
-- ✅ Encryption in transit (HTTPS enforcement + HSTS implemented 2026-03-14)
-- ✅ Access controls (Clerk JWT auth + RBAC implemented)
+- ❌ Encryption in transit (HTTPS enforcement needed)
+- ❌ Access controls (Strong authentication needed)
 - ❌ Data minimization (Review data retention policies)
 - ❌ Right to erasure (Implement user deletion workflow)
 
 ### CQC Regulation 17 (Good Governance)
 - ✅ Data integrity (immutable audit log)
 - ✅ Tamper detection (hash-chain verification)
-- ✅ Security incident logging (structured logging + security logger implemented 2026-03-14)
+- ❌ Security incident logging (monitoring needed)
 - ❌ Regular security reviews (penetration testing needed)
 
-**Compliance Risk:** **MEDIUM** - Most security requirements met. Remaining: data retention policy, right-to-erasure endpoint, penetration testing
+**Compliance Risk:** **HIGH** - Current security gaps may violate GDPR/CQC requirements
 
 ---
 
@@ -686,4 +644,4 @@ pnpm -C apps/web build
 
 Contact the security team or create an issue in the repository.
 
-**Last Reviewed:** 2026-03-14
+**Last Reviewed:** 2026-01-26

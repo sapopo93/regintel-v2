@@ -1,9 +1,6 @@
 import express from 'express';
-import crypto from 'crypto';
 import cors from 'cors';
-import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import { logger, securityLogger } from './logger';
 import {
   SessionStatus,
   type DraftFinding,
@@ -969,7 +966,7 @@ async function generateActionsForFinding(
       });
       actions.push(record);
     } catch (err) {
-      logger.error('[ACTION_PLAN] Failed to create audit-derived action', { error: (err as Error).message });
+      console.error(`[ACTION_PLAN] Failed to create audit-derived action:`, err);
     }
   }
 
@@ -998,7 +995,7 @@ async function generateActionsForFinding(
       });
       actions.push(record);
     } catch (err) {
-      logger.error('[ACTION_PLAN] Failed to create template action', { error: (err as Error).message });
+      console.error(`[ACTION_PLAN] Failed to create template action:`, err);
     }
   }
 
@@ -1017,33 +1014,6 @@ async function generateActionsForFinding(
 
 export function createApp(): { app: express.Express; store: InMemoryStore } {
   const app = express();
-
-  // HTTPS redirect in production (behind reverse proxy)
-  if (process.env.NODE_ENV === 'production') {
-    app.use((req, res, next) => {
-      if (req.header('x-forwarded-proto') !== 'https') {
-        return res.redirect(301, `https://${req.headers.host}${req.url}`);
-      }
-      next();
-    });
-  }
-
-  // Security headers via helmet
-  app.use(
-    helmet({
-      hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
-      contentSecurityPolicy: false, // CSP handled by Next.js for web; API returns JSON only
-      crossOriginEmbedderPolicy: false, // Allow cross-origin API calls
-    })
-  );
-
-  // Request ID middleware — correlate logs across request lifecycle
-  app.use((req, res, next) => {
-    const requestId = (req.headers['x-request-id'] as string) || crypto.randomUUID();
-    req.headers['x-request-id'] = requestId;
-    res.setHeader('x-request-id', requestId);
-    next();
-  });
 
   // CORS configuration: production domains always allowed, plus env overrides
   const isTestMode = process.env.NODE_ENV === 'test' || process.env.E2E_TEST_MODE === 'true';
@@ -1067,7 +1037,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       'http://localhost:3001',
     ];
     if (!isTestMode) {
-      logger.warn(
+      console.warn(
         '[CORS] ALLOWED_ORIGINS not set - using defaults (production + localhost). ' +
         'Set ALLOWED_ORIGINS to customize.'
       );
@@ -1107,28 +1077,6 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     app.use(limiter);
   }
 
-  // Request logging middleware
-  app.use((req, res, next) => {
-    const start = Date.now();
-    res.on('finish', () => {
-      const duration = Date.now() - start;
-      // Skip health check spam in logs
-      if (req.path === '/health' || req.path === '/health/deep') {
-        return;
-      }
-      logger.info('request', {
-        requestId: req.headers['x-request-id'],
-        method: req.method,
-        path: req.path,
-        status: res.statusCode,
-        duration,
-        tenantId: (req as any).auth?.tenantId,
-        actorId: (req as any).auth?.actorId,
-      });
-    });
-    next();
-  });
-
   app.get('/health', (_req, res) => {
     const isE2EMode = process.env.E2E_TEST_MODE === 'true';
     const hasCqcKey = !!process.env.CQC_API_KEY;
@@ -1153,43 +1101,6 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       warnings: warnings.length > 0 ? warnings : undefined,
     });
   });
-
-  // Deep health check — verifies dependency connectivity
-  app.get('/health/deep', asyncRoute(async (_req, res) => {
-    const checks: Record<string, { status: string; latency?: number }> = {};
-
-    // Database check
-    if (useDbStore && store instanceof PrismaStore) {
-      const dbStart = Date.now();
-      try {
-        const prisma = (store as any).prisma;
-        if (prisma) await prisma.$queryRaw`SELECT 1`;
-        checks.database = { status: 'ok', latency: Date.now() - dbStart };
-      } catch {
-        checks.database = { status: 'error', latency: Date.now() - dbStart };
-      }
-    } else {
-      checks.database = { status: 'skipped' };
-    }
-
-    // Blob storage check
-    if (process.env.BLOB_STORAGE_PATH) {
-      try {
-        const fs = await import('fs/promises');
-        await fs.access(process.env.BLOB_STORAGE_PATH);
-        checks.blobStorage = { status: 'ok' };
-      } catch {
-        checks.blobStorage = { status: 'error' };
-      }
-    }
-
-    const allHealthy = Object.values(checks).every(c => c.status === 'ok' || c.status === 'skipped');
-    res.status(allHealthy ? 200 : 503).json({
-      status: allHealthy ? 'healthy' : 'degraded',
-      checks,
-      uptime: process.uptime(),
-    });
-  }));
 
   // Clerk webhook (MUST be before express.json() and authMiddleware)
   // Webhooks need raw body for signature verification
@@ -1976,7 +1887,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     try {
       await generateActionsForFinding(ctx, store, finding, session.topicId, session.facilityId);
     } catch (err) {
-      logger.error(`[ACTION_PLAN] Failed to generate actions for finding ${finding.id}`, { error: (err as Error).message });
+      console.error(`[ACTION_PLAN] Failed to generate actions for finding ${finding.id}:`, err);
     }
 
     if (process.env.ENABLE_AI_INSIGHTS !== 'false') {
@@ -1997,7 +1908,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
 
         setBounded(mockInsightJobs, sessionId, job.id);
       } catch (error) {
-        logger.error('[AI_INSIGHTS] Failed to enqueue job', { error: (error as Error).message });
+        console.error('[AI_INSIGHTS] Failed to enqueue job:', error);
       }
     }
 
@@ -2059,7 +1970,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         error: job.error,
       });
     } catch (error) {
-      logger.error('[AI_INSIGHTS] Failed', { error: (error as Error).message });
+      console.error('[AI_INSIGHTS] Failed:', error);
       sendError(res, 500, 'Failed to fetch AI insights');
     }
   });
@@ -2537,7 +2448,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         scanJobId: scanJob.id,
       });
     } catch (error) {
-      logger.error('[BLOB_UPLOAD] Failed', { error: (error as Error).message });
+      console.error('[BLOB_UPLOAD] Failed:', error);
       sendError(res, 500, 'Failed to upload blob');
     }
   });
@@ -2581,7 +2492,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       res.setHeader('Content-Disposition', `attachment; filename="${evidenceRecord.fileName || blobHash}"`);
       res.send(content);
     } catch (error) {
-      logger.error('[BLOB_DOWNLOAD] Failed', { error: (error as Error).message });
+      console.error('[BLOB_DOWNLOAD] Failed:', error);
       sendError(res, 500, 'Failed to download blob');
     }
   });
@@ -2636,7 +2547,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         error: job.error,
       });
     } catch (error) {
-      logger.error('[BLOB_SCAN] Failed', { error: (error as Error).message });
+      console.error('[BLOB_SCAN] Failed:', error);
       sendError(res, 500, 'Failed to check scan status');
     }
   });
@@ -3052,10 +2963,10 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
           evidenceType: record.evidenceType,
           serviceType: facility.serviceType,
         } as DocumentAuditJobData);
-        logger.info(`[AUDIT] Queued job ${job.id} for evidence ${record.id}`);
+        console.log(`[AUDIT] Queued job ${job.id} for evidence ${record.id}`);
       } catch (error) {
         const failureReason = 'Document audit could not be queued. Review manually or retry.';
-        logger.error('[AUDIT] Failed to enqueue', { error: (error as Error).message });
+        console.error('[AUDIT] Failed to enqueue:', error);
         await saveDocumentAuditFailure({
           tenantId: ctx.tenantId,
           facilityId,
@@ -4145,7 +4056,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         },
       });
     } catch (error) {
-      logger.error('[JOB_STATUS] Failed', { error: (error as Error).message });
+      console.error('[JOB_STATUS] Failed:', error);
       sendError(res, 500, 'Failed to fetch job status');
     }
   });
@@ -4253,12 +4164,12 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
               fileName: reportFileName,
               description: `CQC inspection report (${report.rating || 'unknown rating'}) — ${report.reportDate || ''}`,
             });
-            logger.info('[SCRAPE] HTML report saved successfully', { contentHash: blobMetadata.contentHash });
+            console.log('[SCRAPE] HTML report saved successfully:', blobMetadata.contentHash);
           } else {
-            logger.info('[SCRAPE] Duplicate report detected, skipping evidence record create', { contentHash: blobMetadata.contentHash });
+            console.log('[SCRAPE] Duplicate report detected, skipping evidence record create:', blobMetadata.contentHash);
           }
         } catch (htmlErr) {
-          logger.error('[SCRAPE] Failed to save HTML report', { error: (htmlErr as Error).message });
+          console.error('[SCRAPE] Failed to save HTML report:', htmlErr);
         }
       }
 
@@ -4305,19 +4216,19 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       const result = store.seedDemoProvider(demoContext);
       const handleResult = (provider: typeof result extends Promise<infer T> ? T : typeof result) => {
         if (provider) {
-          logger.info(`[SEED] Demo provider created: ${(provider as any).providerId}`);
+          console.log(`[SEED] Demo provider created: ${(provider as any).providerId}`);
         }
       };
 
       if (result && typeof (result as any).then === 'function') {
         (result as unknown as Promise<any>).then(handleResult).catch((error: unknown) => {
-          logger.warn('[SEED] Demo provider seed skipped', { error: error instanceof Error ? error.message : String(error) });
+          console.warn('[SEED] Demo provider seed skipped:', error instanceof Error ? error.message : error);
         });
       } else {
         handleResult(result as any);
       }
     } catch (error) {
-      logger.warn('[SEED] Demo provider seed skipped', { error: error instanceof Error ? error.message : String(error) });
+      console.warn('[SEED] Demo provider seed skipped:', error instanceof Error ? error.message : error);
     }
   }
 
@@ -4426,7 +4337,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     });
 
     if (!locationsResult.success) {
-      logger.error('[CQC Intelligence] Location search failed', { error: locationsResult.error });
+      console.error('[CQC Intelligence] Location search failed:', locationsResult.error);
       sendError(res, 502, `CQC API error: ${locationsResult.error}`);
       return;
     }
@@ -4547,7 +4458,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
           existingKeys.add(alertDeduplicationKey(alert));
         }
       } catch (err) {
-        logger.error(`[CQC Intelligence] Error processing ${loc.locationId}`, { error: (err as Error).message });
+        console.error(`[CQC Intelligence] Error processing ${loc.locationId}:`, err);
         locationsSkipped++;
       }
     }
@@ -4584,26 +4495,10 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
   });
 
 //  Global Express error handler
-app.use((err: any, req: any, res: any, _next: any) => {
-  const requestId = req.headers?.['x-request-id'] || 'unknown';
-  const isProduction = process.env.NODE_ENV === 'production';
-
-  logger.error('Unhandled route error', {
-    requestId,
-    error: err?.message || String(err),
-    stack: err?.stack,
-    method: req.method,
-    path: req.path,
-    tenantId: req.auth?.tenantId,
-  });
-
+app.use((err: any, _req: any, res: any, _next: any) => {
+  console.error('[API] Unhandled route error:', err?.message || err);
   if (!res.headersSent) {
-    res.status(500).json({
-      ...buildConstitutionalMetadata(),
-      error: isProduction ? 'Internal server error' : (err?.message || 'Internal server error'),
-      ...(isProduction ? {} : { stack: err?.stack }),
-      requestId,
-    });
+    res.status(500).json({ ...buildConstitutionalMetadata(), error: 'Internal server error' });
   }
 });
 

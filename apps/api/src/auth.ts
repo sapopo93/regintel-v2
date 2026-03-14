@@ -2,7 +2,6 @@ import type { NextFunction, Request, Response } from 'express';
 import { clerkClient } from '@clerk/express';
 import { verifyToken } from '@clerk/backend';
 import { buildConstitutionalMetadata } from './metadata';
-import { securityLogger } from './logger';
 
 export type AuthRole = 'FOUNDER' | 'PROVIDER';
 
@@ -38,8 +37,8 @@ function isTestAuthAllowed(): boolean {
   // If Clerk is configured but test token is also set without E2E mode,
   // this is a dangerous configuration - log warning but allow in dev
   if (hasClerkSecret && hasClerkTestToken) {
-    securityLogger.warn(
-      'Both CLERK_SECRET_KEY and CLERK_TEST_TOKEN are set ' +
+    console.warn(
+      '[AUTH SECURITY WARNING] Both CLERK_SECRET_KEY and CLERK_TEST_TOKEN are set ' +
       'but E2E_TEST_MODE is not enabled. Test auth is disabled to prevent security bypass. ' +
       'Set E2E_TEST_MODE=true if this is intentional.'
     );
@@ -108,7 +107,7 @@ async function resolveClerkAuth(token: string): Promise<AuthContext | null> {
       userId: user.id,
     };
   } catch (error) {
-    securityLogger.warn('Clerk auth verification failed', { error: (error as Error).message });
+    console.error('Clerk auth verification failed:', error);
     return null;
   }
 }
@@ -183,12 +182,6 @@ export async function authMiddleware(
   const context = await resolveAuthContext(req);
 
   if (!context) {
-    securityLogger.warn('Auth failed', {
-      ip: req.ip,
-      path: req.path,
-      method: req.method,
-      requestId: req.headers['x-request-id'],
-    });
     res.status(401).json({
       ...buildConstitutionalMetadata(),
       error: 'Unauthorized: Invalid or missing authentication token',
