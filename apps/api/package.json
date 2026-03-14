@@ -27,6 +27,8 @@
     "express-rate-limit": "^7.5.1",
     "mammoth": "^1.11.0",
     "pdfkit": "^0.17.2",
+    "pino": "^10.3.1",
+    "pino-http": "^11.0.0",
     "svix": "^1.84.1",
     "xlsx": "^0.18.5",
     "zod": "^4.3.6"
@@ -37,6 +39,7 @@
     "@types/node": "^20.10.0",
     "@types/pdfkit": "^0.17.5",
     "@types/pg": "^8.10.9",
+    "@types/pino-http": "^6.1.0",
     "@types/supertest": "^6.0.2",
     "pg": "^8.11.5",
     "prisma": "^5.20.0",

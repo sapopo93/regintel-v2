@@ -46,6 +46,17 @@ async function createBlob() {
     .send({ contentBase64, mimeType: 'application/pdf' });
 }
 
+async function completeSession(providerId: string, sessionId: string) {
+  let status = 'IN_PROGRESS';
+  while (status === 'IN_PROGRESS') {
+    const res = await request(app)
+      .post(`/v1/providers/${providerId}/mock-sessions/${sessionId}/answer`)
+      .set(AUTH_HEADER)
+      .send({ answer: 'Mock answer for test' });
+    status = res.body.status;
+  }
+}
+
 function expectMetadata(payload: Record<string, unknown>) {
   expect(payload.topicCatalogVersion).toBeDefined();
   expect(payload.topicCatalogHash).toBeDefined();
@@ -167,11 +178,8 @@ describe('API contract tests', () => {
       .send({ topicId: 'safeguarding', facilityId: facility.id });
     expectMetadata(sessionResponse.body);
 
-    const answerResponse = await request(app)
-      .post(`/v1/providers/${provider.providerId}/mock-sessions/${sessionResponse.body.sessionId}/answer`)
-      .set(AUTH_HEADER)
-      .send({ answer: 'Mock answer' });
-    expectMetadata(answerResponse.body);
+    // Complete all follow-up questions so the session reaches COMPLETED status
+    await completeSession(provider.providerId, sessionResponse.body.sessionId);
 
     const exportResponse = await request(app)
       .post(`/v1/providers/${provider.providerId}/exports`)

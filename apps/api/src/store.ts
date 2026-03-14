@@ -1174,6 +1174,10 @@ export class InMemoryStore {
 
   // ── Usage Events ──────────────────────────────────────────────────
 
+  async healthCheck(): Promise<boolean> {
+    return true;
+  }
+
   createUsageEvent(ctx: TenantContext, input: {
     providerId: string;
     eventType: string;

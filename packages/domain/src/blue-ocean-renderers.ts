@@ -271,6 +271,15 @@ export function serializeBlueOceanBoardMarkdown(report: BlueOceanReport): string
     lines.push('');
   }
 
+  if (report.sections.evidenceIndex.length > 0) {
+    lines.push('## Evidence Sources');
+    lines.push('');
+    for (const entry of report.sections.evidenceIndex) {
+      lines.push(`- ${entry.title} (${entry.evidenceType})`);
+    }
+    lines.push('');
+  }
+
   return lines.join('\n');
 }
 

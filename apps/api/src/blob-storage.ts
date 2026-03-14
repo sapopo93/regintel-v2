@@ -10,6 +10,8 @@
 import { createWriteStream, promises as fs } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
+import { createConnection } from 'node:net';
+import { logger } from './logger';
 
 export interface BlobMetadata {
   contentHash: string;
@@ -49,6 +51,50 @@ export interface BlobStorageBackend {
    * Delete blob (use with caution - should only be called after quarantine)
    */
   delete(contentHash: string): Promise<void>;
+}
+
+/**
+ * Scan a buffer via clamd's INSTREAM protocol over a unix socket.
+ * Returns 'CLEAN' or the threat name string.
+ */
+function clamdScan(socketPath: string, content: Buffer): Promise<'CLEAN' | string> {
+  return new Promise((resolve, reject) => {
+    const CHUNK_SIZE = 8192;
+    const socket = createConnection(socketPath, () => {
+      // Send INSTREAM command
+      socket.write('zINSTREAM\0');
+
+      // Send content in chunks: 4-byte big-endian length prefix + data
+      for (let offset = 0; offset < content.length; offset += CHUNK_SIZE) {
+        const chunk = content.subarray(offset, offset + CHUNK_SIZE);
+        const header = Buffer.alloc(4);
+        header.writeUInt32BE(chunk.length, 0);
+        socket.write(header);
+        socket.write(chunk);
+      }
+
+      // Send terminator: 4 zero bytes
+      socket.write(Buffer.alloc(4));
+    });
+
+    const chunks: Buffer[] = [];
+    socket.on('data', (data) => chunks.push(data));
+    socket.on('end', () => {
+      const response = Buffer.concat(chunks).toString('utf8').trim();
+      // Response format: "stream: OK" or "stream: <threat> FOUND"
+      if (response.endsWith('OK')) {
+        resolve('CLEAN');
+      } else {
+        const match = response.match(/stream:\s*(.+)\s+FOUND/);
+        resolve(match ? match[1] : response);
+      }
+    });
+    socket.on('error', reject);
+    socket.setTimeout(30000, () => {
+      socket.destroy();
+      reject(new Error('ClamAV scan timed out after 30s'));
+    });
+  });
 }
 
 /**
@@ -146,20 +192,32 @@ export class FilesystemBlobStorage implements BlobStorageBackend {
   }
 
   async scanForMalware(contentHash: string): Promise<'PENDING' | 'CLEAN' | 'INFECTED'> {
-    // Stub implementation - always returns CLEAN
-    // TODO: Integrate ClamAV, VirusTotal, or AWS Macie
-
-    // In production, this would:
-    // 1. Check if file exists
-    // 2. Send to malware scanner
-    // 3. Return actual scan result
-
     if (!(await this.exists(contentHash))) {
       throw new Error(`Blob not found: ${contentHash}`);
     }
 
-    // For now, assume all files are clean
-    return 'CLEAN';
+    const clamavEnabled = process.env.CLAMAV_ENABLED === 'true';
+    if (!clamavEnabled) {
+      logger.warn({ contentHash }, 'ClamAV disabled — skipping scan, returning CLEAN');
+      return 'CLEAN';
+    }
+
+    const socketPath = process.env.CLAMD_SOCKET || '/var/run/clamav/clamd.ctl';
+    const content = await this.download(contentHash);
+
+    try {
+      const result = await clamdScan(socketPath, content);
+      if (result === 'CLEAN') {
+        logger.info({ contentHash }, 'ClamAV scan: CLEAN');
+        return 'CLEAN';
+      } else {
+        logger.warn({ contentHash, threat: result }, 'ClamAV scan: INFECTED');
+        return 'INFECTED';
+      }
+    } catch (err) {
+      logger.error({ err, contentHash }, 'ClamAV scan failed — treating as PENDING for retry');
+      return 'PENDING';
+    }
   }
 
   async delete(contentHash: string): Promise<void> {

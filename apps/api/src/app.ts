@@ -83,6 +83,7 @@ import {
 } from './store';
 import { PrismaStore } from './db-store';
 import { handleClerkWebhook } from './webhooks/clerk';
+import { logger } from './logger';
 import { blobStorage } from './blob-storage';
 import { scanBlob } from './malware-scanner';
 import {
@@ -603,7 +604,7 @@ function resolveOutputFormat(format: ExportFormat, outputFormat?: string): Outpu
   // Defaults per report type
   if (format === 'CSV') return 'csv';
   if (format === 'PDF') return 'pdf';
-  return 'pdf'; // Blue Ocean and Inspector Pack default to PDF now
+  return 'md'; // Blue Ocean and Inspector Pack default to markdown
 }
 
 function getMimeType(outputFormat: OutputFormat): string {
@@ -966,7 +967,7 @@ async function generateActionsForFinding(
       });
       actions.push(record);
     } catch (err) {
-      console.error(`[ACTION_PLAN] Failed to create audit-derived action:`, err);
+      logger.error({ err }, 'Failed to create audit-derived action');
     }
   }
 
@@ -995,7 +996,7 @@ async function generateActionsForFinding(
       });
       actions.push(record);
     } catch (err) {
-      console.error(`[ACTION_PLAN] Failed to create template action:`, err);
+      logger.error({ err }, 'Failed to create template action');
     }
   }
 
@@ -1037,10 +1038,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       'http://localhost:3001',
     ];
     if (!isTestMode) {
-      console.warn(
-        '[CORS] ALLOWED_ORIGINS not set - using defaults (production + localhost). ' +
-        'Set ALLOWED_ORIGINS to customize.'
-      );
+      logger.warn('ALLOWED_ORIGINS not set - using defaults (production + localhost). Set ALLOWED_ORIGINS to customize.');
     }
   }
   app.use(
@@ -1077,7 +1075,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     app.use(limiter);
   }
 
-  app.get('/health', (_req, res) => {
+  app.get('/health', async (_req, res) => {
     const isE2EMode = process.env.E2E_TEST_MODE === 'true';
     const hasCqcKey = !!process.env.CQC_API_KEY;
     const hasClerkKey = !!process.env.CLERK_SECRET_KEY;
@@ -1090,11 +1088,19 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     if (!hasCqcKey) warnings.push('no_cqc_api_key');
     if (storeType === 'memory') warnings.push('in_memory_store');
 
-    res.status(200).json({
-      status: 'ok',
+    const dbHealthy = await store.healthCheck();
+
+    const status = dbHealthy ? 'ok' : 'degraded';
+    const httpStatus = dbHealthy ? 200 : 503;
+
+    if (!dbHealthy) warnings.push('database_unreachable');
+
+    res.status(httpStatus).json({
+      status,
       config: {
         auth: isE2EMode ? 'bypassed' : hasClerkKey ? 'clerk' : 'legacy_tokens',
         store: storeType,
+        database: dbHealthy ? 'connected' : 'unreachable',
         cqcApi: hasCqcKey ? 'configured' : 'missing',
         nodeEnv: process.env.NODE_ENV || 'not_set',
       },
@@ -1117,7 +1123,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
    * Lightweight CQC API lookup — fetches location data without creating a facility.
    * Used by the "Fetch from CQC" button to auto-populate the onboarding form.
    */
-  app.get('/v1/cqc/locations/:locationId', async (req, res) => {
+  app.get('/v1/cqc/locations/:locationId', asyncRoute(async (req, res) => {
     const parsed = validateRequest(req, res, {
       params: z.object({ locationId: zCqcLocationId }).strip(),
     });
@@ -1143,15 +1149,15 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     } catch (error) {
       sendError(res, 500, 'Failed to fetch CQC data');
     }
-  });
+  }));
 
-  app.get('/v1/providers', async (req, res) => {
+  app.get('/v1/providers', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const providers = await store.listProviders(ctx);
     sendWithMetadata(res, { providers });
-  });
+  }));
 
-  app.post('/v1/providers', async (req, res) => {
+  app.post('/v1/providers', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       body: z
@@ -1167,9 +1173,9 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     const provider = await store.createProvider(ctx, { providerName: providerName.trim(), orgRef });
     await store.appendAuditEvent(ctx, provider.providerId, 'PROVIDER_CREATED', { providerId: provider.providerId, providerName: provider.providerName });
     sendWithMetadata(res, { provider });
-  });
+  }));
 
-  app.get('/v1/providers/:providerId/overview', async (req, res) => {
+  app.get('/v1/providers/:providerId/overview', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ providerId: zProviderId }).strip(),
@@ -1239,7 +1245,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       requiredEvidenceTypes: fCtx.requiredEvidenceTypes,
       readinessWeights: fCtx.readinessWeights,
     }, reportContext);
-  });
+  }));
 
   /**
    * GET /v1/providers/:providerId/dashboard
@@ -1621,7 +1627,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     });
   }));
 
-  app.get('/v1/providers/:providerId/topics', async (req, res) => {
+  app.get('/v1/providers/:providerId/topics', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ providerId: zProviderId }).strip(),
@@ -1670,9 +1676,9 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     }
 
     sendWithMetadata(res, { topics: filteredTopics, completionStatus }, reportContext);
-  });
+  }));
 
-  app.get('/v1/providers/:providerId/topics/:topicId', async (req, res) => {
+  app.get('/v1/providers/:providerId/topics/:topicId', asyncRoute(async (req, res) => {
     const parsed = validateRequest(req, res, {
       params: z.object({ providerId: zProviderId, topicId: zTopicId }).strip(),
       query: z.object({ facility: zOptionalQueryString }).strip(),
@@ -1690,9 +1696,9 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       ? await resolveReportContextForFacility(ctx, providerId, facilityId)
       : undefined;
     sendWithMetadata(res, topic, reportContext);
-  });
+  }));
 
-  app.get('/v1/providers/:providerId/mock-sessions', async (req, res) => {
+  app.get('/v1/providers/:providerId/mock-sessions', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ providerId: zProviderId }).strip(),
@@ -1706,9 +1712,9 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       .filter((session) => !facilityId || session.facilityId === facilityId);
     const reportContext = resolveMockContextFromSessions(sessions);
     sendWithMetadata(res, { sessions }, reportContext);
-  });
+  }));
 
-  app.post('/v1/providers/:providerId/mock-sessions', async (req, res) => {
+  app.post('/v1/providers/:providerId/mock-sessions', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ providerId: zProviderId }).strip(),
@@ -1754,9 +1760,9 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
 
     const reportContext = resolveReportContextForSession(session);
     sendWithMetadata(res, session, reportContext);
-  });
+  }));
 
-  app.get('/v1/providers/:providerId/mock-sessions/:sessionId', async (req, res) => {
+  app.get('/v1/providers/:providerId/mock-sessions/:sessionId', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ providerId: zProviderId, sessionId: zSessionId }).strip(),
@@ -1772,9 +1778,9 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
 
     const reportContext = resolveReportContextForSession(session);
     sendWithMetadata(res, session, reportContext);
-  });
+  }));
 
-  app.post('/v1/providers/:providerId/mock-sessions/:sessionId/answer', async (req, res) => {
+  app.post('/v1/providers/:providerId/mock-sessions/:sessionId/answer', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ providerId: zProviderId, sessionId: zSessionId }).strip(),
@@ -1887,7 +1893,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     try {
       await generateActionsForFinding(ctx, store, finding, session.topicId, session.facilityId);
     } catch (err) {
-      console.error(`[ACTION_PLAN] Failed to generate actions for finding ${finding.id}:`, err);
+      logger.error({ err, findingId: finding.id }, 'Failed to generate actions for finding');
     }
 
     if (process.env.ENABLE_AI_INSIGHTS !== 'false') {
@@ -1908,20 +1914,20 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
 
         setBounded(mockInsightJobs, sessionId, job.id);
       } catch (error) {
-        console.error('[AI_INSIGHTS] Failed to enqueue job:', error);
+        logger.error({ err: error }, 'Failed to enqueue AI insights job');
       }
     }
 
     const reportContext = resolveReportContextForSession(updated);
     sendWithMetadata(res, { ...updated, findingId: finding.id }, reportContext);
-  });
+  }));
 
   /**
    * GET /v1/providers/:providerId/mock-sessions/:sessionId/ai-insights
    *
    * Fetch advisory AI insights for a mock session (if available).
    */
-  app.get('/v1/providers/:providerId/mock-sessions/:sessionId/ai-insights', async (req, res) => {
+  app.get('/v1/providers/:providerId/mock-sessions/:sessionId/ai-insights', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ providerId: zProviderId, sessionId: zSessionId }).strip(),
@@ -1970,15 +1976,15 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         error: job.error,
       });
     } catch (error) {
-      console.error('[AI_INSIGHTS] Failed:', error);
+      logger.error({ err: error }, 'AI insights processing failed');
       sendError(res, 500, 'Failed to fetch AI insights');
     }
-  });
+  }));
 
   // ── Old action plan endpoints removed — see new endpoints below findings ──
 
   // ── SAF 34 Quality Statement Coverage ──────────────────────────
-  app.get('/v1/providers/:providerId/saf34-coverage', async (req, res) => {
+  app.get('/v1/providers/:providerId/saf34-coverage', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ providerId: zProviderId }).strip(),
@@ -2023,9 +2029,9 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       keyQuestions: coverage.keyQuestions,
       overall: coverage.overall,
     }, reportContext);
-  });
+  }));
 
-  app.get('/v1/providers/:providerId/findings', async (req, res) => {
+  app.get('/v1/providers/:providerId/findings', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ providerId: zProviderId }).strip(),
@@ -2049,9 +2055,9 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     }
 
     sendWithMetadata(res, { findings, totalCount: findings.length }, reportContext);
-  });
+  }));
 
-  app.get('/v1/providers/:providerId/findings/:findingId', async (req, res) => {
+  app.get('/v1/providers/:providerId/findings/:findingId', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ providerId: zProviderId, findingId: zFindingId }).strip(),
@@ -2071,7 +2077,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       regulationText:
         'Regulation 12(2)(a): Care and treatment must be provided in a safe way for service users.',
     }, reportContext);
-  });
+  }));
 
   // ── Action Plans ──────────────────────────────────────────────────────────
 
@@ -2081,7 +2087,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
    * Retrieve the action plan for a specific finding.
    * Returns empty actions array if no plan has been generated yet.
    */
-  app.get('/v1/providers/:providerId/findings/:findingId/action-plan', async (req, res) => {
+  app.get('/v1/providers/:providerId/findings/:findingId/action-plan', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ providerId: zProviderId, findingId: zFindingId }).strip(),
@@ -2109,7 +2115,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         a.targetCompletionDate && a.targetCompletionDate < new Date().toISOString() && a.status !== 'VERIFIED_CLOSED'
       ).length,
     }, reportContext);
-  });
+  }));
 
   /**
    * POST /v1/providers/:providerId/findings/:findingId/action-plan/generate
@@ -2117,7 +2123,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
    * Auto-generate action plan items from the finding's topic template.
    * Idempotent: if actions already exist for this finding, returns existing plan.
    */
-  app.post('/v1/providers/:providerId/findings/:findingId/action-plan/generate', async (req, res) => {
+  app.post('/v1/providers/:providerId/findings/:findingId/action-plan/generate', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ providerId: zProviderId, findingId: zFindingId }).strip(),
@@ -2185,14 +2191,14 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       overdueActions: 0,
       generated: true,
     }, reportContext);
-  });
+  }));
 
   /**
    * PATCH /v1/providers/:providerId/actions/:actionId
    *
    * Update an action item (status, owner, due date, notes).
    */
-  app.patch('/v1/providers/:providerId/actions/:actionId', async (req, res) => {
+  app.patch('/v1/providers/:providerId/actions/:actionId', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ providerId: zProviderId, actionId: zId }).strip(),
@@ -2277,7 +2283,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       reportSource: { type: 'mock' as const, id: existing.findingId, asOf: now },
     };
     sendWithMetadata(res, updated, reportContext);
-  });
+  }));
 
   /**
    * GET /v1/providers/:providerId/action-plans
@@ -2285,7 +2291,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
    * List all action plans for a provider (grouped by finding).
    * Each plan includes the finding context and action counts.
    */
-  app.get('/v1/providers/:providerId/action-plans', async (req, res) => {
+  app.get('/v1/providers/:providerId/action-plans', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ providerId: zProviderId }).strip(),
@@ -2324,7 +2330,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     );
 
     sendWithMetadata(res, { plans });
-  });
+  }));
 
   /**
    * GET /v1/providers/:providerId/action-plans/summary
@@ -2332,7 +2338,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
    * Summary of all action plans across all findings for a provider.
    * Used by dashboard and roadmap views.
    */
-  app.get('/v1/providers/:providerId/action-plans/summary', async (req, res) => {
+  app.get('/v1/providers/:providerId/action-plans/summary', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ providerId: zProviderId }).strip(),
@@ -2357,11 +2363,11 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       ).length,
       highPriorityOpen: allActions.filter(a => a.priority === 'HIGH' && a.status !== 'VERIFIED_CLOSED').length,
     });
-  });
+  }));
 
   // ── Evidence ───────────────────────────────────────────────────────────────
 
-  app.get('/v1/providers/:providerId/evidence', async (req, res) => {
+  app.get('/v1/providers/:providerId/evidence', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ providerId: zProviderId }).strip(),
@@ -2383,9 +2389,9 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       ? await resolveReportContextForFacility(ctx, providerId, facilityId)
       : undefined;
     sendWithMetadata(res, { evidence: mapped, totalCount: mapped.length }, reportContext);
-  });
+  }));
 
-  app.post('/v1/evidence/blobs', async (req, res) => {
+  app.post('/v1/evidence/blobs', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       body: z
@@ -2448,10 +2454,10 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         scanJobId: scanJob.id,
       });
     } catch (error) {
-      console.error('[BLOB_UPLOAD] Failed:', error);
+      logger.error({ err: error }, 'Blob upload failed');
       sendError(res, 500, 'Failed to upload blob');
     }
-  });
+  }));
 
   /**
    * GET /v1/evidence/blobs/:blobHash
@@ -2460,7 +2466,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
    * Returns 404 if blob not found, quarantined, or not owned by tenant.
    * Security: Validates blob belongs to requesting tenant via EvidenceRecord lookup.
    */
-  app.get('/v1/evidence/blobs/:blobHash', async (req, res) => {
+  app.get('/v1/evidence/blobs/:blobHash', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ blobHash: zBlobHash }).strip(),
@@ -2492,17 +2498,17 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       res.setHeader('Content-Disposition', `attachment; filename="${evidenceRecord.fileName || blobHash}"`);
       res.send(content);
     } catch (error) {
-      console.error('[BLOB_DOWNLOAD] Failed:', error);
+      logger.error({ err: error }, 'Blob download failed');
       sendError(res, 500, 'Failed to download blob');
     }
-  });
+  }));
 
   /**
    * GET /v1/evidence/blobs/:blobHash/scan
    *
    * Check malware scan status for a blob.
    */
-  app.get('/v1/evidence/blobs/:blobHash/scan', async (req, res) => {
+  app.get('/v1/evidence/blobs/:blobHash/scan', asyncRoute(async (req, res) => {
     const parsed = validateRequest(req, res, {
       params: z.object({ blobHash: zBlobHash }).strip(),
     });
@@ -2547,12 +2553,12 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         error: job.error,
       });
     } catch (error) {
-      console.error('[BLOB_SCAN] Failed:', error);
+      logger.error({ err: error }, 'Blob scan failed');
       sendError(res, 500, 'Failed to check scan status');
     }
-  });
+  }));
 
-  app.post('/v1/providers/:providerId/facilities', async (req, res) => {
+  app.post('/v1/providers/:providerId/facilities', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ providerId: zProviderId }).strip(),
@@ -2613,9 +2619,9 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         sendError(res, 400, message);
       }
     }
-  });
+  }));
 
-  app.get('/v1/providers/:providerId/facilities', async (req, res) => {
+  app.get('/v1/providers/:providerId/facilities', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ providerId: zProviderId }).strip(),
@@ -2629,15 +2635,15 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     }
     const facilities = await store.listFacilitiesByProvider(ctx, providerId);
     sendWithMetadata(res, { provider, facilities, totalCount: facilities.length });
-  });
+  }));
 
-  app.get('/v1/facilities', async (req, res) => {
+  app.get('/v1/facilities', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const facilities = await store.listFacilities(ctx);
     sendWithMetadata(res, { facilities, totalCount: facilities.length });
-  });
+  }));
 
-  app.get('/v1/facilities/:facilityId', async (req, res) => {
+  app.get('/v1/facilities/:facilityId', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ facilityId: zFacilityId }).strip(),
@@ -2652,14 +2658,14 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     const provider = await store.getProviderById(ctx, facility.providerId);
     const reportContext = await resolveReportContextForFacility(ctx, facility.providerId, facilityId);
     sendWithMetadata(res, { facility, provider }, reportContext);
-  });
+  }));
 
   /**
    * PATCH /v1/facilities/:facilityId
    *
    * Update a location's mutable fields. CQC Location ID and provider are immutable.
    */
-  app.patch('/v1/facilities/:facilityId', async (req, res) => {
+  app.patch('/v1/facilities/:facilityId', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ facilityId: zFacilityId }).strip(),
@@ -2705,14 +2711,14 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       const message = error instanceof Error ? error.message : 'Update failed';
       sendError(res, 400, message);
     }
-  });
+  }));
 
   /**
    * DELETE /v1/facilities/:facilityId
    *
    * Delete a location. Guards against deletion if in-progress sessions exist.
    */
-  app.delete('/v1/facilities/:facilityId', async (req, res) => {
+  app.delete('/v1/facilities/:facilityId', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ facilityId: zFacilityId }).strip(),
@@ -2738,14 +2744,14 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       const message = error instanceof Error ? error.message : 'Delete failed';
       sendError(res, 409, message);
     }
-  });
+  }));
 
   /**
    * DELETE /v1/facilities/:facilityId/evidence/:evidenceId
    *
    * Delete an evidence record. Does not delete the underlying blob.
    */
-  app.delete('/v1/facilities/:facilityId/evidence/:evidenceId', async (req, res) => {
+  app.delete('/v1/facilities/:facilityId/evidence/:evidenceId', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ facilityId: zFacilityId, evidenceId: zId }).strip(),
@@ -2772,7 +2778,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       const message = error instanceof Error ? error.message : 'Delete failed';
       sendError(res, 404, message);
     }
-  });
+  }));
 
   /**
    * POST /v1/facilities/onboard
@@ -2788,7 +2794,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
    *
    * Idempotent: Re-onboarding same CQC ID updates the facility.
    */
-  app.post('/v1/facilities/onboard', async (req, res) => {
+  app.post('/v1/facilities/onboard', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       body: z
@@ -2893,9 +2899,9 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       const message = error instanceof Error ? error.message : 'Facility onboarding failed';
       sendError(res, 400, message);
     }
-  });
+  }));
 
-  app.post('/v1/facilities/:facilityId/evidence', async (req, res) => {
+  app.post('/v1/facilities/:facilityId/evidence', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ facilityId: zFacilityId }).strip(),
@@ -2963,10 +2969,10 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
           evidenceType: record.evidenceType,
           serviceType: facility.serviceType,
         } as DocumentAuditJobData);
-        console.log(`[AUDIT] Queued job ${job.id} for evidence ${record.id}`);
+        logger.info({ jobId: job.id, evidenceRecordId: record.id }, 'Queued document audit job');
       } catch (error) {
         const failureReason = 'Document audit could not be queued. Review manually or retry.';
-        console.error('[AUDIT] Failed to enqueue:', error);
+        logger.error({ err: error }, 'Failed to enqueue document audit');
         await saveDocumentAuditFailure({
           tenantId: ctx.tenantId,
           facilityId,
@@ -3031,9 +3037,9 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       const message = error instanceof Error ? error.message : 'Evidence record failed';
       sendError(res, 400, message);
     }
-  });
+  }));
 
-  app.get('/v1/facilities/:facilityId/evidence', async (req, res) => {
+  app.get('/v1/facilities/:facilityId/evidence', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ facilityId: zFacilityId }).strip(),
@@ -3053,9 +3059,9 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     const mapped = evidence.map((record) => mapEvidenceRecord(record, auditSummaries.get(record.id)));
     const reportContext = await resolveReportContextForFacility(ctx, facility.providerId, facilityId);
     sendWithMetadata(res, { evidence: mapped, totalCount: mapped.length }, reportContext);
-  });
+  }));
 
-  app.get('/v1/evidence/:evidenceRecordId/document-audit', async (req, res) => {
+  app.get('/v1/evidence/:evidenceRecordId/document-audit', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ evidenceRecordId: zId }).strip(),
@@ -3068,9 +3074,9 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       res,
       audit ?? createPendingDocumentAuditSummary(evidenceRecordId)
     );
-  });
+  }));
 
-  app.get('/v1/providers/:providerId/exports', async (req, res) => {
+  app.get('/v1/providers/:providerId/exports', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ providerId: zProviderId }).strip(),
@@ -3111,9 +3117,9 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         }
         : undefined,
     }, reportContext);
-  });
+  }));
 
-  app.post('/v1/providers/:providerId/exports', async (req, res) => {
+  app.post('/v1/providers/:providerId/exports', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ providerId: zProviderId }).strip(),
@@ -3659,9 +3665,9 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       downloadUrl,
       expiresAt: exportRecord.expiresAt,
     }, reportContext);
-  });
+  }));
 
-  app.get('/v1/exports/:exportId.csv', async (req, res) => {
+  app.get('/v1/exports/:exportId.csv', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ exportId: zExportId }).strip(),
@@ -3676,9 +3682,9 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="${exportRecord.id}.csv"`);
     res.send(exportRecord.content);
-  });
+  }));
 
-  app.get('/v1/exports/:exportId.pdf', async (req, res) => {
+  app.get('/v1/exports/:exportId.pdf', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ exportId: zExportId }).strip(),
@@ -3699,9 +3705,9 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${exportRecord.id}.pdf"`);
     res.send(Buffer.from(exportRecord.content, 'base64'));
-  });
+  }));
 
-  app.get('/v1/exports/:exportId.docx', async (req, res) => {
+  app.get('/v1/exports/:exportId.docx', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ exportId: zExportId }).strip(),
@@ -3717,9 +3723,9 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="${exportRecord.id}.docx"`);
     res.send(Buffer.from(exportRecord.content, 'base64'));
-  });
+  }));
 
-  app.get('/v1/exports/:exportId.md', async (req, res) => {
+  app.get('/v1/exports/:exportId.md', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ exportId: zExportId }).strip(),
@@ -3746,9 +3752,9 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       `attachment; filename="${filename}"`
     );
     res.send(exportRecord.content);
-  });
+  }));
 
-  app.get('/v1/providers/:providerId/audit-trail', async (req, res) => {
+  app.get('/v1/providers/:providerId/audit-trail', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ providerId: zProviderId }).strip(),
@@ -3762,7 +3768,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       ? await resolveReportContextForFacility(ctx, providerId, facilityId)
       : undefined;
     sendWithMetadata(res, { events, totalCount: events.length }, reportContext);
-  });
+  }));
 
   /**
    * POST /v1/facilities/onboard-bulk
@@ -3771,7 +3777,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
    * Processes each facility with the same logic as single onboarding.
    * Returns success/failure status for each facility.
    */
-  app.post('/v1/facilities/onboard-bulk', async (req, res) => {
+  app.post('/v1/facilities/onboard-bulk', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       body: z
@@ -3886,7 +3892,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       results,
       backgroundJobsQueued: autoSyncReports ? successCount : 0,
     });
-  });
+  }));
 
   /**
    * POST /v1/facilities/:facilityId/sync-latest-report
@@ -3894,7 +3900,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
    * Triggers background scraping of the latest CQC report for this facility.
    * Non-blocking: returns immediately and processes in background.
    */
-  app.post('/v1/facilities/:facilityId/sync-latest-report', async (req, res) => {
+  app.post('/v1/facilities/:facilityId/sync-latest-report', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ facilityId: zFacilityId }).strip(),
@@ -3928,7 +3934,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       status: 'queued',
       estimatedCompletion: '30-60 seconds',
     });
-  });
+  }));
 
   /**
    * POST /v1/facilities/:facilityId/create-baseline
@@ -3936,7 +3942,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
    * For never-inspected facilities, creates a baseline through self-assessment.
    * Guides the facility through creating their first "pre-inspection" snapshot.
    */
-  app.post('/v1/facilities/:facilityId/create-baseline', async (req, res) => {
+  app.post('/v1/facilities/:facilityId/create-baseline', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ facilityId: zFacilityId }).strip(),
@@ -4002,7 +4008,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         ],
       },
     });
-  });
+  }));
 
   /**
    * GET /v1/background-jobs/:jobId
@@ -4010,7 +4016,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
    * Check status of a background job.
    * Security: Validates job belongs to requesting tenant.
    */
-  app.get('/v1/background-jobs/:jobId', async (req, res) => {
+  app.get('/v1/background-jobs/:jobId', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ jobId: zJobId }).strip(),
@@ -4056,10 +4062,10 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
         },
       });
     } catch (error) {
-      console.error('[JOB_STATUS] Failed:', error);
+      logger.error({ err: error }, 'Job status check failed');
       sendError(res, 500, 'Failed to fetch job status');
     }
-  });
+  }));
 
   /**
    * Report scraping processor (used for in-memory fallback).
@@ -4164,12 +4170,12 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
               fileName: reportFileName,
               description: `CQC inspection report (${report.rating || 'unknown rating'}) — ${report.reportDate || ''}`,
             });
-            console.log('[SCRAPE] HTML report saved successfully:', blobMetadata.contentHash);
+            logger.info({ contentHash: blobMetadata.contentHash }, 'HTML report saved successfully');
           } else {
-            console.log('[SCRAPE] Duplicate report detected, skipping evidence record create:', blobMetadata.contentHash);
+            logger.info({ contentHash: blobMetadata.contentHash }, 'Duplicate report detected, skipping evidence record create');
           }
         } catch (htmlErr) {
-          console.error('[SCRAPE] Failed to save HTML report:', htmlErr);
+          logger.error({ err: htmlErr }, 'Failed to save HTML report');
         }
       }
 
@@ -4216,25 +4222,25 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       const result = store.seedDemoProvider(demoContext);
       const handleResult = (provider: typeof result extends Promise<infer T> ? T : typeof result) => {
         if (provider) {
-          console.log(`[SEED] Demo provider created: ${(provider as any).providerId}`);
+          logger.info({ providerId: (provider as any).providerId }, 'Demo provider created');
         }
       };
 
       if (result && typeof (result as any).then === 'function') {
         (result as unknown as Promise<any>).then(handleResult).catch((error: unknown) => {
-          console.warn('[SEED] Demo provider seed skipped:', error instanceof Error ? error.message : error);
+          logger.warn({ err: error }, 'Demo provider seed skipped');
         });
       } else {
         handleResult(result as any);
       }
     } catch (error) {
-      console.warn('[SEED] Demo provider seed skipped:', error instanceof Error ? error.message : error);
+      logger.warn({ err: error }, 'Demo provider seed skipped');
     }
   }
 
   // ── CQC Intelligence Endpoints (Feature 1) ──────────────────────────
 
-  app.get('/v1/providers/:providerId/cqc-intelligence', async (req, res) => {
+  app.get('/v1/providers/:providerId/cqc-intelligence', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ providerId: zProviderId }).strip(),
@@ -4272,9 +4278,9 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       })),
       summary: { riskCount, outstandingCount },
     });
-  });
+  }));
 
-  app.post('/v1/providers/:providerId/cqc-intelligence/:alertId/dismiss', async (req, res) => {
+  app.post('/v1/providers/:providerId/cqc-intelligence/:alertId/dismiss', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
     const parsed = validateRequest(req, res, {
       params: z.object({ providerId: zProviderId, alertId: z.string().min(1) }).strip(),
@@ -4290,9 +4296,9 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
 
     await store.dismissCqcAlert(ctx, alertId);
     sendWithMetadata(res, { dismissed: true });
-  });
+  }));
 
-  app.post('/v1/cqc-intelligence/poll', async (req, res) => {
+  app.post('/v1/cqc-intelligence/poll', asyncRoute(async (req, res) => {
     const ctx = getContext(req);
 
     // Get all providers for this tenant
@@ -4337,7 +4343,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
     });
 
     if (!locationsResult.success) {
-      console.error('[CQC Intelligence] Location search failed:', locationsResult.error);
+      logger.error({ error: locationsResult.error }, 'CQC Intelligence location search failed');
       sendError(res, 502, `CQC API error: ${locationsResult.error}`);
       return;
     }
@@ -4458,7 +4464,7 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
           existingKeys.add(alertDeduplicationKey(alert));
         }
       } catch (err) {
-        console.error(`[CQC Intelligence] Error processing ${loc.locationId}:`, err);
+        logger.error({ err, locationId: loc.locationId }, 'CQC Intelligence error processing location');
         locationsSkipped++;
       }
     }
@@ -4492,11 +4498,11 @@ export function createApp(): { app: express.Express; store: InMemoryStore } {
       locationsProcessed,
       locationsSkipped,
     });
-  });
+  }));
 
 //  Global Express error handler
 app.use((err: any, _req: any, res: any, _next: any) => {
-  console.error('[API] Unhandled route error:', err?.message || err);
+  logger.error({ err }, 'Unhandled route error');
   if (!res.headersSent) {
     res.status(500).json({ ...buildConstitutionalMetadata(), error: 'Internal server error' });
   }

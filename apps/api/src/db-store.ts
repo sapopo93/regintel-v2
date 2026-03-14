@@ -25,24 +25,56 @@ import {
   type UsageEventRecord,
 } from './store';
 import { scopeKey, unscopeKey } from '@regintel/security/tenant';
+import { logger } from './logger';
 
 const prisma = new PrismaClient();
+
+/**
+ * Retry a fire-and-forget Prisma operation with exponential backoff.
+ * 3 attempts: immediate, 1s, 4s. Logs CRITICAL on total failure.
+ */
+function persistWithRetry(operation: string, fn: () => Promise<unknown>): void {
+  const attempt = (n: number, delayMs: number): void => {
+    fn().catch((err: unknown) => {
+      if (n >= 3) {
+        logger.error({ err, operation, attempts: n }, 'CRITICAL: All DB write retries exhausted — data may be lost');
+        return;
+      }
+      logger.warn({ err, operation, attempt: n, nextRetryMs: delayMs }, 'DB write failed, retrying');
+      setTimeout(() => attempt(n + 1, delayMs * 4), delayMs);
+    });
+  };
+  attempt(1, 1000);
+}
 
 export class PrismaStore extends InMemoryStore {
   private hydratePromise: Promise<void>;
 
   constructor() {
     super();
-    console.log('[PrismaStore] Using PostgreSQL for all entity persistence');
+    logger.info('PrismaStore using PostgreSQL for all entity persistence');
     this.hydratePromise = this.hydrate();
   }
 
   /**
    * Blocks until DB hydration is complete.
    * Call this before the HTTP server starts accepting traffic.
+   * Times out after 30 seconds to prevent indefinite hangs.
    */
   async waitForReady(): Promise<void> {
-    await this.hydratePromise;
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('PrismaStore hydration timed out after 30s — is the database reachable?')), 30000)
+    );
+    await Promise.race([this.hydratePromise, timeout]);
+  }
+
+  override async healthCheck(): Promise<boolean> {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private advanceCounter(counters: Map<string, Record<string, number>>, tenantId: string, key: string, seq: number): void {
@@ -288,6 +320,7 @@ export class PrismaStore extends InMemoryStore {
           sessionId: row.sessionId,
           format: row.format as ExportRecord['format'],
           content: row.content,
+          contentEncoding: (row.contentEncoding as ExportRecord['contentEncoding']) ?? 'utf8',
           reportingDomain: row.reportingDomain as ExportRecord['reportingDomain'],
           mode: row.mode as ExportRecord['mode'],
           reportSource: row.reportSource as ExportRecord['reportSource'],
@@ -407,15 +440,21 @@ export class PrismaStore extends InMemoryStore {
         if (match) this.advanceCounter(counters, row.tenantId, 'action', parseInt(match[1], 10));
       }
 
-      console.log(
-        `[PrismaStore] Hydrated ${dbProviders.length} providers, ${dbFacilities.length} facilities, ` +
-        `${dbSessions.length} sessions, ${dbFindings.length} findings, ${dbBlobs.length} blobs, ` +
-        `${dbEvidenceRecords.length} evidence records, ${dbExports.length} exports, ` +
-        `${dbAuditEvents.length} audit events, ${dbCqcAlerts.length} CQC alerts, ` +
-        `${dbPollStates.length} poll states, ${dbActions.length} actions`
-      );
+      logger.info({
+        providers: dbProviders.length,
+        facilities: dbFacilities.length,
+        sessions: dbSessions.length,
+        findings: dbFindings.length,
+        blobs: dbBlobs.length,
+        evidenceRecords: dbEvidenceRecords.length,
+        exports: dbExports.length,
+        auditEvents: dbAuditEvents.length,
+        cqcAlerts: dbCqcAlerts.length,
+        pollStates: dbPollStates.length,
+        actions: dbActions.length,
+      }, 'PrismaStore hydration complete');
     } catch (err) {
-      console.error('[PrismaStore] Hydration failed:', err);
+      logger.error({ err }, 'PrismaStore: Hydration failed');
       throw err;
     }
   }
@@ -477,9 +516,9 @@ export class PrismaStore extends InMemoryStore {
     const facility = this.getFacilityById(ctx, facilityId);
     super.deleteFacility(ctx, facilityId);
     if (facility) {
-      (prisma as any).facility
-        .delete({ where: { id: facilityId } })
-        .catch((err: unknown) => console.error('[PrismaStore] Failed to delete facility:', err));
+      persistWithRetry('delete facility', () =>
+        (prisma as any).facility.delete({ where: { id: facilityId } })
+      );
       this.syncProviderStats(ctx, facility.providerId);
     }
   }
@@ -533,9 +572,9 @@ export class PrismaStore extends InMemoryStore {
 
   override deleteEvidenceRecord(ctx: TenantContext, evidenceRecordId: string): EvidenceRecordRecord {
     const record = super.deleteEvidenceRecord(ctx, evidenceRecordId);
-    (prisma as any).evidenceRecordV2
-      .delete({ where: { id: evidenceRecordId } })
-      .catch((err: unknown) => console.error('[PrismaStore] Failed to delete evidence record:', err));
+    persistWithRetry('delete evidence record', () =>
+      (prisma as any).evidenceRecordV2.delete({ where: { id: evidenceRecordId } })
+    );
     return record;
   }
 
@@ -615,9 +654,7 @@ export class PrismaStore extends InMemoryStore {
             },
           });
 
-    op.catch((err: unknown) =>
-      console.error('[PrismaStore] Failed to persist provider:', err)
-    );
+    persistWithRetry('persist provider', () => op);
   }
 
   private persistFacility(record: FacilityRecord): void {
@@ -647,6 +684,7 @@ export class PrismaStore extends InMemoryStore {
       asOf: record.asOf,
     };
 
+    persistWithRetry('persist facility', () =>
     (prisma as any).facility
       .upsert({
         where: { id: record.id },
@@ -671,9 +709,7 @@ export class PrismaStore extends InMemoryStore {
           asOf: record.asOf,
         },
       })
-      .catch((err: unknown) =>
-        console.error('[PrismaStore] Failed to persist facility:', err)
-      );
+    );
   }
 
   private persistMockSession(record: MockSessionRecord): void {
@@ -698,6 +734,7 @@ export class PrismaStore extends InMemoryStore {
       conversationHistory: record.conversationHistory as any,
     };
 
+    persistWithRetry('persist mockSessionV2', () =>
     (prisma as any).mockSessionV2
       .upsert({
         where: { sessionId: record.sessionId },
@@ -710,9 +747,7 @@ export class PrismaStore extends InMemoryStore {
           conversationHistory: record.conversationHistory as any,
         },
       })
-      .catch((err: unknown) =>
-        console.error('[PrismaStore] Failed to persist mock session:', err)
-      );
+    );
   }
 
   private persistFinding(record: FindingRecord): void {
@@ -739,11 +774,10 @@ export class PrismaStore extends InMemoryStore {
       createdAt: record.createdAt,
     };
 
+    persistWithRetry('persist findingV2', () =>
     (prisma as any).findingV2
       .create({ data })
-      .catch((err: unknown) =>
-        console.error('[PrismaStore] Failed to persist finding:', err)
-      );
+    );
   }
 
   private persistEvidenceBlob(record: EvidenceBlobRecord): void {
@@ -754,15 +788,14 @@ export class PrismaStore extends InMemoryStore {
       uploadedAt: record.uploadedAt,
     };
 
+    persistWithRetry('persist evidenceBlobV2', () =>
     (prisma as any).evidenceBlobV2
       .upsert({
         where: { blobHash: record.blobHash },
         create: data,
         update: {},
       })
-      .catch((err: unknown) =>
-        console.error('[PrismaStore] Failed to persist evidence blob:', err)
-      );
+    );
   }
 
   private persistEvidenceRecord(record: EvidenceRecordRecord): void {
@@ -782,11 +815,10 @@ export class PrismaStore extends InMemoryStore {
       expiresAt: record.expiresAt ?? null,
     };
 
+    persistWithRetry('persist evidenceRecordV2', () =>
     (prisma as any).evidenceRecordV2
       .create({ data })
-      .catch((err: unknown) =>
-        console.error('[PrismaStore] Failed to persist evidence record:', err)
-      );
+    );
   }
 
   private persistExport(record: ExportRecord): void {
@@ -806,11 +838,10 @@ export class PrismaStore extends InMemoryStore {
       expiresAt: record.expiresAt,
     };
 
+    persistWithRetry('persist exportV2', () =>
     (prisma as any).exportV2
       .create({ data })
-      .catch((err: unknown) =>
-        console.error('[PrismaStore] Failed to persist export:', err)
-      );
+    );
   }
 
   private persistAuditEvent(providerId: string, record: AuditEventRecord, payload: Record<string, unknown>): void {
@@ -831,11 +862,10 @@ export class PrismaStore extends InMemoryStore {
       payload: payload as any,
     };
 
+    persistWithRetry('persist auditEventV2', () =>
     (prisma as any).auditEventV2
       .upsert({ where: { eventId: data.eventId }, create: data, update: {} })
-      .catch((err: unknown) =>
-        console.error('[PrismaStore] Failed to persist audit event:', err)
-      );
+    );
   }
 
   /**
@@ -845,6 +875,7 @@ export class PrismaStore extends InMemoryStore {
     const provider = this.getProviderById(ctx, providerId);
     if (!provider) return;
 
+    persistWithRetry('persist provider', () =>
     (prisma as any).provider
       .update({
         where: { id: provider.providerId },
@@ -854,9 +885,7 @@ export class PrismaStore extends InMemoryStore {
           asOf: provider.asOf,
         },
       })
-      .catch((err: unknown) =>
-        console.error('[PrismaStore] Failed to sync provider stats:', err)
-      );
+    );
   }
 
   private persistAction(record: ActionRecord): void {
@@ -886,6 +915,7 @@ export class PrismaStore extends InMemoryStore {
       source: record.source,
     };
 
+    persistWithRetry('persist actionV2', () =>
     (prisma as any).actionV2
       .upsert({
         where: { id: data.id },
@@ -900,15 +930,14 @@ export class PrismaStore extends InMemoryStore {
           notes: data.notes,
         },
       })
-      .catch((err: unknown) =>
-        console.error('[PrismaStore] Failed to persist action:', err)
-      );
+    );
   }
 
   // ── CQC Intelligence overrides ──
 
   override createCqcAlert(ctx: TenantContext, alert: CqcIntelligenceAlertRecord): void {
     super.createCqcAlert(ctx, alert);
+    persistWithRetry('persist cqcIntelligenceAlertV2', () =>
     (prisma as any).cqcIntelligenceAlertV2
       .create({
         data: {
@@ -931,36 +960,32 @@ export class PrismaStore extends InMemoryStore {
           dismissedAt: alert.dismissedAt,
         },
       })
-      .catch((err: unknown) =>
-        console.error('[PrismaStore] Failed to persist CQC alert:', err)
-      );
+    );
   }
 
   override dismissCqcAlert(ctx: TenantContext, alertId: string): void {
     super.dismissCqcAlert(ctx, alertId);
     const now = new Date().toISOString();
+    persistWithRetry('persist cqcIntelligenceAlertV2', () =>
     (prisma as any).cqcIntelligenceAlertV2
       .update({
         where: { id: alertId },
         data: { dismissedAt: now },
       })
-      .catch((err: unknown) =>
-        console.error('[PrismaStore] Failed to dismiss CQC alert:', err)
-      );
+    );
   }
 
   override updatePollState(ctx: TenantContext, providerId: string, lastPolledAt: string): void {
     super.updatePollState(ctx, providerId, lastPolledAt);
     const id = `${ctx.tenantId}:${providerId}`;
+    persistWithRetry('persist cqcIntelligencePollStateV2', () =>
     (prisma as any).cqcIntelligencePollStateV2
       .upsert({
         where: { id },
         create: { id, tenantId: ctx.tenantId, providerId, lastPolledAt },
         update: { lastPolledAt },
       })
-      .catch((err: unknown) =>
-        console.error('[PrismaStore] Failed to persist poll state:', err)
-      );
+    );
   }
 
   override createUsageEvent(
@@ -968,6 +993,7 @@ export class PrismaStore extends InMemoryStore {
     input: Parameters<InMemoryStore['createUsageEvent']>[1]
   ): UsageEventRecord {
     const record = super.createUsageEvent(ctx, input);
+    persistWithRetry('persist usageEventV2', () =>
     (prisma as any).usageEventV2
       .create({
         data: {
@@ -980,9 +1006,7 @@ export class PrismaStore extends InMemoryStore {
           metadata: record.metadata as any,
         },
       })
-      .catch((err: unknown) =>
-        console.error('[PrismaStore] Failed to persist usage event:', err)
-      );
+    );
     return record;
   }
 }

@@ -76,7 +76,10 @@ async function withTenant<T>(
   const client = await appPool.connect();
   try {
     await client.query('BEGIN');
-    await client.query('SET LOCAL app.tenant_id = $1', [tenantId]);
+    // SET LOCAL doesn't support parameterized queries in all pg versions.
+    // Escape single quotes to prevent SQL injection, then interpolate safely.
+    const escaped = tenantId.replace(/'/g, "''");
+    await client.query(`SET LOCAL app.tenant_id = '${escaped}'`);
     const result = await fn(client);
     await client.query('COMMIT');
     return result;

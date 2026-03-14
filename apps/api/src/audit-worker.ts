@@ -12,6 +12,7 @@ import {
   processInMemoryJob,
 } from '@regintel/queue';
 import { runDocumentAuditForEvidence } from './document-auditor';
+import { logger } from './logger';
 
 export interface DocumentAuditJobData {
   tenantId: string;
@@ -29,13 +30,17 @@ export interface DocumentAuditJobData {
 
 const POLL_MS = 2000;
 const BUSY_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
+const MAX_ATTEMPTS = 3;
 let busy = false;
 let busySince: number | null = null;
+
+// In-memory attempt tracker (survives within process lifetime)
+const attemptCounts = new Map<string, number>();
 
 async function processPendingAudits() {
   if (busy) {
     if (busySince && Date.now() - busySince > BUSY_TIMEOUT_MS) {
-      console.warn('[AUDIT-WORKER] Busy flag stuck for >3 minutes, force-resetting');
+      logger.warn('Audit worker busy flag stuck for >3 minutes, force-resetting');
       busy = false;
       busySince = null;
     } else {
@@ -79,7 +84,7 @@ async function processPendingAudits() {
       LIMIT 3
     `;
   } catch (err) {
-    console.error('[AUDIT-WORKER] DB query failed:', err);
+    logger.error({ err }, 'Audit worker DB query failed');
     return;
   }
 
@@ -89,7 +94,10 @@ async function processPendingAudits() {
   busySince = Date.now();
   const row = pendingRows[0];
   const jobId = row.evidence_record_id;
-  console.log(`[AUDIT-WORKER] Processing evidence record ${jobId} (${row.file_name})`);
+  const attempts = (attemptCounts.get(jobId) ?? 0) + 1;
+  attemptCounts.set(jobId, attempts);
+
+  logger.info({ jobId, fileName: row.file_name, attempt: attempts }, 'Processing evidence record');
 
   try {
     await runDocumentAuditForEvidence({
@@ -105,9 +113,25 @@ async function processPendingAudits() {
       evidenceType: row.evidence_type ?? undefined,
       serviceType: row.service_type ?? undefined,
     });
-    console.log(`[AUDIT-WORKER] Completed ${jobId}`);
+    logger.info({ jobId }, 'Audit worker completed job');
+    attemptCounts.delete(jobId);
   } catch (err) {
-    console.error(`[AUDIT-WORKER] Failed ${jobId}:`, err);
+    if (attempts >= MAX_ATTEMPTS) {
+      logger.error({ err, jobId, attempts }, 'Audit worker job permanently failed after max attempts');
+      attemptCounts.delete(jobId);
+      // Mark as FAILED_PERMANENT in DB so it won't be retried
+      try {
+        await (prisma as any).$executeRaw`
+          UPDATE document_audits
+          SET status = 'FAILED_PERMANENT', updated_at = NOW()
+          WHERE evidence_record_id = ${jobId} AND status = 'PENDING'
+        `;
+      } catch (dbErr) {
+        logger.error({ err: dbErr, jobId }, 'Failed to mark audit as FAILED_PERMANENT');
+      }
+    } else {
+      logger.warn({ err, jobId, attempt: attempts, maxAttempts: MAX_ATTEMPTS }, 'Audit worker job failed, will retry');
+    }
   } finally {
     busy = false;
     busySince = null;
@@ -120,15 +144,15 @@ export function stopAuditWorker(): void {
   if (_timer !== null) {
     clearInterval(_timer);
     _timer = null;
-    console.log('[AUDIT-WORKER] Worker stopped');
+    logger.info('Audit worker stopped');
   }
 }
 
 export function startAuditWorker() {
   if (_timer) {
-    console.log('[AUDIT-WORKER] Already running, skipping duplicate start');
+    logger.info('Audit worker already running, skipping duplicate start');
     return;
   }
-  console.log('[AUDIT-WORKER] Worker started, polling every', POLL_MS, 'ms');
+  logger.info({ pollIntervalMs: POLL_MS, maxAttempts: MAX_ATTEMPTS }, 'Audit worker started');
   _timer = setInterval(processPendingAudits, POLL_MS);
 }
